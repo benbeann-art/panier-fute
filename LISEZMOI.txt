@@ -1,0 +1,53 @@
+PANIER FUTÉ v2.2.0 — app indépendante (sans Claude)
+====================================================
+
+Tout est dans index.html : les 297 recettes, les images, les spéciaux de départ.
+Rien à installer.
+
+1) SUR L'ORDI (Windows)
+   - Dézippe le dossier PanierFute où tu veux (ex. : Documents).
+   - Double-clique sur index.html : l'app s'ouvre dans Chrome ou Edge.
+   - Astuce : clic droit sur index.html > Envoyer vers > Bureau (créer un raccourci).
+
+2) SUR LE CELL (Android ou iPhone)
+   Un cell ne peut pas ouvrir un fichier comme un ordi : l'app doit avoir une
+   adresse web. C'est gratuit avec GitHub Pages :
+   a. Crée un compte gratuit sur https://github.com
+   b. Bouton « + » > « New repository », nom : panier-fute, coche « Public », Create.
+   c. « uploading an existing file » : glisse TOUS les fichiers du dossier PanierFute
+      (index.html, manifest.webmanifest, sw.js, icon-192.png, icon-512.png), puis « Commit changes ».
+   d. Settings > Pages > Branch : « main » > Save. Attends 1 minute.
+   e. Ton adresse : https://TON-NOM.github.io/panier-fute/
+   f. Ouvre-la sur le cell :
+      - Android (Chrome) : menu ⋮ > « Installer l'application » (ou « Ajouter à l'écran d'accueil »).
+      - iPhone (Safari) : bouton Partager > « Sur l'écran d'accueil ».
+   L'app a alors son icône et s'ouvre en plein écran, comme une vraie app.
+   (Tu peux aussi utiliser cette même adresse sur l'ordi.)
+
+3) LES IA (Réglages, roue dentée en haut à droite)
+   Colle au moins une clé. Les clés restent sur l'appareil.
+   - Gemini (a un niveau gratuit) : https://aistudio.google.com/apikey
+   - Grok (payant à l'usage)      : https://console.x.ai
+   - Claude (payant à l'usage)    : https://console.anthropic.com/settings/keys
+   Appuie sur « Tester » à côté de chaque clé.
+   Choisis ton IA principale. Si sa limite est atteinte, l'app passe toute seule à la suivante.
+   PHOTOS : chaque recette reçoit une vraie photo faite par Gemini ou Grok (Claude ne fait
+   pas d'images). Elle est faite une seule fois, puis gardée dans l'appareil.
+   Réglable dans Réglages > Photos des recettes.
+   Note : la clé API n'est pas ton abonnement Claude/Gemini/Grok ; c'est un compte séparé.
+
+4) CE QUI SE FAIT TOUT SEUL
+   Chaque semaine, à la première ouverture de l'app, l'IA :
+   - va lire les circulaires de la semaine (Maxi, Super C, IGA, Metro, Provigo, Walmart, Adonis)
+     et vérifie que ce sont les bonnes dates;
+   - invente 4 nouvelles recettes selon tes goûts (Recettes > Mes goûts).
+   Tu peux aussi le faire à la main : Spéciaux > « Mettre à jour les circulaires ».
+
+5) CELL + ORDI : SYNCHRO AUTOMATIQUE (gratuit, avec ton compte GitHub)
+   a. Sur GitHub (connecté), ouvre : https://github.com/settings/tokens/new?scopes=gist&description=Panier%20fute
+   b. Expiration : « No expiration ». La case « gist » est déjà cochée. Clique « Generate token ».
+   c. Copie la clé (ghp_...). Dans l'app : Réglages > Synchro cell ↔ ordi > colle la clé > Activer.
+   d. Sur l'autre appareil, colle la MÊME clé : il reçoit tout de suite tes données.
+   Ensuite tout se synchronise tout seul (à l'ouverture, à chaque changement et chaque minute) :
+   menu, liste cochée, goûts, recettes de l'IA, réglages. Les clés d'IA et les photos restent
+   sur chaque appareil. Garde cette clé GitHub secrète, comme un mot de passe.

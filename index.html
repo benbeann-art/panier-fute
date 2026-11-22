@@ -2632,7 +2632,8 @@ function bestFor(k) {
   if (!ing) return null;
   const ix = rankCache ? rankCache.ix : idx();
   const sp = (ix[id] || []).find((x) => S.reg.stores.includes(x.mag));
-  const reg = linked ? Math.max(c.p, ing.p * amt) : ing.p;
+  const low = lowReg(id), lp = low && low.p > 0 ? low.p : ing.p; // regular price in my own stores, not another store's
+  const reg = linked ? Math.max(c.p, lp * amt) : lp;
   return sp && sp.pu * amt < reg ? { price: sp.pu * amt, mag: sp.mag, cote: sp.cote } : { price: reg, mag: null };
 }
 // Typo-tolerant suggestions: "beure" -> Beurre, "fromge" -> Fromage, "pq" -> Papier hygiénique
@@ -2750,8 +2751,9 @@ function rList() {
     ${checkItems.length ? `<div class="store"><h3 style="background:#b7791f"><span>À vérifier : tu en as à la maison</span><span class="small">${checkItems.length}</span></h3>
       <p class="small" style="margin:6px 2px">Ton inventaire dit que tu en as. Regarde si c'est assez pour la recette.</p>
       ${checkItems.map((it) => { const h = invHas(it.id), ing = ING[it.id], ix = rankCache ? rankCache.ix : {}, sp = (ix[it.id] || []).find((x) => S.reg.stores.includes(x.mag));
-        const price = L.packCost(it.id, it.buy, sp ? Math.min(sp.pu, ing.p) : ing.p, ING).cost;
-        return `<div class="vrow"><div><b>${esc(ing.n)}</b><span class="q">Il faut : ${L.fmtQty(ing, it.buy)}${h ? ` · tu as : ${esc(h.qte || "une quantité inconnue")} (${{ frigo: "frigo", congel: "congélateur", garde: "garde-manger" }[h.z]})` : ""}${price >= 0.5 ? ` · si tu l'achètes : ≈ ${L.FR(price)} $${sp ? " chez " + esc(sp.mag) : ""}` : ""}</span></div>
+        const low = lowReg(it.id), lp = low && low.p > 0 ? low.p : ing.p; // regular price in my own stores only
+        const price = L.packCost(it.id, it.buy, sp ? Math.min(sp.pu, lp) : lp, ING).cost;
+        return `<div class="vrow"><div><b>${esc(ing.n)}</b><span class="q">Il faut : ${L.fmtQty(ing, it.buy)}${h ? ` · tu as : ${esc(h.qte || "une quantité inconnue")} (${{ frigo: "frigo", congel: "congélateur", garde: "garde-manger" }[h.z]})` : ""}${price >= 0.5 ? ` · si tu l'achètes : ≈ ${L.FR(price)} $${sp && sp.pu < lp ? " chez " + esc(sp.mag) : low ? " chez " + esc(low.s) : ""}` : ""}</span></div>
           <div class="row"><button class="btn sm" data-vf="${it.id}" data-v2="have">J'en ai assez</button><button class="btn sm red" data-vf="${it.id}" data-v2="buy">À acheter</button></div></div>`; }).join("")}</div>` : ""}
     ${todo.length ? byStore : checkItems.length ? "" : `<div class="empty" style="margin-top:14px"><b>Tout est coché.</b> Bonne cuisine !</div>`}
     ${pantryItems.length ? `<div class="store"><h3 style="background:var(--mute)"><span>Déjà à la maison (achetés, garde-manger et vérifiés)</span><span class="small">${pantryItems.length}</span></h3>${pantryItems.map((it) => `<div class="item done" style="opacity:.7" ${!inPantry(it.id) ? `data-vf="${it.id}" data-v2="check" role="button" tabindex="0" title="Remettre à vérifier"` : ""}><span class="bx">✓</span><span><span class="nm" style="text-decoration:none">${esc(ING[it.id].n)}</span><span class="q">${L.fmtQty(ING[it.id], it.buy)}${it.bought ? " · acheté" : ""}</span></span><span></span></div>`).join("")}</div>` : ""}
@@ -2828,6 +2830,7 @@ let recLimit = 40;
 // Montreal average with a small factor (discount stores a bit cheaper).
 const TIER = { Maxi: 0.92, "Super C": 0.92, Walmart: 0.92, "Tigre Géant": 0.93, Bonanza: 0.95, Adonis: 0.97, "Marché Tradition": 1.0, Provigo: 1.03, IGA: 1.04, Metro: 1.04 };
 function regAt(id, store) {
+  if (String(id).startsWith("u_")) return ING[id] ? ING[id].p : null; // a price I typed myself: the same in every store
   const x = ((S.regStore || {})[id] || {})[store];
   if (x && x.p > 0 && x.date >= addDays(today(), -150)) return x.p;
   return ING[id] ? ING[id].p * (TIER[store] || 1) : null;

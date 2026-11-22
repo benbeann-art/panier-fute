@@ -1094,7 +1094,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
   // A word list is "a|b" (any of them). One word = start of a word in the name ("poitrine" finds "poitrines");
   // "=word" = exact word; text with a space = that exact phrase.
   const T = {
-    poulet_poitrine: ["poitrines de poulet", ["poitrine", "poulet"], ["pane", "nugget", "croquette", "burger", "dinde", "cuit", "tranch", "fume", "bouillon", "soupe"]],
+    poulet_poitrine: ["poitrines de poulet", ["poitrine", "poulet"], ["pane", "nugget", "croquette", "burger", "dinde", "cuit", "tranch", "fume", "bouillon", "soupe", "farci", "fondue", "tournedos"]],
     poulet_cuisse: ["hauts de cuisse de poulet", ["cuisse", "poulet"], ["pane", "cuit", "dinde", "bouillon"]],
     poulet_pilon: ["pilons de poulet", ["pilon"], ["pane", "cuit", "dinde"]],
     poulet_entier: ["poulet entier", ["poulet", "entier"], ["cuit", "roti", "bbq", "barbecue"]],
@@ -1155,7 +1155,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
     mais_conserve: ["maïs en crème", ["=mais", "creme|conserve|boite"], ["croustil", "chips", "huile", "surgel", "congel", "soupe"]],
     petits_pois: ["petits pois surgelés", ["petits pois|petit pois|pois verts"], ["carotte", "conserve", "chiche", "mange", "croustil", "soupe"]],
     legumes_mel: ["légumes surgelés", ["legume", "melange|surgel|congel"], ["soupe", "bouillon", "croustil", "chips", "pate", "riz", "nourriture", "jus", "sauce", "bebe", "puree", "boulette", "burger", "galette", "rouleau", "pizza", "trempette"]],
-    lait: ["lait", ["=lait"], ["coco", "amande", "avoine", "soya", "soja", "chocolat", "frappe", "condense", "evapore", "beurre", "go", "glace", "poudre", "bebe", "maternise", "fermente", "kefir", "chai", "cafe", "latte", "biscuit", "dessert", "cacahuete", "noix", "riz", "pois", "nourrisson", "formule", "ml", "x", "creme", "fromage", "yogourt", "savon", "lotion", "corps", "nettoyant", "demaquill", "shampo", "hydrat", "solaire"]],
+    lait: ["lait", ["=lait"], ["coco", "amande", "avoine", "soya", "soja", "chocolat", "frappe", "condense", "concentre", "eagle", "evapore", "beurre", "go", "glace", "poudre", "bebe", "maternise", "fermente", "kefir", "chai", "cafe", "latte", "biscuit", "dessert", "cacahuete", "noix", "riz", "pois", "nourrisson", "formule", "ml", "x", "creme", "fromage", "yogourt", "savon", "lotion", "corps", "nettoyant", "demaquill", "shampo", "hydrat", "solaire"]],
     creme: ["crème à cuisson", ["=creme"], ["glacee", "glace", "sure", "fromage", "dessert", "caramel", "soupe", "cafe", "crepe", "corps", "mains", "visage", "solaire", "rasage", "hydrat", "anti", "biscuit", "pouding", "brulee", "patissier", "chou", "tarte", "gateau", "mais", "bonbon", "lotion", "nettoyant", "cereale", "blé", "ble", "riz", "champignon", "poulet", "brocoli", "fouettee", "aerosol", "chocolat", "vanille", "nutella", "erable", "beurre", "mousse", "coupe", "barre", "sandwich"]],
     beurre: ["beurre", ["=beurre"], ["arachide", "amande", "pomme", "noix", "cacao", "sucre", "biscuit", "popcorn", "mais", "lait de beurre", "babeurre", "karite", "corps", "lotion", "erable", "poulet", "sauce", "tartinade", "croissant", "cookie", "graine", "soya", "tournesol", "bonbon", "galette", "cari", "chicken", "trempette", "noix de coco", "lait"]],
     mozzarella: ["mozzarella", ["mozzarella"], ["boccon", "pizza", "batonnet", "bouchee", "panee", "frite", "croquette"]],
@@ -1169,7 +1169,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
     pain_tranche: ["pain tranché", ["=pain|=pains"], ["raisin", "kaiser", "hamburger", "hot", "burger", "naan", "pita", "baguette", "dore", "miettes", "gateau", "viande", "sous marin", "bagel", "croissant", "ail", "epice", "banane", "courgette", "mais", "sucre", "chocolat", "fromage", "sandwich", "chapelure", "pizza", "panini", "ciabatta", "tortilla", "brioche", "muffin", "pita", "croute", "plat", "pudding", "pouding", "farine", "levure", "machine", "grille", "papier", "cereale", "savon", "repas", "chiens", "chats", "sushi", "panettone"]],
     kaiser: ["pains kaiser", ["kaiser"], []],
     baguette: ["baguette", ["baguette"], ["pizza", "chips", "croustil", "fromage", "garnie", "sandwich", "ail", "craquelin", "grissol", "melba"]],
-    tortilla: ["tortillas", ["tortilla|wrap"], ["croustil", "chips", "nachos", "soupe", "trempette", "kit", "ensemble", "chips", "poulet", "porc"]],
+    tortilla: ["tortillas", ["tortilla|wrap"], ["croustil", "chips", "nachos", "soupe", "trempette", "kit", "ensemble", "chips", "poulet", "porc", "mais", "coquille", "snack"]],
     pita: ["pains pita", ["pita"], ["croustil", "chips", "craquelin", "trempette", "pizza"]],
     croissant: ["croissants", ["croissant"], ["surgel", "pate", "sandwich", "jambon", "pizza", "cereale"]],
     ciabatta: ["ciabatta", ["ciabatta"], ["pizza", "sandwich", "ail", "boeuf", "poulet", "jambon", "dinde"]],
@@ -1374,11 +1374,14 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
     if (/^\/?\s*kg\b/.test(pst) || /(^| )kg( |$)/.test(post) && !/\d\s*\/\s*kg/.test(pst)) return { qte: 1 * mult, unite: "kg" };
     const raw = String(r.name).toLowerCase().replace(/œ/g, "oe");
     // several products in one name ("carottes 5 lb, betteraves 5 lb et panais 1 lb"): the size written right after our product
-    const key = T[r.ing] && String(T[r.ing][1][0] || "").split("|")[0];
+    const key = T[r.ing] && T[r.ing][1].map((x) => String(x).split("|")[0].replace(/^=/, "")).sort((x, y) => y.length - x.length)[0];
     const own = key && raw.match(new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "[a-zàâçéèêëîïôûù]*\\s+(\\d+(?:[.,]\\d+)?)\\s*(kg|g|ml|l|lb)\\b"));
     const many = (raw.match(/\d+(?:[.,]\d+)?\s*(?:kg|g|ml|l|lb)\b/g) || []).length > 1;
     m = raw.match(/(\d+)\s*[x×]\s*(\d+(?:[.,]\d+)?)\s*(kg|g|ml|l|lb)\b/);
     let q = null;
+    const firstSize = raw.search(/\d+(?:[.,]\d+)?\s*(?:kg|g|ml|l|lb)\b/);
+    const keyAt = key ? raw.search(new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))) : -1;
+    if (!own && firstSize >= 0 && keyAt > firstSize && / ou |, /.test(raw.slice(firstSize, keyAt))) return null; // "saucisson 375 g ou cheddar": 375 g is not the cheddar
     if (own && many) q = { qte: NUM(own[1]), unite: own[2] };
     else if (m) q = { qte: Number(m[1]) * NUM(m[2]), unite: m[3] };
     else if ((m = raw.match(/(\d+(?:[.,]\d+)?)\s*(kg|g|ml|l|lb)\b/))) q = { qte: NUM(m[1]), unite: m[2] };

@@ -31,19 +31,19 @@
     saumon: ["filet de saumon", ["saumon"], ["fume", "farci", "tournedos", "conserve", "boite", "roulade", "burger", "galette", "sushi", "pate", "mousse", "croquette", "nourriture"]],
     truite: ["truite", ["truite"], ["fume", "farci", "conserve"]],
     tilapia: ["tilapia", ["tilapia"], ["pane", "farci"]],
-    crevettes: ["crevettes", ["crevette"], ["anneau", "cocktail", "pane", "tempura", "sauce", "croustil", "chips", "dumpling", "rouleau", "won"]],
+    crevettes: ["crevettes", ["crevette"], ["anneau", "cocktail", "pane", "pates", "surimi", "batonnet", "poisson", "tempura", "sauce", "croustil", "chips", "dumpling", "rouleau", "won"]],
     thon: ["thon en conserve", ["thon"], ["steak", "frais", "sushi", "longe", "tataki", "salade", "chat", "nourriture"]],
     oeufs: ["oeufs", ["oeuf"], ["chocolat", "paques", "nouille", "pate", "blanc d oeufs|blancs d oeufs", "liquide", "cuit", "kinder", "sandwich", "muffin"]],
-    pois_chiches: ["pois chiches", ["pois chiche"], ["hummus", "houmous", "croustil", "farine", "pate"]],
+    pois_chiches: ["pois chiches", ["pois chiche"], ["trempette", "hummus", "houmous", "croustil", "farine", "pate"]],
     lentilles: ["lentilles", ["lentille"], ["soupe", "pate", "croustil", "chips"]],
     haricots_noirs: ["haricots noirs", ["haricot", "noir"], ["sauce", "soupe", "croustil"]],
     haricots_rouges: ["haricots rouges", ["haricot", "rouge"], ["sauce", "soupe"]],
     tofu: ["tofu", ["tofu"], ["dessert", "boisson", "pouding"]],
-    oignon: ["oignons", ["oignon"], ["vert", "rondelle", "frit", "soupe", "poudre", "croustil", "trempette", "sauce", "rouge et", "marine", "perle"]],
+    oignon: ["oignons", ["oignon"], ["brochette", "kafta", "merguez", "vert", "rondelle", "frit", "soupe", "poudre", "croustil", "trempette", "sauce", "rouge et", "marine", "perle"]],
     ail: ["ail", ["=ail"], ["poudre", "pain", "beurre", "sauce", "sel", "noir", "trempette", "croutons", "moulu", "aioli", "pate"]],
     carotte: ["carottes", ["carotte"], ["gateau", "muffin", "jus", "nourriture", "carrot cake", "surgel", "congel"]],
     celeri: ["céleri", ["celeri"], ["sel", "rave", "graine", "soupe"]],
-    patate: ["pommes de terre", ["pommes de terre|pomme de terre|patate"], ["douce", "frite", "croustil", "chips", "pile", "salade", "pilee", "surgel", "congel", "galette", "pate", "gnocchi", "sachet", "pures"]],
+    patate: ["pommes de terre", ["pommes de terre|pomme de terre|patate"], ["douce", "frite", "rondelle", "quartier", "croustil", "chips", "pile", "salade", "pilee", "surgel", "congel", "galette", "pate", "gnocchi", "sachet", "pures"]],
     patate_douce: ["patates douces", ["patate|pomme de terre", "douce"], ["frite", "croustil", "chips", "surgel", "congel", "nourriture"]],
     poivron: ["poivrons", ["poivron"], ["grille", "farci", "pot", "rotis", "marine", "conserve", "sauce", "trempette"]],
     brocoli: ["brocoli", ["brocoli"], ["surgel", "congel", "salade", "chou fleur", "soupe", "melange"]],
@@ -82,17 +82,17 @@
     fromage_tranche: ["tranches de fromage", ["fromage", "tranch"], ["burger", "sandwich", "craquelin"]],
     yogourt: ["yogourt", ["yogourt|yaourt|yogurt"], ["glace", "glacee", "barre", "boisson", "a boire", "tube", "enrobe", "chien", "chat", "bebe", "pretzel", "raisins", "croustil", "biscuit", "nourriture", "cereale"]],
     feta: ["feta", ["feta"], ["pizza", "trempette", "spanakopita", "salade", "pate", "feuillete"]],
-    pain_tranche: ["pain tranché", ["=pain|=pains"], ["kaiser", "hamburger", "hot", "burger", "naan", "pita", "baguette", "dore", "miettes", "gateau", "viande", "sous marin", "bagel", "croissant", "ail", "epice", "banane", "courgette", "mais", "sucre", "chocolat", "fromage", "sandwich", "chapelure", "pizza", "panini", "ciabatta", "tortilla", "brioche", "muffin", "pita", "croute", "plat", "pudding", "pouding", "farine", "levure", "machine", "grille", "papier", "cereale", "savon", "repas", "chiens", "chats", "sushi", "panettone"]],
+    pain_tranche: ["pain tranché", ["=pain|=pains"], ["raisin", "kaiser", "hamburger", "hot", "burger", "naan", "pita", "baguette", "dore", "miettes", "gateau", "viande", "sous marin", "bagel", "croissant", "ail", "epice", "banane", "courgette", "mais", "sucre", "chocolat", "fromage", "sandwich", "chapelure", "pizza", "panini", "ciabatta", "tortilla", "brioche", "muffin", "pita", "croute", "plat", "pudding", "pouding", "farine", "levure", "machine", "grille", "papier", "cereale", "savon", "repas", "chiens", "chats", "sushi", "panettone"]],
     kaiser: ["pains kaiser", ["kaiser"], []],
     baguette: ["baguette", ["baguette"], ["pizza", "chips", "croustil", "fromage", "garnie", "sandwich", "ail"]],
     tortilla: ["tortillas", ["tortilla|wrap"], ["croustil", "chips", "nachos", "soupe", "trempette", "kit", "ensemble", "chips", "poulet", "porc"]],
     pita: ["pains pita", ["pita"], ["croustil", "chips", "craquelin", "trempette", "pizza"]],
     croissant: ["croissants", ["croissant"], ["surgel", "pate", "sandwich", "jambon", "pizza", "cereale"]],
-    ciabatta: ["ciabatta", ["ciabatta"], ["pizza", "sandwich", "ail"]],
+    ciabatta: ["ciabatta", ["ciabatta"], ["pizza", "sandwich", "ail", "boeuf", "poulet", "jambon", "dinde"]],
     bagel: ["bagels", ["bagel"], ["chips", "croustil", "pizza", "assaison", "epice", "crustil", "bouchees", "fromage a la creme"]],
     pain_sousmarin: ["pains sous-marin", ["sous marin|sous marins|hot dog|hot dogs|hamburger"], ["saucisse", "wiener", "boeuf", "galette", "surgel", "congel", "sauce", "relish", "moutarde", "bbq", "cuit", "garni", "pizza"]],
     pate_pizza: ["pâte à pizza", ["pate a pizza|pizza dough|croute a pizza|croutes a pizza"], ["sauce", "fromage"]],
-    riz: ["riz", ["=riz"], ["basmati", "nouille", "galette", "gateau", "craquelin", "lait", "vinaigre", "farine", "boisson", "crispies", "papier", "pouding", "vermicelle", "cereale", "sauce", "poulet", "plat", "repas", "bebe", "chips", "croustil", "chou fleur", "choux fleurs", "brocoli", "sushi", "spaghetti", "pates", "bol", "son", "sirop", "biscuit", "barre", "galettes", "risotto", "accompagnement", "melange", "ble", "quinoa", "mais", "assaison"]],
+    riz: ["riz", ["=riz"], ["basmati", "express", "minute", "instantane", "nouille", "galette", "gateau", "craquelin", "lait", "vinaigre", "farine", "boisson", "crispies", "papier", "pouding", "vermicelle", "cereale", "sauce", "poulet", "plat", "repas", "bebe", "chips", "croustil", "chou fleur", "choux fleurs", "brocoli", "sushi", "spaghetti", "pates", "bol", "son", "sirop", "biscuit", "barre", "galettes", "risotto", "accompagnement", "melange", "ble", "quinoa", "mais", "assaison"]],
     riz_basmati: ["riz basmati", ["riz", "basmati"], ["pret", "plat", "bol", "sachet micro", "accompagnement"]],
     pates: ["pâtes alimentaires", ["penne|rotini|fusilli|rigatoni|farfalle|pates alimentaires|pates seches|tortiglioni|cavatappi|bucatini|orzo|linguine|fettuccine|catelli|barilla|primo|italpasta|de cecco|pates"], ["sauce", "a pizza", "fraiches", "pret", "plat", "repas", "kit", "diner", "macaroni et fromage", "salade", "lasagne", "pate a", "pate de", "pate feuillet", "pate brisee", "pate de foie", "farcies", "farci", "ravioli", "tortellini", "gnocchi", "surgel", "congel", "chips", "soupe"]],
     spaghetti: ["spaghetti", ["spaghetti|spaghettini"], ["sauce", "courge", "boulette", "repas", "conserve", "plat", "surgel", "congel"]],
@@ -208,10 +208,11 @@
     if (q) { if (q.unite === "l") q.unite = "L"; q.qte *= mult; }
     if (ingU === "u") {
       if (/douzaine/.test(nm)) return { qte: 12 * mult, unite: "u" };
-      m = raw.match(/(?:paq(?:uet)?\.?\s*de|pqt\s*de|sac\s*de|boite\s*de|caisse\s*de|emballage\s*de)\s*(\d+)(?!\s*(?:g|kg|ml|l|lb)\b)/) || raw.match(/\b(\d+)\s*(?:unites|un\.|pains|bagels|tortillas|croissants|pitas|oeufs|œufs)\b/);
+      m = raw.match(/(?:paq(?:uet)?\.?\s*de|pqt\s*de|sac\s*de|boite\s*de|caisse\s*de|emballage\s*de)\s*(\d+)(?!\s*(?:g|kg|ml|l|lb)\b)/) || raw.match(/\b(\d+)\s*(?:un\b|unités?\b|unites?\b|pains\b|bagels\b|tortillas\b|croissants\b|pitas\b|oeufs\b|œufs\b)/);
       if (m) return { qte: Number(m[1]) * mult, unite: "u" };
-      if (q || PACK[r.ing]) return null; // a size but not a count, or a pack of unknown count: ask the AI
-      return { qte: 1 * mult, unite: "u" };
+      if (/(^| )(ch|chacun|chacune|unite|l unite|un)( |$)/.test(post)) return { qte: 1 * mult, unite: "u" };
+      return null; // count not written (bag, pack, by weight): the AI reads it
+
     }
     return q;
   }
@@ -224,7 +225,7 @@
       const fix = opts.sizes && opts.sizes[r.ing + "|" + r.name];
       if (fix && fix.skip) continue;
       let s = fix || sizeOf(r, ing.u);
-      if (!s && opts.guess && ing.u === "u" && PACK[r.ing]) s = { qte: PACK[r.ing], unite: "u" };
+      if (!s && opts.guess && ing.u === "u" && PACK[r.ing] && !sizeOf(r, "g")) s = { qte: PACK[r.ing], unite: "u" };
       if (!s) { unknown.push(r); continue; }
       if (ing.u === "u" && s.unite !== "u") { unknown.push(r); continue; }
       if (ing.u === "g" && !["lb", "kg", "g"].includes(s.unite)) { unknown.push(r); continue; }

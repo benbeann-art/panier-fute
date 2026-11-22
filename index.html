@@ -1676,6 +1676,17 @@ function cleanIA(x) {
   if (!x || typeof x.n !== "string" || !Array.isArray(x.i) || !Array.isArray(x.s)) return null;
   const i = x.i.filter((l) => Array.isArray(l) && ING[l[0]] && Number(l[1]) > 0).map((l) => [l[0], Number(l[1])]);
   if (i.length < 3 || x.s.length < 2) return null;
+  // grams written as spoons by mistake (4 g of flour for 12 portions): a tablespoon is about 8 g
+  for (const l of i) if (ING[l[0]].u === "g" && l[1] < 10 && !/gingembre|ail|piment|safran/.test(l[0])) l[1] = Math.round(l[1] * 8);
+  // an ingredient named in the steps but missing from the list (leeks to slice, but no leeks to buy): add it with a usual quantity
+  let txt = x.s.join(" ");
+  for (const [k] of i) txt = txt.replace(new RegExp(aiKeyRe(ING[k].n.split(" (")[0].split(" / ")[0]).source, "giu"), " "); // "tomates cerises" is not "tomates"
+  for (const id of Object.keys(ING)) {
+    if (i.some((l) => l[0] === id) || !ING[id].n) continue;
+    if (aiKeyRe(ING[id].n.split(" (")[0].split(" / ")[0]).test(txt)) { const q = usualQty(id); if (q > 0) i.push([id, q]); }
+  }
+  // only quantity tokens of ingredients in the list
+  x.s = x.s.map((t) => String(t).replace(/\{[=+]([a-z_]+)(@[\d.]+)?\}/g, (m, k) => (i.some((l) => l[0] === k) ? m : "")));
   const id = String(x.id || "ia-" + x.n).replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 60);
   return { id: id.startsWith("ia-") ? id : "ia-" + id, n: x.n.slice(0, 90), c: CATS.includes(x.c) ? x.c : "Au four", l: LUNCH[x.l] ? x.l : "micro",
     p: ING[x.p] ? x.p : i[0][0], t: Math.min(600, Math.max(5, Number(x.t) || 45)), k: "ia", ia: true, why: String(x.why || "").slice(0, 200),
@@ -2759,6 +2770,7 @@ Mets cette recette au format de l'application, pour 12 portions : trouve pour co
 Chaque ingrédient doit utiliser un identifiant de cette liste (id = nom [unité] ; g = grammes, ml = millilitres, u = unités, cs = c. à soupe, ct = c. à thé). Convertis les tasses et les livres dans l'unité de la liste. Si un ingrédient n'a pas d'équivalent, prends le plus proche ; s'il n'y en a vraiment aucun, laisse-le de côté et nomme-le dans "manque".
 ${ingCatalog()}
 Écris les étapes clairement, une action par étape, en gardant les temps et les températures, toujours en degrés Fahrenheit (°F) seulement, jamais en Celsius (et une température interne sécuritaire pour les viandes, en °F).
+${AI_STEP_RULE}
 Réponds UNIQUEMENT par cet objet JSON :
 {"n":"Nom","c":"${CATS.join('"|"')}","o":"Québécois|Italien|Français|Américain|Mexicain|Asiatique|Monde","l":"micro"|"thermos"|"froid","p":"id de l'ingrédient principal","t":minutes,"i":[["id",quantité],...],"s":["étape",...],"manque":["ingrédient sans équivalent",...]}`;
   try {
@@ -3226,10 +3238,69 @@ let cook = null; // {id, i, done:{}}
 const FMAP = { 57: 135, 63: 145, 70: 158, 71: 160, 74: 165, 82: 180, 85: 185, 88: 190, 120: 250, 150: 300, 160: 325, 180: 350, 190: 375, 200: 400, 210: 425, 220: 425, 230: 450 };
 // Fahrenheit only, also for imported or AI-adjusted recipes
 function toF(t) {
-  return String(t).replace(/(\d+)\s?°\s?C\s*\((\d+)\s?°\s?F\)/g, "$2 °F").replace(/(\d+)\s?°\s?C\b/g, (m, c) => (FMAP[+c] || Math.round((c * 9 / 5 + 32) / 5) * 5) + " °F");
+  return String(t).replace(/(\d+)\s?°\s?C\s*\((\d+)\s?°\s?F\)/g, "$2 °F").replace(/(\d+)\s?°\s?C\s*(?:\/|ou)\s*(\d+)\s?°\s?F/g, "$2 °F").replace(/(\d+)\s?°\s?C\b/g, (m, c) => (FMAP[+c] || Math.round((c * 9 / 5 + 32) / 5) * 5) + " °F")
+    .replace(/(\d+) °F\s*\(\s*\1\s?°\s?F\)/g, "$1 °F").replace(/(\d+) °F\s*(?:\/|ou)\s*\1\s?°\s?F/g, "$1 °F");
 }
+// ---------- AI recipes: put the quantities in the steps ----------
+// A name -> regex that accepts singular or plural and "œ" or "oe", whole words only
+function aiKeyRe(name) {
+  const w = String(name).toLowerCase().trim().split(/\s+/).map((x) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/œ/g, "(?:œ|oe)").replace(/(?:s|x)$/, "") + "(?:s|x)?");
+  return new RegExp("(?<![\\p{L}])" + w.join("\\s+") + "(?![\\p{L}])", "iu");
+}
+let usualCache = null;
+function usualQty(id) {
+  if (!usualCache) {
+    usualCache = {};
+    const all = {};
+    for (const r of REC) if (!r.ia) for (const [k, q] of r.i) (all[k] = all[k] || []).push(q);
+    for (const k in all) { const a = all[k].sort((x, y) => x - y); usualCache[k] = a[a.length >> 1]; }
+  }
+  return usualCache[id] || 0;
+}
+const AI_GENERIC = new Set(["sauce", "huile", "pâte", "pâtes", "poudre", "fromage", "bouillon", "jus", "crème", "lait", "pain", "pains", "riz", "farine", "graines", "flocons", "feuilles", "cubes", "filets", "haricots", "tomates", "oignons", "chou", "nouilles", "vin", "fines", "petits", "assaisonnement", "extrait", "pois", "tranches", "côtes"]);
+const AI_STOPW = new Set(["de", "d'", "à", "au", "aux", "en", "du", "des", "la", "le", "les", "ou", "et", "/"]);
+const MEATW = { poulet: "poulet", boeuf: "bœuf", porc: "porc", dinde: "dinde" };
+// For a recipe whose steps have no quantity tokens: add {=id} after the first mention of each ingredient
+const autoCache = {};
+function autoTokens(r) {
+  const key = r.id + "|" + r.s.join("|") + "|" + r.i.map((l) => l[0]).join(",");
+  if (autoCache[key]) return autoCache[key];
+  const ids = r.i.map((l) => l[0]);
+  const cands = [], owners = {};
+  for (const id of ids) {
+    const base = ING[id].n.split(" (")[0].split(" / ")[0].toLowerCase();
+    const words = base.split(/\s+/);
+    const names = new Set([base]);
+    for (let n = words.length - 1; n >= 1; n--) { if (AI_STOPW.has(words[n - 1])) continue; names.add(words.slice(0, n).join(" ")); }
+    const mw = Object.keys(MEATW).find((m) => id.startsWith(m + "_")); if (mw) names.add(MEATW[mw]);
+    if (id === "sel") names.add("saler");
+    if (id === "poivre") names.add("poivrer");
+    for (const nm of names) { (owners[nm] = owners[nm] || new Set()).add(id); cands.push({ id, nm }); }
+  }
+  cands.sort((a, b) => b.nm.length - a.nm.length);
+  const steps = r.s.map(String), taken = steps.map(() => []), placed = new Set(), ins = steps.map(() => []);
+  for (const c of cands) {
+    if (placed.has(c.id) || owners[c.nm].size > 1) continue; // two ingredients share this name: too vague
+    if (!c.nm.includes(" ") && AI_GENERIC.has(c.nm) && ids.filter((x) => ING[x].n.toLowerCase().startsWith(c.nm)).length > 1) continue;
+    const re = new RegExp(aiKeyRe(c.nm).source, "giu");
+    for (let k = 0; k < steps.length && !placed.has(c.id); k++) {
+      for (const m of steps[k].matchAll(re)) {
+        const a = m.index, b = a + m[0].length;
+        if (taken[k].some(([x, y]) => a < y && b > x)) continue;
+        taken[k].push([a, b]); placed.add(c.id);
+        const before = steps[k].slice(Math.max(0, a - 22), a);
+        if (!/\d[^.;:!?°]*$/.test(before.replace(/c\. à/g, "c à"))) ins[k].push([b, " {=" + c.id + "}"]); // else the quantity is already written
+        break;
+      }
+    }
+  }
+  const out = steps.map((t, k) => { let u = t; for (const [pos, tok] of ins[k].sort((x, y) => y[0] - x[0])) u = u.slice(0, pos) + tok + u.slice(pos); return u; });
+  return (autoCache[key] = out);
+}
+// "1 ct de sel", "2 cs d'huile": the app's own words
+const unAbbr = (t) => String(t).replace(/(\d|½|¼|¾)\s*cs\b\.?/g, "$1 c. à soupe").replace(/(\d|½|¼|¾)\s*ct\b\.?/g, "$1 c. à thé");
 function stepsOf(r) {
-  if (!r.s.some((t) => /\{[=+][a-z_]+(@[\d.]+)?\}/.test(t))) return r.s.map(toF);
+  if (!r.s.some((t) => /\{[=+][a-z_]+(@[\d.]+)?\}/.test(t))) r = Object.assign({}, r, { s: autoTokens(r) });
   const c = cfgOf(r.id), aj = S.ajust[ajKey(r.id)], q = {};
   for (const [k, v] of L.scaleRecipe(r, ING, c, aj && aj.q)) q[k] = v;
   const qty = (id, f) => {
@@ -3239,7 +3310,7 @@ function stepsOf(r) {
     return String(L.fmtQty(g, v)).replace(/ \((≈[^()]*)\)/g, ", $1");
   };
   const nm = (id) => { const g = ING[id]; if (!g) return id; const n = g.n.split(" (")[0]; return n.charAt(0).toLowerCase() + n.slice(1); };
-  return r.s.map((t) => String(t).replace(/\{=([a-z_]+)(?:@([\d.]+))?\}/g, (m, id, f) => (qty(id, f && +f) ? `(${qty(id, f && +f)})` : "")).replace(/\{\+([a-z_]+)\}/g, (m, id) => (qty(id) ? `${nm(id)} (${qty(id)})` : nm(id))).replace(/ +([.,])/g, "$1").replace(/ {2,}/g, " ")).map(toF);
+  return r.s.map((t) => String(t).replace(/\{=([a-z_]+)(?:@([\d.]+))?\}/g, (m, id, f) => (qty(id, f && +f) ? `(${qty(id, f && +f)})` : "")).replace(/\{\+([a-z_]+)\}/g, (m, id) => (qty(id) ? `${nm(id)} (${qty(id)})` : nm(id))).replace(/ +([.,])/g, "$1").replace(/ {2,}/g, " ")).map((t) => toF(unAbbr(t)));
 }
 function openCook(id) {
   cook = { id, i: 0, done: {} };
@@ -3938,6 +4009,7 @@ async function weeklyAuto() {
 }
 
 // ---------- AI: new recipes for our tastes, perfect scaling ----------
+const AI_STEP_RULE = `Dans les étapes, n'écris JAMAIS une quantité en chiffres : écris le jeton {=id} juste après le nom de l'ingrédient, la première fois qu'il est utilisé (ex. « Faire fondre le beurre {=beurre} et dorer les poireaux {=poireau} émincés »). L'application le remplace par la bonne quantité. Chaque ingrédient de "i" doit être utilisé dans une étape, et tout ingrédient nommé dans les étapes doit être dans "i". Les quantités en g sont de vrais grammes (4 c. à soupe de farine = 32 g). Températures en °F seulement, jamais en °C.`;
 const ingCatalog = () => Object.entries(ING).map(([k, v]) => `${k} = ${v.n} [${v.u}]`).join("\n");
 const likedNames = (v) => REC.filter((r) => S.aime[r.id] === v).map((r) => r.n).slice(0, 40);
 // Ask the AI for a specific dish: it proposes 3 recipes; the one you keep stays in the app (and syncs)
@@ -3954,6 +4026,7 @@ ${banText() ? `INTERDIT (allergies ou interdits, aucun de ces aliments ni ingré
 Profite si possible de ces spéciaux de la semaine : ${best || "(aucun)"}
 Chaque recette est pour 12 portions (4 adultes × 3 repas), quantités réalistes et complètes. TOUS les ingrédients, y compris sel, poivre, huile, beurre et épices, doivent venir de cette liste (id = nom [unité]; cs = c. à soupe, ct = c. à thé, u = unité) :
 ${ingCatalog()}
+${AI_STEP_RULE}
 Réponds UNIQUEMENT par un tableau JSON de 3 objets :
 [{"n":"Nom","c":"${CATS.join('"|"')}","l":"micro"|"thermos"|"froid","p":"id de la protéine principale","t":minutes,"why":"une phrase : ce qui distingue cette version","i":[["id",quantité],...],"s":["étape détaillée avec temps et températures de cuisson sécuritaires",...]}]`;
   try {
@@ -3990,6 +4063,7 @@ Spéciaux de la semaine à utiliser en priorité : ${best || "(aucun)"}
 Ne reprends pas ces noms : ${REC.filter((r) => r.ia).map((r) => r.n).join("; ") || "(aucun)"}
 Chaque recette est pour 12 portions (4 adultes × 3 repas), quantités réalistes. TOUS les ingrédients, y compris sel, poivre, huile et épices, doivent venir de cette liste (id = nom [unité]; cs = c. à soupe, ct = c. à thé, u = unité) :
 ${ingCatalog()}
+${AI_STEP_RULE}
 Réponds UNIQUEMENT par un tableau JSON de 4 objets :
 [{"n":"Nom","c":"${CATS.join('"|"')}","l":"micro"|"thermos"|"froid","p":"id de la protéine principale","t":minutes,"why":"une phrase : pourquoi pour eux","i":[["id",quantité],...],"s":["étape avec temps et températures de cuisson sécuritaires",...]}]`;
   try {

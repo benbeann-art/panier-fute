@@ -44,7 +44,7 @@
     porc_cotelettes: ["côtelettes de porc", ["cotelette", "porc"], ["fume", "cuit"]],
     cotes_levees: ["côtes levées", ["cotes levees|cote levee|cotes levee"], ["sauce", "cuit", "poulet", "boeuf"]],
     porc_hache: ["porc haché", ["porc", "hache"], ["burger", "galette", "boulette"]],
-    saucisses: ["saucisses", ["saucisse"], ["hot dog", "wiener", "cocktail", "pain", "seche", "pepperoni"]],
+    saucisses: ["saucisses", ["saucisse"], ["hot dog", "wiener", "cocktail", "pain", "seche", "pepperoni", "hors", "vegetal", "vegan"]],
     dinde_hachee: ["dinde hachée", ["dinde", "hache"], ["burger", "galette"]],
     jambon: ["jambon", ["jambon"], ["pizza", "sandwich", "pois", "soupe", "croquette", "prosciutto", "salami"]],
     bacon: ["bacon", ["bacon"], ["bits", "miettes", "morceaux", "croustil", "burger", "saveur", "dinde"]],
@@ -52,7 +52,7 @@
     saumon: ["filet de saumon", ["saumon"], ["fume", "farci", "tournedos", "conserve", "boite", "roulade", "burger", "galette", "sushi", "pate", "mousse", "croquette", "nourriture"]],
     truite: ["truite", ["truite"], ["fume", "farci", "conserve"]],
     tilapia: ["tilapia", ["tilapia"], ["pane", "farci"]],
-    crevettes: ["crevettes", ["crevette"], ["anneau", "cocktail", "pane", "pates", "surimi", "batonnet", "poisson", "goberge", "salade", "bouchee", "moghrabieh", "tempura", "sauce", "croustil", "chips", "dumpling", "rouleau", "won"]],
+    crevettes: ["crevettes", ["crevette"], ["anneau", "cocktail", "pane", "pates", "surimi", "batonnet", "poisson", "goberge", "salade", "bouchee", "moghrabieh", "tempura", "sauce", "croustil", "chips", "dumpling", "rouleau", "won", "bol", "popcorn", "couronne"]],
     thon: ["thon en conserve", ["thon"], ["steak", "frais", "sushi", "longe", "tataki", "salade", "chat", "nourriture"]],
     oeufs: ["oeufs", ["oeuf"], ["chocolat", "paques", "nouille", "pate", "blanc d oeufs|blancs d oeufs", "liquide", "cuit", "kinder", "sandwich", "muffin"]],
     pois_chiches: ["pois chiches", ["pois chiche"], ["trempette", "hummus", "houmous", "croustil", "farine", "pate"]],
@@ -70,7 +70,7 @@
     brocoli: ["brocoli", ["brocoli"], ["surgel", "congel", "salade", "chou fleur", "soupe", "melange"]],
     chou_fleur: ["chou-fleur", ["chou fleur|choux fleurs"], ["surgel", "congel", "riz", "pizza", "croute", "brocoli et", "gratin"]],
     courgette: ["courgettes", ["courgette|zucchini"], ["spirale", "surgel", "pates", "muffin", "pain"]],
-    champignons: ["champignons", ["champignon"], ["soupe", "sauce", "conserve", "marine", "farci", "pizza", "creme", "seche", "fromage", "gouda"]],
+    champignons: ["champignons", ["champignon"], ["soupe", "sauce", "conserve", "marine", "farci", "pizza", "creme", "seche", "fromage", "gouda", "vtech", "construction", "jouet", "maison champignon", "ens"]],
     epinards: ["épinards", ["epinard"], ["surgel", "congel", "trempette", "pates", "tortilla", "spanakopita", "boulette", "pizza", "feuillete", "hache", "cedar"]],
     laitue: ["laitue romaine", ["laitue|romaine"], ["salade cesar|kit|ensemble|melange"]],
     tomate: ["tomates", ["tomate"], ["cerise", "raisin", "conserve", "sauce", "pate", "jus", "en des", "seche", "ketchup", "soupe", "bruschetta", "salsa", "broye", "entieres en", "passata", "boite", "cocktail", "ml", "aylmer", "hunt", "primo", "conserve", "coulis", "compliments"]],
@@ -87,7 +87,7 @@
     avocat: ["avocats", ["avocat"], ["huile", "guacamole", "trempette", "sushi", "toast", "mayo"]],
     feves_germees: ["fèves germées", ["feve|feves", "germe"], ["conserve"]],
     pois_mange_tout: ["pois mange-tout", ["mange tout|mangetout|pois sucres|pois sugar snap|sugar snap"], ["surgel", "melange"]],
-    navet: ["navet", ["navet|rutabaga"], ["soupe", "frite"]],
+    navet: ["navet", ["navet|rutabaga"], ["soupe", "frite", "marine", "piment"]],
     mais: ["maïs surgelé", ["=mais", "surgel|congel|grains"], ["creme", "conserve", "croustil", "chips", "tortilla", "huile", "farine", "fecule", "souffle", "pop", "sirop", "flocons", "galette"]],
     mais_conserve: ["maïs en crème", ["=mais", "creme|conserve|boite"], ["croustil", "chips", "huile", "surgel", "congel", "soupe"]],
     petits_pois: ["petits pois surgelés", ["petits pois|petit pois|pois verts"], ["carotte", "conserve", "chiche", "mange", "croustil", "soupe"]],
@@ -97,7 +97,7 @@
     beurre: ["beurre", ["=beurre"], ["arachide", "amande", "pomme", "noix", "cacao", "sucre", "biscuit", "popcorn", "mais", "lait de beurre", "babeurre", "karite", "corps", "lotion", "erable", "poulet", "sauce", "tartinade", "croissant", "cookie", "graine", "soya", "tournesol", "bonbon", "galette", "cari", "chicken", "trempette", "noix de coco", "lait"]],
     mozzarella: ["mozzarella", ["mozzarella"], ["boccon", "pizza", "batonnet", "bouchee", "panee", "frite", "croquette"]],
     cheddar: ["cheddar", ["cheddar"], ["craquelin", "croustil", "chips", "macaroni", "goldfish", "pop", "bacon", "saucisse", "burger", "soupe", "sauce", "pain", "biscuit", "pretzel", "nachos"]],
-    parmesan: ["parmesan", ["parmesan|parmigiano|grana"], ["sauce", "croutons", "vinaigrette", "croustil", "pain", "biscuit", "poulet", "veau", "aubergine", "pates"]],
+    parmesan: ["parmesan", ["parmesan|parmigiano|grana"], ["sauce", "croutons", "vinaigrette", "croustil", "pain", "biscuit", "poulet", "veau", "aubergine", "pates", "fondue", "hors", "saucisse"]],
     fromage_creme: ["fromage à la crème", ["fromage a la creme|philadelphia|fromage creme"], ["gateau", "bagel", "biscuit", "glacage", "trempette", "rangoon", "jalapeno", "won"]],
     creme_sure: ["crème sure", ["creme sure"], ["croustil", "chips", "trempette", "oignon"]],
     fromage_tranche: ["tranches de fromage", ["fromage", "tranch"], ["burger", "sandwich", "craquelin"]],
@@ -281,15 +281,17 @@
     if (perKg && !x.post) { x.post = "/kg"; return x; }
     if (size && !/\d\s*(lb|kg|g)\b/.test(x.name.toLowerCase())) { addSize(x, `${size[1]} de ${size[2]} ${size[3]}`); return x; }
     // a plain weight in the description ("Produits du Québec 907 g", "1,36 kg"): the size of the package (not "4,39/kg", a price)
-    const w = !x.post && !size && d.match(/(?<![\d,.\/$])(\d+(?:[.,]\d+)?)\s*(kg|g|lb)\b(?!\s*\/)/);
-    if (w && !/\d\s*(lb|kg|g)\b/.test(x.name.toLowerCase())) addSize(x, `${w[1]} ${w[2]}`);
+    const mx = !x.post && !size && d.match(/(\d+)\s*[x×]\s*(\d+(?:[.,]\d+)?)\s*(kg|g|ml|l)\b/);
+    const w = !x.post && !size && d.match(/(?<![\d,.\/$x×])(\d+(?:[.,]\d+)?)\s*(kg|g|lb|ml|l)\b(?!\s*\/)/);
+    if (mx && !/\d\s*(lb|kg|g|ml|l)\b/.test(x.name.toLowerCase())) addSize(x, `${mx[1]} x ${mx[2]} ${mx[3]}`);
+    else if (w && !/\d\s*(lb|kg|g|ml|l)\b/.test(x.name.toLowerCase())) addSize(x, `${w[1]} ${w[2]}`);
     return x;
   }
   async function addDetails(out, opts) {
-    const todo = out.filter((x) => PRODUCE.has(x.ing) && !x.det && (!x.post || /^\s*ch\.?\s*$|^\s*chacun/i.test(x.post)) && !/\d\s*(lb|kg|g|un\.?)\b/i.test(x.name) && x.fid).slice(0, opts.maxDetails || 200);
+    const todo = out.filter((x) => !x.det && (!x.post || /^\s*ch\.?\s*$|^\s*chacun/i.test(x.post)) && !/\d\s*(lb|kg|g|un\.?)\b/i.test(x.name) && x.fid).slice(0, opts.maxDetails || 320);
     let i = 0;
     const worker = async () => { while (i < todo.length) { const x = todo[i++]; const d = await detailOf(x.fid, opts.fetch); if (d.trim()) { applyDetail(x, d); x.det = 1; } } };
-    await Promise.all([worker(), worker(), worker(), worker()]);
+    await Promise.all([worker(), worker(), worker(), worker(), worker(), worker()]);
   }
 
   // Price -> what it buys, without AI. Returns {qte, unite} or null when the size is unknown.
@@ -304,7 +306,7 @@
     const post = norm(r.post), nm = norm(r.name);
     const pm = String(r.pre || "").match(/^\s*(\d+)\s*(?:\/|pour\b)/i);
     const mult = pm ? Number(pm[1]) : 1;
-    let m = String(r.post).toLowerCase().match(/^\s*\/?\s*100\s*g/);
+    let m = String(r.post).toLowerCase().match(/^\s*(?:\/|le|la|par)?\s*100\s*g/);
     if (m) return { qte: 100, unite: "g" }; // "/100g prix membre 14,47/kg": the price is for 100 g
     const pst = String(r.post).trim().toLowerCase();
     if (/^\/?\s*lb\b/.test(pst) || (/(^| )lb( |$)/.test(post) && !/\/\s*kg/.test(pst))) return { qte: 1 * mult, unite: "lb" };

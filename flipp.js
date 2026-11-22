@@ -168,6 +168,24 @@
     kale: ["chou kale", ["kale|frise"], ["chips", "croustil", "salade cesar", "salade de", "smoothie"]],
     gruyere: ["fromage gruyère", ["gruyere|suisse|emmental|jarlsberg"], ["tranche", "pain", "chips", "craquelin", "fondue", "quiche", "sandwich"]],
     poivre: ["poivre noir moulu", ["=poivre"], ["poivron", "citron", "chips", "croustil", "saucisse", "bifteck", "steak", "salami", "sauce", "rose", "vert", "assaison", "sel et poivre", "melange", "moulin a", "jambon", "pepperoni", "dinde", "poulet", "boeuf", "porc", "fromage", "craquelin"]],
+    // snacks (Collations tab)
+    banane: ["bananes", ["banane"], ["plantain", "chips", "croustil", "pain", "muffin", "yogourt", "barre", "sechee", "seche", "nourriture", "bebe", "smoothie", "boisson", "gateau", "puree", "collation"]],
+    poire: ["poires", ["=poire|=poires"], ["jus", "conserve", "coupe", "nectar", "sechee", "yogourt", "compote", "gourde", "boisson"]],
+    clementine: ["clémentines", ["clementine|mandarine"], ["jus", "conserve", "coupe", "yogourt", "boisson", "gelee"]],
+    orange: ["oranges", ["=orange|=oranges"], ["jus", "boisson", "marmelade", "saveur", "chocolat", "poivron", "carotte", "patate", "courge", "yogourt", "bonbon", "gelee", "nectar", "the", "tisane", "cheddar"]],
+    raisins: ["raisins", ["raisin"], ["sec", "secs", "sultana", "jus", "gelee", "pain", "biscuit", "muffin", "cereale", "yogourt", "vinaigre", "huile", "confiture", "boisson", "chocolat", "bagel", "son", "tomate"]],
+    bleuets: ["bleuets", ["bleuet"], ["muffin", "yogourt", "jus", "confiture", "gaufre", "barre", "pain", "cereale", "seche", "sauce", "tarte", "boisson", "the", "gelee", "pancake", "crepe"]],
+    fraises: ["fraises", ["fraise"], ["confiture", "yogourt", "jus", "gelee", "boisson", "barre", "saveur", "sirop", "tarte", "bonbon", "the", "lait", "creme glacee", "gateau", "smoothie", "rhubarbe et"]],
+    avoine: ["flocons d'avoine", ["avoine|gruau"], ["barre", "biscuit", "cereale", "boisson", "lait", "sachet", "instantane", "saveur", "muffin", "pain", "son d", "granola", "galette", "bouchee"]],
+    dattes: ["dattes", ["datte"], ["carre", "barre", "biscuit", "pain", "muffin", "sirop"]],
+    raisins_secs: ["raisins secs", ["raisin", "sec|secs|sultana"], ["pain", "biscuit", "cereale", "bagel", "muffin", "son", "chocolat", "yogourt", "enrobe"]],
+    graines_tournesol: ["graines de tournesol", ["tournesol", "graine"], ["huile", "beurre", "pain", "craquelin", "barre", "oiseau", "semence", "margarine", "tartinade"]],
+    graines_citrouille: ["graines de citrouille", ["citrouille|courge", "graine"], ["pain", "huile", "barre", "craquelin", "semence", "oiseau"]],
+    mais_eclater: ["maïs à éclater", ["mais", "eclater|souffle"], ["micro", "beurre", "caramel", "prepare", "saveur", "kettle", "chocolat", "fromage", "sucre", "chips"]],
+    beurre_tournesol: ["beurre de tournesol", ["tournesol", "beurre|tartinade"], ["huile", "margarine", "biscuit", "barre"]],
+    edamame: ["edamames", ["edamame|feve de soya|feves de soya"], ["sec", "chips", "croustil", "pate", "nouille", "sauce", "boisson", "lait", "salade"]],
+    farine_ble: ["farine de blé entier", ["farine", "ble entier|entier"], ["pain", "craquelin", "tortilla", "pita", "pates", "biscuit", "muffin", "melange", "spaghetti"]],
+    graines_lin: ["graines de lin", ["lin", "graine|moulu"], ["huile", "pain", "craquelin", "cereale", "barre", "bagel"]],
     sel: ["sel de table", ["=sel"], ["sans sel", "poivre", "ail", "celeri", "assaison", "croustil", "chips", "vinaigre", "noix", "arachide", "beurre", "bain", "epsom", "deglacage", "fondant", "adoucisseur", "chlorure", "piscine", "eau", "caramel", "chocolat", "biscuit", "craquelin", "bretzel", "pretzel", "pistache", "amande", "edamame", "morue", "sachets", "faible", "reduit", "graines", "tournesol", "cajou", "rose de l himalaya|himalaya", "fleur de sel", "fumee", "epices", "sel de mer et", "beurre", "pop", "mais"]],
   };
   const norm = (s) => String(s || "").toLowerCase().replace(/œ/g, "oe").replace(/æ/g, "ae").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
@@ -224,7 +242,7 @@
 
   // Price -> what it buys, without AI. Returns {qte, unite} or null when the size is unknown.
   // usual count in one package, for "unit" ingredients sold in packs (used only when the AI can't tell)
-  const PACK = { oeufs: 12, pain_tranche: 20, kaiser: 6, bagel: 6, tortilla: 10, pita: 6, croissant: 6, ciabatta: 4, pain_sousmarin: 6, fromage_tranche: 16, ail: 10 };
+  const PACK = { clementine: 12, poire: 6, orange: 8, oeufs: 12, pain_tranche: 20, kaiser: 6, bagel: 6, tortilla: 10, pita: 6, croissant: 6, ciabatta: 4, pain_sousmarin: 6, fromage_tranche: 16, ail: 10 };
   const NUM = (s) => Number(String(s).replace(",", "."));
   function sizeOf(r, ingU) {
     const post = norm(r.post), nm = norm(r.name);

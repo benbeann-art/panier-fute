@@ -1,4 +1,4 @@
-PANIER FUTÉ v3.4.0 — app indépendante (sans Claude)
+PANIER FUTÉ v3.4.1 — app indépendante (sans Claude)
 ====================================================
 
 Tout est dans index.html : les 297 recettes, les images, les spéciaux de départ.

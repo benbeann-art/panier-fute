@@ -307,6 +307,10 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
       return null;
     }
     if (ing.u === "u" && sp.unite === "u") return sp.prix / q;
+    if (ing.u === "cs" || ing.u === "ct") { // oil, sauces, spices: price of one spoon
+      const ml = sp.unite === "L" ? 1000 * q : sp.unite === "ml" || sp.unite === "g" ? q : sp.unite === "kg" ? 1000 * q : null;
+      return ml ? sp.prix / (ml / (ing.u === "cs" ? 15 : 5)) : null;
+    }
     return null;
   }
 
@@ -1709,7 +1713,7 @@ async function push() {
   if (pending) { pending = false; push(); }
 }
 const setSync = () => updateAIBadge();
-const toast = (t) => { const el = $("#toast"); el.textContent = t; el.style.display = "block"; clearTimeout(toast.k); toast.k = setTimeout(() => (el.style.display = "none"), 2600); };
+const toast = (t, ms) => { const el = $("#toast"); el.textContent = t; el.style.display = "block"; clearTimeout(toast.k); toast.k = setTimeout(() => (el.style.display = "none"), ms || 2600); };
 
 // ---------- derived data ----------
 function allSpecials() {
@@ -2074,15 +2078,15 @@ async function readReceipt(files) {
 - combien de jours ça se garde à cet endroit,
 - l'identifiant le plus proche dans cette liste (sinon null) :
 ${invIdCatalog()}
-Lis aussi le nom du magasin (un de : ${L.STORES.join(", ")}, sinon null) et la date du reçu.
-Ignore les taxes, sacs, consignes, rabais de carte et sous-totaux.
-Réponds UNIQUEMENT par cet objet JSON : {"mag":"magasin ou null","date":"AAAA-MM-JJ","items":[{"n":"nom","qte":"quantité","prix":12.34,"zone":"frigo|congel|garde","jours":7,"id":"identifiant ou null"}]}`;
+Lis aussi le nom du magasin (un de : ${L.STORES.join(", ")}, sinon null), la date du reçu et le TOTAL PAYÉ (taxes comprises, le montant final du reçu).
+Dans les articles, ignore les taxes, sacs, consignes, rabais de carte et sous-totaux.
+Réponds UNIQUEMENT par cet objet JSON : {"mag":"magasin ou null","date":"AAAA-MM-JJ","total":123.45,"items":[{"n":"nom","qte":"quantité","prix":12.34,"zone":"frigo|congel|garde","jours":7,"id":"identifiant ou null"}]}`;
   try {
     const j = AI.extractJSON(await askAI(prompt, { images: await Promise.all([...files].slice(0, 4).map((f) => shrinkImg(f, 2200))), maxTokens: 6000 }), "object");
     if (!j || !Array.isArray(j.items)) throw new Error("reçu illisible");
     invReview = j.items.filter((x) => x && x.n).map((x) => ({ n: String(x.n).slice(0, 60), qte: String(x.qte || "").slice(0, 30), zone: ZONES[x.zone] ? x.zone : "frigo",
       id: ING[x.id] ? x.id : null, days: Number(x.jours) > 0 ? Math.round(Number(x.jours)) : null, prix: Number(x.prix) > 0 ? Number(x.prix) : null, keep: true }));
-    invReview.receipt = { mag: L.STORES.includes(j.mag) ? j.mag : null, date: /^\d{4}-\d\d-\d\d$/.test(j.date || "") ? j.date : today() };
+    invReview.receipt = { mag: L.STORES.includes(j.mag) ? j.mag : null, date: /^\d{4}-\d\d-\d\d$/.test(j.date || "") ? j.date : today(), total: Number(j.total) > 0 ? Number(j.total) : null };
     const tot = invReview.reduce((t, x) => t + (x.prix || 0), 0);
     invMsg = invReview.length ? `Reçu${invReview.receipt.mag ? " de " + invReview.receipt.mag : ""} : ${invReview.length} articles, ${L.FR(tot)} $. Vérifie et ajoute à l'inventaire.` : "Rien de lisible. Reprends la photo bien à plat, avec de la lumière.";
   } catch (e) { invMsg = "La lecture du reçu n'a pas marché : " + (e.message || "erreur"); }
@@ -2106,7 +2110,10 @@ function logReceipt(review) {
     const amt = x.id ? parseAmt(x.qte, x.id) || (ING[x.id].u === "u" ? 1 : null) : null;
     regular += amt && ING[x.id] ? Math.max(x.prix, ING[x.id].p * amt) : x.prix;
   }
+  const est = (S.depenses || []).find((x) => x.src === "liste" && x.date === (rc.date || today()) && (!rc.mag || (x.mags || []).includes(rc.mag)));
+  if (rc.total && rc.total >= total * 0.9) { regular += rc.total - total; total = rc.total; } // the amount really paid, taxes included
   if (total > 0) logTrip({ date: rc.date || today(), mags: rc.mag ? [rc.mag] : [], mag: rc.mag, total: Math.round(total * 100) / 100, saved: Math.round(Math.max(0, regular - total) * 100) / 100, src: "recu" });
+  return { total, est: est ? est.total : null };
 }
 function finishShopping() {
   const { list, ch } = listData();
@@ -2115,11 +2122,13 @@ function finishShopping() {
   let total = 0, regular = 0;
   for (const it of bought) { const a2 = ch.assign[it.id]; total += a2 ? a2.cost : 0; regular += L.packCost(it.id, it.buy, ING[it.id].p, ING).cost; }
   const mags = [...new Set(bought.map((it) => ch.assign[it.id] && ch.assign[it.id].mag).filter(Boolean))];
+  { const tx = taxOf(bought, ch); total += tx; regular += tx; }
   logTrip({ date: today(), mags, total: Math.round(total * 100) / 100, saved: Math.round(Math.max(0, regular - total) * 100) / 100, src: "liste" });
   // what was bought goes to the home inventory, then the list is cleared for next time
-  for (const it of bought) if (ING[it.id] && ING[it.id].r !== "Garde-manger et épices") {
-    const r = ING[it.id].r, zone = /Surgelés/.test(r) ? "congel" : /Épicerie|Collations|Ménager/.test(r) ? "garde" : "frigo";
-    addInv(zone, { n: ING[it.id].n.split(" (")[0], id: it.id, qte: L.fmtQty(ING[it.id], it.buy), amt: ING[it.id].u === "cs" || ING[it.id].u === "ct" ? null : it.buy });
+  for (const it of bought) if (ING[it.id]) {
+    const r = ING[it.id].r, zone = /Surgelés/.test(r) ? "congel" : /Épicerie|Collations|Ménager|Garde-manger/.test(r) || /^(patate|oignon|ail|courge|banane)/.test(it.id) ? "garde" : "frigo";
+    const a2 = ch.assign[it.id], got = a2 && a2.packs && a2.size ? a2.packs * a2.size : it.buy; // a 1 L bottle, not the 5 ml the recipe needs
+    addInv(zone, { n: ING[it.id].n.split(" (")[0], id: it.id, qte: invQtyTxt(it.id, got), amt: got, add: true });
   }
   markBought(bought.map((it) => it.id));
   for (const it of bought) delete S.coches[it.id];
@@ -2169,7 +2178,8 @@ function recordReceiptPrices(review) {
     if (!x.keep || !x.id || !x.prix) continue;
     const amt = parseAmt(x.qte, x.id) || (ING[x.id].u === "u" ? 1 : null);
     if (!amt) continue;
-    items.push({ ing: x.id, mag: rc.mag, prix: x.prix, qte: amt, unite: ING[x.id].u === "g" ? "g" : ING[x.id].u === "ml" ? "ml" : "u", txt: x.n });
+    const u = ING[x.id].u, spoon = u === "cs" ? 15 : u === "ct" ? 5 : 0;
+    items.push({ ing: x.id, mag: rc.mag, prix: x.prix, qte: spoon ? amt * spoon : amt, unite: u === "g" ? "g" : u === "ml" || spoon ? "ml" : "u", txt: x.n });
   }
   const d = new Date(rc.date + "T12:00"); d.setDate(d.getDate() - ((d.getDay() + 3) % 7));
   // what was not on special that week in this store = its everyday price
@@ -2271,7 +2281,19 @@ function parseAmt(text, id) {
   if (ing.u === "g") { if (u === "kg") return n * 1000; if (u === "g") return n; if (/^(lb|livre)/.test(u)) return n * 453.6; return null; }
   if (ing.u === "ml") { if (/^l/.test(u)) return n * 1000; if (u === "ml") return n; return null; }
   if (ing.u === "u") { if (/^(douzaine|dz)/.test(u)) return n * 12; if (!u) return n; return null; }
+  if (ing.u === "cs" || ing.u === "ct") { // oil, sauces, spices: kept in spoons
+    const sp = ing.u === "cs" ? 15 : 5;
+    if (/^l/.test(u)) return n * 1000 / sp; if (u === "ml" || u === "g") return n / sp; if (u === "kg") return n * 1000 / sp;
+    return null;
+  }
   return null;
+}
+// a package with no readable size ("1 pot", "1 bouteille", "2"): the usual package of that product
+function amtOrPack(text, id) {
+  const a = parseAmt(text, id); if (a != null || !ING[id]) return a;
+  const t = norm(text || "1"), m = t.match(/^(\d+)/), k = m ? Number(m[1]) : /^(un|une)\b|pot|bouteille|sac|boite|paquet|contenant|carton/.test(t) || !t ? 1 : null;
+  const pk = L.packOf(id, ING);
+  return k != null && pk ? k * pk : null;
 }
 // typical keeping time (days) by zone and aisle, used when the AI gives no date
 function shelfDays(id, zone) {
@@ -2286,9 +2308,10 @@ function shelfDays(id, zone) {
 }
 function addInv(zone, item) {
   const L2 = zoneList(zone), same = L2.find((x) => (item.id && x.id === item.id) || norm(x.n) === norm(item.n));
-  const amt = item.amt != null ? item.amt : parseAmt(item.qte, item.id);
+  const amt = item.amt != null ? item.amt : item.id ? amtOrPack(item.qte, item.id) : null;
   const exp = item.exp || (item.days ? addDays(today(), Number(item.days)) : item.id ? addDays(today(), shelfDays(item.id, zone)) : "");
-  if (same) { same.qte = item.qte || same.qte; same.amt = amt != null ? amt : same.amt; same.date = today(); same.exp = exp || same.exp; }
+  if (same && item.add && same.amt != null && amt != null) { same.amt = Math.round((same.amt + amt) * 100) / 100; same.qte = invQtyTxt(same.id || item.id, same.amt); same.date = today(); same.exp = exp || same.exp; same.at = Date.now(); } // bought more: add to what is left
+  else if (same) { same.qte = item.qte || same.qte; same.amt = amt != null ? amt : same.amt; same.date = today(); same.exp = exp || same.exp; }
   else L2.push({ n: item.n, id: item.id || null, qte: item.qte || "", amt, date: today(), exp, at: Date.now() });
 }
 // match a typed name to a known ingredient (typo tolerant)
@@ -2387,6 +2410,7 @@ function rMenu() {
     const when = x.cook.day < 0 ? dayName(-1) + " soir (avant le début)" : dayName(x.cook.day) + " soir";
     return `<div class="cook"><button class="thumb" data-open="${r.id}" aria-label="Voir la recette">${pic(r)}</button><div><button class="nm" data-open="${r.id}">${esc(r.n)}</button>
       <div class="small mute">À cuisiner : <b>${when}</b> · ${cfgTxt(cfgOf(r.id))} · ${x.slots.length} repas${x.extra ? ` · ${x.extra} repas de surplus <button class="btn sm" data-frz="${r.id}" data-por="${x.extra * cfgOf(r.id).pers}">Mettre au congélateur</button>` : ""}</div></div>
+      ${isCooked(r.id) ? `<button class="btn sm" data-uncook="${r.id}" title="Annuler">✓ Cuisinée</button>` : `<button class="btn sm red" data-cooked="${r.id}">C'est cuisiné</button>`}
       <button class="btn sm" data-rm="${r.id}">Retirer</button></div>`;
   }).join("");
   $("#v-menu").innerHTML = `<h1>Menu de la semaine</h1>
@@ -2556,8 +2580,39 @@ Réponds UNIQUEMENT par cet objet JSON :
   }
   aiItemBusy = false;
 }
+// Québec sales taxes (TPS 5 % + TVQ 9,975 %): basic groceries are not taxed; snacks, soft drinks, alcohol and household items are
+const TAX = 0.14975;
+const taxable = (id) => { const g = ING[id] || {}; return /Collations et boissons|Ménager et hygiène/.test(g.r || "") || /^(vin_|biere)/.test(id); };
+const taxOf = (list, ch) => Math.round(list.reduce((t, it) => t + (taxable(it.id) && ch.assign[it.id] ? ch.assign[it.id].cost * TAX : 0), 0) * 100) / 100;
+// ---------- cooked recipes: what they used leaves the home inventory, and they leave the grocery list ----------
+const isCooked = (id) => { const d = (S.cuit || {})[id]; return !!d && d >= addDays(today(), -6); };
+// amount left, in words people use: 990 ml of oil, not 66 tablespoons
+function invQtyTxt(id, amt) {
+  const g = ING[id]; if (!g) return "";
+  if (g.u === "cs" || g.u === "ct") { const ml = amt * (g.u === "cs" ? 15 : 5); return ml >= 1000 ? L.FR(ml / 1000, 1).replace(/,0$/, "") + " L" : Math.round(ml) + " ml"; }
+  return L.fmtQty(g, amt);
+}
+function useRecipe(r) {
+  const need = {}; for (const [id, q] of L.scaleRecipe(r, ING, cfgOf(r.id), ajustOf(r.id))) need[id] = (need[id] || 0) + q;
+  let n = 0;
+  // oldest first (the one that expires first)
+  const all = ["frigo", "congel", "garde"].flatMap((z) => zoneList(z).map((x) => ({ z, x }))).filter((o) => o.x.id && need[o.x.id] > 0)
+    .sort((p, q) => String(p.x.exp || "9").localeCompare(String(q.x.exp || "9")));
+  const gone = new Set();
+  for (const { x } of all) {
+    if (!(need[x.id] > 0)) continue;
+    n++;
+    if (x.amt == null) { if (!/Garde-manger et épices/.test(ING[x.id].r)) { gone.add(x); need[x.id] = 0; } continue; } // unknown amount: used up, except spices and oil
+    const take = Math.min(x.amt, need[x.id]); x.amt = Math.round((x.amt - take) * 100) / 100; need[x.id] -= take;
+    if (x.amt > 0.0001) x.qte = "reste " + invQtyTxt(x.id, x.amt); else gone.add(x);
+  }
+  for (const z of ["frigo", "congel", "garde"]) S.inv[z] = zoneList(z).filter((x) => !gone.has(x));
+  (S.cuit = S.cuit || {})[r.id] = today();
+  rankCache = null; save();
+  return n;
+}
 function fullList() {
-  const list = L.buildList(S.menu.concat(S.col.filter((id) => BYID[id])), BYID, ING, cfgOf, ajustOf), by = Object.fromEntries(list.map((it) => [it.id, it]));
+  const list = L.buildList(S.menu.filter((id) => !isCooked(id)).concat(S.col.filter((id) => BYID[id])), BYID, ING, cfgOf, ajustOf), by = Object.fromEntries(list.map((it) => [it.id, it]));
   for (const e of S.extras) {
     ensureCustom(e);
     const c = CAT[e.k], linked = c && c.link && ING[c.link];
@@ -2689,9 +2744,9 @@ function rList() {
   $("#v-epicerie").innerHTML = `<h1>Liste d'épicerie</h1>
     ${addBox()}<p class="lead">${S.menu.length ? `Pour ${S.menu.length} recettes (quantités ajustées) ` : ""}${S.col.length ? `${S.menu.length ? "+ " : "Pour "}${S.col.length} sorte${S.col.length > 1 ? "s" : ""} de collations ` : ""}${S.extras.length ? `${S.menu.length ? "+ " : ""}${S.extras.length} article(s) ajouté(s) à la main. ` : ""} Touche un article quand tu l'as déjà à la maison ou qu'il est dans le panier : il descend en bas.</p>
     <div class="sum"><div><span class="small mute">Où aller</span><b>${ch.stores.map(esc).join(" + ")}</b></div>
-      <div><span class="small mute">Total de l'épicerie</span><b>${L.FR(ch.cost)} $</b></div>
+      <div><span class="small mute">Total de l'épicerie (avec taxes)</span><b>${L.FR(ch.cost + taxOf(list, ch))} $</b>${taxOf(list, ch) > 0 ? `<span class="small mute">dont ${L.FR(taxOf(list, ch))} $ de taxes</span>` : ""}</div>
       <div><span class="small mute">Sauvé grâce aux spéciaux</span><b style="color:var(--green)">${L.FR(Math.max(0, saved), 0)} $</b></div></div>
-    <p class="small mute">${why} Prix réguliers estimés (moyenne Montréal). Le prix est celui du format complet que tu paies au magasin (il te faut 200 ml d'un pot de 500 ml : c'est le prix du 500 ml), taxes en plus.</p>
+    <p class="small mute">${why} Prix réguliers estimés (moyenne Montréal). Le prix est celui du format complet que tu paies au magasin (il te faut 200 ml d'un pot de 500 ml : c'est le prix du 500 ml), taxes comprises sur ce qui est taxable (collations, boissons, alcool, ménager).</p>
     ${checkItems.length ? `<div class="store"><h3 style="background:#b7791f"><span>À vérifier : tu en as à la maison</span><span class="small">${checkItems.length}</span></h3>
       <p class="small" style="margin:6px 2px">Ton inventaire dit que tu en as. Regarde si c'est assez pour la recette.</p>
       ${checkItems.map((it) => { const h = invHas(it.id), ing = ING[it.id], ix = rankCache ? rankCache.ix : {}, sp = (ix[it.id] || []).find((x) => S.reg.stores.includes(x.mag));
@@ -3637,6 +3692,8 @@ const histCount = () => Object.values(S.hist || {}).reduce((a, l) => a + l.lengt
 function perUnitTxt(ing, pu) {
   if (ing.u === "g") return ing.r.startsWith("Viandes") || ing.r.startsWith("Poissons") ? L.FR(pu * 453.6) + " $/lb" : L.FR(pu * 1000) + " $/kg";
   if (ing.u === "ml") return L.FR(pu * 1000) + " $/L";
+  if (ing.u === "cs") return L.FR(pu * 1000 / 15) + " $/L";
+  if (ing.u === "ct") return L.FR(pu * 100 / 5) + " $/100 g";
   return L.FR(pu) + " $ l'unité";
 }
 // The AI reads the flyers of one week: from a text we give it (no web search), or by searching the web
@@ -4312,7 +4369,7 @@ document.addEventListener("click", (e) => {
   if (d.ing) { S.rf = "spec"; S.q = ING[d.ing].n.split(" (")[0]; S.cat = ""; S.cuis = ""; S.tag = ""; return show("recettes", false); }
   if (d.del) { S.extra = S.extra.filter((x) => x.perso !== d.del); rankCache = null; save(); return rSpec(); }
   if (d.go === "menu-auto") { autoMenu(); return show("menu", false); }
-  if (d.go === "menu-clear") { S.menu = []; save(); return rMenu(); }
+  if (d.go === "menu-clear") { S.menu = []; S.cuit = {}; save(); return rMenu(); }
   if (d.go) return show(d.go, false);
   if (t.id === "closeSheet") return closeRec();
   if (d.like && S.open) { const v = Number(d.like); if (S.aime[S.open] === v) delete S.aime[S.open]; else S.aime[S.open] = v; rankCache = null; save(); savePrefs(); openRec(S.open); return render(S.view); }
@@ -4333,26 +4390,20 @@ document.addEventListener("click", (e) => {
   if (t.id === "stAdd") return addStoreByLink();
   if (d.stdel) { const x = (S.myStores || []).find((y) => y.id === d.stdel); S.myStores = (S.myStores || []).filter((y) => y.id !== d.stdel); if (x && !CUSTOM.some((y) => y.name === x.name)) { S.reg.stores = S.reg.stores.filter((s) => s !== x.name); if (SPEC) SPEC.items = SPEC.items.filter((i) => i.mag !== x.name); } save(); return rReg(); }
   if (t.id === "rvCancel") { invReview = null; invMsg = ""; return rHome(); }
-  if (t.id === "rvAdd" && invReview) { if (invReview.receipt) logReceipt(invReview); const np = recordReceiptPrices(invReview); if (np) toast(`${np} vrais prix ajoutés à l'historique`); let n = 0; for (const x of invReview) if (x.keep) { addInv(x.zone, x); if (x.id && S.verif) delete S.verif[x.id]; n++; } if (invReview.receipt) markBought(receiptIds(invReview)); invReview = null; invMsg = `${n} articles ajoutés.`; rankCache = null; save(); toast(`${n} articles ajoutés à l'inventaire`); return rHome(); }
+  if (t.id === "rvAdd" && invReview) { const lr = invReview.receipt ? logReceipt(invReview) : null; const np = recordReceiptPrices(invReview); if (lr && lr.est) toast(`Facture : ${L.FR(lr.total)} $ · l'app avait prévu ${L.FR(lr.est)} $. Les vrais prix de ton reçu remplacent les estimations.`, 7000); else if (np) toast(`${np} vrais prix ajoutés à l'historique`); let n = 0; for (const x of invReview) if (x.keep) { addInv(x.zone, Object.assign({}, x, { add: !!invReview.receipt })); if (x.id && S.verif) delete S.verif[x.id]; n++; } if (invReview.receipt) markBought(receiptIds(invReview)); invReview = null; invMsg = `${n} articles ajoutés.`; rankCache = null; save(); toast(`${n} articles ajoutés à l'inventaire`); return rHome(); }
   if (t.id === "invAsk") {
     const stock = ["frigo", "congel", "garde"].flatMap((zz) => zoneList(zz).map((x) => x.n)).slice(0, 60).join(", ");
     S.view = "recettes"; show("recettes", false);
     return iaAsk(`Une recette avec surtout ce que j'ai à la maison : ${stock || "(inventaire vide)"}. J'ai aussi les épices de base.`);
   }
-  if (t.id === "cookUse" && cook) { const r = BYID[cook.id]; if (r) {
-      const need = {}; for (const [id, q] of L.scaleRecipe(r, ING, cfgOf(r.id), ajustOf(r.id))) need[id] = (need[id] || 0) + q;
-      for (const zz of ["frigo", "congel", "garde"]) S.inv[zz] = zoneList(zz).filter((x) => {
-        if (!x.id || need[x.id] == null) return true;
-        if (x.amt == null) return zz === "garde"; // unknown amount: used up, except pantry staples
-        const take = Math.min(x.amt, need[x.id]); x.amt -= take; need[x.id] -= take;
-        x.qte = x.amt > 0 ? "reste " + L.fmtQty(ING[x.id], x.amt) : x.qte;
-        return x.amt > 0.0001;
-      });
-      rankCache = null; save(); toast("Inventaire mis à jour : ce que tu as utilisé est retiré"); } return closeCook(); }
+  if (t.id === "cookUse" && cook) { const r = BYID[cook.id]; if (r) { useRecipe(r); toast("Inventaire mis à jour : ce que tu as utilisé est retiré"); } return closeCook(); }
+  if (d.cooked) { const r = BYID[d.cooked]; if (r) { const n = useRecipe(r); toast(n ? `Cuisinée ! ${n} ingrédient${n > 1 ? "s" : ""} retiré${n > 1 ? "s" : ""} de l'inventaire` : "Cuisinée !"); } return render(S.view); }
+  if (d.uncook) { delete (S.cuit || {})[d.uncook]; rankCache = null; save(); toast("Remise à cuisiner (l'inventaire n'est pas remis)"); return render(S.view); }
   if (t.id === "cookGo" && S.open) return openCook(S.open);
   if (t.id === "cookNext" && cook) { cook.i++; return renderCook(); }
   if (t.id === "cookPrev" && cook) { cook.i = Math.max(0, cook.i - 1); return renderCook(); }
-  if ((t.id === "cookOut" || t.id === "cookOut2") && cook) return closeCook();
+  if (t.id === "cookOut2" && cook) { if (BYID[cook.id]) { (S.cuit = S.cuit || {})[cook.id] = today(); save(); } return closeCook(); }
+  if (t.id === "cookOut" && cook) return closeCook();
   if (d.frz) { toFreezer(BYID[d.frz] ? BYID[d.frz].n : "Repas", Number(d.por) || 4); return render(S.view); }
   if (d.fq) { const x = S.frigo[Number(d.fq)]; if (!x) return; x.por += Number(d.d); if (x.por <= 0) S.frigo.splice(Number(d.fq), 1); save(); return render(S.view); }
   if (d.fdel) { S.frigo.splice(Number(d.fdel), 1); save(); return render(S.view); }

@@ -71,7 +71,7 @@
     chou_fleur: ["chou-fleur", ["chou fleur|choux fleurs"], ["surgel", "congel", "riz", "pizza", "croute", "brocoli et", "gratin"]],
     courgette: ["courgettes", ["courgette|zucchini"], ["spirale", "surgel", "pates", "muffin", "pain"]],
     champignons: ["champignons", ["champignon"], ["soupe", "sauce", "conserve", "marine", "farci", "pizza", "creme", "seche", "fromage", "gouda"]],
-    epinards: ["épinards", ["epinard"], ["surgel", "congel", "trempette", "pates", "tortilla", "spanakopita", "boulette", "pizza", "feuillete"]],
+    epinards: ["épinards", ["epinard"], ["surgel", "congel", "trempette", "pates", "tortilla", "spanakopita", "boulette", "pizza", "feuillete", "hache", "cedar"]],
     laitue: ["laitue romaine", ["laitue|romaine"], ["salade cesar|kit|ensemble|melange"]],
     tomate: ["tomates", ["tomate"], ["cerise", "raisin", "conserve", "sauce", "pate", "jus", "en des", "seche", "ketchup", "soupe", "bruschetta", "salsa", "broye", "entieres en", "passata", "boite", "cocktail", "ml", "aylmer", "hunt", "primo", "conserve", "coulis", "compliments"]],
     tomate_cerise: ["tomates cerises", ["tomate", "cerise|raisin|cocktail|bouchee|melodie"], ["seche", "sauce", "conserve", "jus", "boite"]],
@@ -201,6 +201,8 @@
     if (t[2].some((w) => has(all, at, w))) return false;
     return true;
   }
+  // a product the filters reject for this ingredient (only the "not this" words: AI-read names are often short)
+  function excluded(id, name) { const t = T[id]; if (!t || !name) return false; const all = norm(name), at = all.split(" "); return t[2].some((w) => has(all, at, w)); }
   const storeOf = (m) => { m = norm(m); return ALIAS[m] || STORES.find((s) => norm(s) === m) || null; };
   const day = (s) => String(s || "").slice(0, 10);
 
@@ -351,7 +353,7 @@
     return Object.values(best).map((b) => b.x);
   }
 
-  const api = { STORES, REGIONS, distKm, nearestRegion, TERMS: T, norm, matches, search, collect, sizeOf, toItems, pretty, bestPerStore, LB, applyDetail };
+  const api = { STORES, REGIONS, distKm, nearestRegion, TERMS: T, norm, matches, search, collect, sizeOf, toItems, pretty, bestPerStore, LB, applyDetail, excluded };
   if (typeof module === "object" && module.exports) module.exports = api;
   root.Flipp = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

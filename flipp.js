@@ -265,6 +265,7 @@
   function applyDetail(x, desc) {
     const d = String(desc || "").toLowerCase().replace(/\s+/g, " ");
     if (!d.trim()) return x;
+    if (/^\s*ch/i.test(x.post || "") && /(?<![\d,.\/$])\d+(?:[.,]\d+)?\s*(kg|lb)\b(?!\s*\/)/.test(d)) x.post = ""; // "ch." on a 3 lb bag
     const bag = d.match(/(\d+[.,]\d{2})\s*\$\s*(?:le|la|par)\s*(sac|filet|caisse|boite|boîte|paquet|emballage|contenant|barquette)\s*(?:de\s*)?(\d+(?:[.,]\d+)?)\s*(lb|kg|g)\b/);
     if (bag) { x.prix = NUM(bag[1]); addSize(x, `${bag[2]} de ${bag[3]} ${bag[4]}`); x.post = ""; return x; }
     if (/^\s*ch/i.test(x.post || "") && !/\b(ch|chacun|chacune|l'unité|unité)\b/.test(d) && (/(sac|filet)/.test(d))) x.post = ""; // "ch." printed on a bag
@@ -296,19 +297,27 @@
   const PACK = { clementine: 12, poire: 6, orange: 8, oeufs: 12, pain_tranche: 20, kaiser: 6, bagel: 6, tortilla: 10, pita: 6, croissant: 6, ciabatta: 4, pain_sousmarin: 6, fromage_tranche: 16, ail: 10 };
   const NUM = (s) => Number(String(s).replace(",", "."));
   // about how many per pound, for fruits and vegetables counted by the unit
+  // the most one fruit or vegetable costs, even on special
+  const MAXEACH = { oignon: 1.5, orange: 2, pomme: 2, poire: 2, clementine: 1, citron: 1.5, lime: 1, tomate: 2.5, concombre: 3.5, poivron: 3.5, avocat: 3.5, courgette: 3, poireau: 3, laitue: 5, brocoli: 5, chou_fleur: 6 };
   const EACH_LB = { orange: 2, pomme: 3, poire: 2.5, clementine: 6, citron: 4, lime: 7, concombre: 1.5, poivron: 2.5, oignon: 3, tomate: 3, avocat: 2.5, courgette: 2, aubergine: 1, brocoli: 1.5, chou_fleur: 0.5, laitue: 1, poireau: 2.5 };
   function sizeOf(r, ingU) {
     const post = norm(r.post), nm = norm(r.name);
     const pm = String(r.pre || "").match(/^\s*(\d+)\s*(?:\/|pour\b)/i);
     const mult = pm ? Number(pm[1]) : 1;
-    if (/(^| )lb( |$)/.test(post) || /^\/?\s*lb/.test(String(r.post).trim().toLowerCase())) return { qte: 1 * mult, unite: "lb" };
-    if (/(^| )kg( |$)/.test(post)) return { qte: 1 * mult, unite: "kg" };
-    let m = String(r.post).toLowerCase().match(/\/\s*100\s*g/);
-    if (m) return { qte: 100, unite: "g" };
+    let m = String(r.post).toLowerCase().match(/^\s*\/?\s*100\s*g/);
+    if (m) return { qte: 100, unite: "g" }; // "/100g prix membre 14,47/kg": the price is for 100 g
+    const pst = String(r.post).trim().toLowerCase();
+    if (/^\/?\s*lb\b/.test(pst) || (/(^| )lb( |$)/.test(post) && !/\/\s*kg/.test(pst))) return { qte: 1 * mult, unite: "lb" };
+    if (/^\/?\s*kg\b/.test(pst) || /(^| )kg( |$)/.test(post) && !/\d\s*\/\s*kg/.test(pst)) return { qte: 1 * mult, unite: "kg" };
     const raw = String(r.name).toLowerCase().replace(/œ/g, "oe");
+    // several products in one name ("carottes 5 lb, betteraves 5 lb et panais 1 lb"): the size written right after our product
+    const key = T[r.ing] && String(T[r.ing][1][0] || "").split("|")[0];
+    const own = key && raw.match(new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "[a-zàâçéèêëîïôûù]*\\s+(\\d+(?:[.,]\\d+)?)\\s*(kg|g|ml|l|lb)\\b"));
+    const many = (raw.match(/\d+(?:[.,]\d+)?\s*(?:kg|g|ml|l|lb)\b/g) || []).length > 1;
     m = raw.match(/(\d+)\s*[x×]\s*(\d+(?:[.,]\d+)?)\s*(kg|g|ml|l|lb)\b/);
     let q = null;
-    if (m) q = { qte: Number(m[1]) * NUM(m[2]), unite: m[3] };
+    if (own && many) q = { qte: NUM(own[1]), unite: own[2] };
+    else if (m) q = { qte: Number(m[1]) * NUM(m[2]), unite: m[3] };
     else if ((m = raw.match(/(\d+(?:[.,]\d+)?)\s*(kg|g|ml|l|lb)\b/))) q = { qte: NUM(m[1]), unite: m[2] };
     if (q) { if (q.unite === "l") q.unite = "L"; q.qte *= mult; }
     if (!q && ingU === "ml" && r.ing === "lait" && !/(^| )(ml|l|litre)( |$)/.test(nm)) return { qte: 2000 * mult, unite: "ml" }; // milk without a size: the usual 2 L
@@ -319,6 +328,8 @@
       if (m && Math.abs(NUM(m[2]) - Number(r.prix)) < 0.02) return { qte: Number(m[1]), unite: "u" };
       m = raw.match(/(?:paq(?:uet)?\.?\s*de|pqt\s*de|sac\s*de|boite\s*de|caisse\s*de|emballage\s*de)\s*(\d+)(?!\s*(?:g|kg|ml|l|lb)\b)/) || raw.match(/\b(\d+)\s*(?:un\b|unités?\b|unites?\b|pains\b|bagels\b|tortillas\b|croissants\b|pitas\b|oeufs\b|œufs\b)/);
       if (m) return { qte: Number(m[1]) * mult, unite: "u" };
+      m = String(r.post).toLowerCase().match(/ou\s*(\d+[.,]\d{2})\s*\$\s*(?:l'|l’)?unit/); // "4,99 $ ou 0,50 $ l'unité": the bag holds about 10
+      if (m && NUM(m[1]) > 0 && r.prix > NUM(m[1])) return { qte: Math.round(r.prix / NUM(m[1])), unite: "u" };
       if (/(^| )(ch|chacun|chacune|unite|l unite|un)( |$)/.test(post)) return { qte: 1 * mult, unite: "u" };
       return null; // count not written (bag, pack, by weight): the AI reads it
 
@@ -338,6 +349,7 @@
       if (!s) { unknown.push(r); continue; }
       if (ing.u === "u" && (s.unite === "lb" || s.unite === "kg") && EACH_LB[r.ing]) s = { qte: Math.max(1, Math.round(s.qte * (s.unite === "kg" ? 2.2046 : 1) * EACH_LB[r.ing])), unite: "u" };
       if (ing.u === "u" && s.unite !== "u") { unknown.push(r); continue; }
+      if (ing.u === "u" && MAXEACH[r.ing] && r.prix / s.qte > MAXEACH[r.ing]) { unknown.push(r); continue; } // "3,99 $ ch." for one onion: it is a bag
       if (ing.u === "g" && !["lb", "kg", "g"].includes(s.unite)) { unknown.push(r); continue; }
       if (ing.u === "ml" && !["L", "ml"].includes(s.unite)) { unknown.push(r); continue; }
       if (["cs", "ct"].includes(ing.u)) { unknown.push(r); continue; }

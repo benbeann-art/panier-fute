@@ -1643,7 +1643,7 @@ function render(v) {
 
 // ---------- SPECIALS ----------
 function rSpec() {
-  const items = allSpecials();
+  const items = allSpecials().filter((sp) => sp.perso || !S.reg.stores.length || S.reg.stores.includes(sp.mag)); // unchecked stores are hidden
   const now = new Date().toISOString().slice(0, 10);
   const rows = items.map((sp) => {
     const ing = ING[sp.ing];

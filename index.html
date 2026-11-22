@@ -1842,7 +1842,7 @@ async function readReceipt(files) {
   const prompt = `Voici la photo d'un reçu d'épicerie du Québec. Lis chaque article acheté (sans en inventer), avec :
 - le nom clair en français (les reçus abrègent : « PTS POULET DESOS » = poitrines de poulet désossées),
 - la quantité achetée (ex. « 1,2 kg », « 2 », « 4 L »), le prix payé total pour cette ligne,
-- où le ranger à la maison (frigo, congel ou garde),
+- où le ranger à la maison : "frigo", "congel" ou "garde" (garde-manger). Règles : viandes, poissons, charcuteries, lait, fromages, yogourts, œufs, beurre, crème, la plupart des légumes et fruits frais (laitue, brocoli, carottes, champignons, poivrons, petits fruits…), sauces ouvertes → frigo ; tout ce qui est écrit surgelé ou congelé, crème glacée → congel ; pommes de terre, patates douces, oignons, ail, courges, bananes, tomates, conserves, pâtes, riz, farine, sucre, épices, céréales, collations, pain, huiles, bouillons en boîte → garde,
 - combien de jours ça se garde à cet endroit,
 - l'identifiant le plus proche dans cette liste (sinon null) :
 ${invIdCatalog()}
@@ -1850,7 +1850,7 @@ Lis aussi le nom du magasin (un de : ${L.STORES.join(", ")}, sinon null) et la d
 Ignore les taxes, sacs, consignes, rabais de carte et sous-totaux.
 Réponds UNIQUEMENT par cet objet JSON : {"mag":"magasin ou null","date":"AAAA-MM-JJ","items":[{"n":"nom","qte":"quantité","prix":12.34,"zone":"frigo|congel|garde","jours":7,"id":"identifiant ou null"}]}`;
   try {
-    const j = AI.extractJSON(await askAI(prompt, { images: files, maxTokens: 6000 }), "object");
+    const j = AI.extractJSON(await askAI(prompt, { images: await Promise.all([...files].slice(0, 4).map((f) => shrinkImg(f, 2200))), maxTokens: 6000 }), "object");
     if (!j || !Array.isArray(j.items)) throw new Error("reçu illisible");
     invReview = j.items.filter((x) => x && x.n).map((x) => ({ n: String(x.n).slice(0, 60), qte: String(x.qte || "").slice(0, 30), zone: ZONES[x.zone] ? x.zone : "frigo",
       id: ING[x.id] ? x.id : null, days: Number(x.jours) > 0 ? Math.round(Number(x.jours)) : null, prix: Number(x.prix) > 0 ? Number(x.prix) : null, keep: true }));
@@ -1946,19 +1946,66 @@ function recordReceiptPrices(review) {
   return items.length ? recordWeek({ debut: d.toISOString().slice(0, 10), items }) : 0;
 }
 
+// Put every inventory item in the right place (fridge, freezer, pantry) — one AI call, no web
+const ZONE_RULES = "viandes, poissons, charcuteries, lait, fromages, yogourts, œufs, beurre, crème, la plupart des légumes et fruits frais (laitue, brocoli, carottes, champignons, poivrons, clémentines, petits fruits…), sauces ouvertes → frigo ; tout ce qui est surgelé ou congelé, crème glacée → congel ; pommes de terre, patates douces, oignons, ail, courges, bananes, tomates, conserves, pâtes, riz, farine, sucre, épices, céréales, collations, pain, huiles, bouillons en boîte, papier et sacs → garde";
+async function sortInventory() {
+  if (invBusy) return;
+  const all = []; for (const z of Object.keys(ZONES)) zoneList(z).forEach((x) => all.push({ z, x }));
+  if (!all.length) return;
+  invBusy = true; invMsg = "L'IA remet chaque article à la bonne place…"; rHome();
+  const prompt = `Voici les articles de l'inventaire d'une maison au Québec, avec l'endroit où ils sont notés maintenant (n°|nom|endroit).
+${all.map((a, i) => `${i}|${a.x.n}|${a.z}`).join("\n")}
+Pour chacun, dis où il doit être rangé : "frigo", "congel" ou "garde". Règles : ${ZONE_RULES}. Si un article est noté au congélateur et peut s'y congeler (viande, pain, beurre), laisse-le au congélateur.
+Réponds UNIQUEMENT par un tableau JSON : [{"n":0,"z":"frigo"}]`;
+  try {
+    const arr = AI.extractJSON(await askAI(prompt, { maxTokens: 4000 }), "array") || [];
+    const move = new Map(); for (const a of arr) if (a && all[a.n] && ZONES[a.z] && a.z !== all[a.n].z) move.set(a.n, a.z);
+    const keep = {}; for (const z of Object.keys(ZONES)) keep[z] = [];
+    all.forEach((a, i) => { const to = move.get(i) || a.z; if (to !== a.z && a.x.id) a.x.exp = addDays(today(), shelfDays(a.x.id, to)); keep[to].push(a.x); });
+    for (const z of Object.keys(ZONES)) { const L2 = zoneList(z); L2.length = 0; L2.push(...keep[z]); }
+    invMsg = move.size ? `${move.size} article${move.size > 1 ? "s" : ""} déplacé${move.size > 1 ? "s" : ""} à la bonne place.` : "Tout était déjà à la bonne place.";
+    save();
+  } catch (e) { invMsg = "Ça n'a pas marché : " + (e.message || "erreur"); }
+  invBusy = false; rHome();
+}
+// Phone photos are big: shrink them before sending (faster, fewer failures, less quota)
+async function shrinkImg(file, max = 1600) {
+  try {
+    const bmp = await createImageBitmap(file);
+    const k = Math.min(1, max / Math.max(bmp.width, bmp.height)), c = document.createElement("canvas");
+    c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+    return await new Promise((res) => c.toBlob((b) => res(b || file), "image/jpeg", 0.85));
+  } catch (e) { return file; }
+}
+// Fridge / freezer / pantry photos: read 2 photos at a time and ADD to the list to check (nothing is lost if you take more photos)
 async function readFridgePhotos(files, zone) {
   if (invBusy || !files.length) return;
-  invBusy = true; invMsg = `L'IA regarde ${files.length > 1 ? "tes " + files.length + " photos" : "ta photo"}…`; rHome();
-  const prompt = `Voici ${files.length > 1 ? files.length + " photos" : "une photo"} de mon ${ZONES[zone].toLowerCase()} (on est au Québec).
-Identifie TOUS les aliments et produits visibles (même partiellement), sans en inventer. Pour chacun : le nom en français, une quantité estimée (ex. « 1 litre », « environ 500 g », « 6 », « 1 pot »), l'endroit où il devrait être rangé, et l'identifiant le plus proche dans cette liste (sinon null) :
+  invBusy = true;
+  if (!invReview || invReview.receipt) invReview = [];
+  const groups = []; for (let i = 0; i < files.length; i += 2) groups.push(files.slice(i, i + 2));
+  let found = 0, failed = 0, lastErr = "";
+  for (let g = 0; g < groups.length; g++) {
+    invMsg = `L'IA regarde ${files.length > 1 ? `tes photos (${Math.min(files.length, g * 2 + groups[g].length)} sur ${files.length})` : "ta photo"}…`; rHome();
+    const imgs = await Promise.all(groups[g].map((f) => shrinkImg(f)));
+    const prompt = `Voici ${imgs.length > 1 ? imgs.length + " photos" : "une photo"} de mon ${ZONES[zone].toLowerCase()} (on est au Québec).
+Identifie TOUS les aliments et produits visibles, même partiellement ou au fond, un par un (chaque pot, chaque contenant, chaque légume), sans en inventer. Si 2 photos montrent le même article, ne le compte qu'une fois.
+Pour chacun : le nom en français, une quantité estimée (ex. « 1 litre », « environ 500 g », « 6 », « 1 pot »), et l'identifiant le plus proche dans cette liste (sinon null) :
 ${invIdCatalog()}
-Ajoute aussi « jours » : combien de jours ça se garde encore à cet endroit (si une date est lisible sur l'emballage, calcule à partir de cette date ; aujourd'hui = ${today()}).
-Réponds UNIQUEMENT par un tableau JSON : [{"n":"nom","qte":"quantité","zone":"frigo|congel|garde","id":"identifiant ou null","jours":nombre}]`;
-  try {
-    const arr = AI.extractJSON(await askAI(prompt, { images: files, maxTokens: 6000 }), "array") || [];
-    invReview = arr.filter((x) => x && x.n).map((x) => ({ n: String(x.n).slice(0, 60), qte: String(x.qte || "").slice(0, 30), zone: ZONES[x.zone] ? x.zone : zone, id: ING[x.id] ? x.id : null, days: Number(x.jours) > 0 ? Math.round(Number(x.jours)) : null, keep: true }));
-    invMsg = invReview.length ? `${AI.PROVIDERS[AIS.last].name} a trouvé ${invReview.length} articles. Vérifie, décoche ce qui est faux, puis ajoute.` : "Rien de reconnu. Essaie une photo plus proche et bien éclairée.";
-  } catch (e) { invMsg = "La lecture n'a pas marché : " + (e.message || "erreur"); }
+Ajoute « jours » : combien de jours ça se garde encore dans le ${ZONES[zone].toLowerCase()} (si une date est lisible sur l'emballage, calcule à partir de cette date ; aujourd'hui = ${today()}).
+Réponds UNIQUEMENT par un tableau JSON : [{"n":"nom","qte":"quantité","id":"identifiant ou null","jours":nombre}]`;
+    try {
+      const arr = AI.extractJSON(await askAI(prompt, { images: imgs, maxTokens: 8000 }), "array") || [];
+      for (const x of arr) {
+        if (!x || !x.n) continue;
+        const it = { n: String(x.n).slice(0, 60), qte: String(x.qte || "").slice(0, 30), zone, id: ING[x.id] ? x.id : null, days: Number(x.jours) > 0 ? Math.round(Number(x.jours)) : null, keep: true };
+        if (invReview.some((y) => norm(y.n) === norm(it.n) && y.zone === zone)) continue; // same article seen on 2 photos
+        invReview.push(it); found++;
+      }
+    } catch (e) { failed++; lastErr = e.message || "erreur"; }
+  }
+  invMsg = invReview.length ? `${found} articles trouvés${failed ? ` (${failed} groupe${failed > 1 ? "s" : ""} de photos n'a pas marché : ${lastErr} — reprends ces photos)` : ""}. Vérifie, décoche ce qui est faux, puis touche « Ajouter ». Tu peux prendre d'autres photos avant : elles s'ajoutent à la liste.`
+    : failed ? "La lecture n'a pas marché : " + lastErr : "Rien de reconnu. Essaie une photo plus proche et bien éclairée.";
   invBusy = false; rHome();
 }
 // "environ 500 g", "1 L", "2 kg", "6", "2 lb", "une douzaine" -> amount in the ingredient's own unit (g, ml or count), or null
@@ -2046,10 +2093,12 @@ function rHome() {
     ${expiryBox().replace('<button class="btn sm" data-go="maison" style="margin-left:6px">Recettes pour les utiliser</button>', "")}
     ${review}
     <h2>${ZONES[z]} : ${items.length} article${items.length > 1 ? "s" : ""}</h2>
+    ${aiOn() && Object.values(S.inv || {}).some((l) => l.length) ? `<p class="small" style="margin:-4px 0 8px"><button class="btn sm" id="invSort" ${invBusy ? "disabled" : ""}>Remettre chaque article à la bonne place (IA)</button> <span class="mute">ou utilise le menu à droite de chaque article pour le déplacer</span></p>` : ""}
     ${items.length ? items.slice().map((x, i) => [x, i]).sort((p, q) => (p[0].exp || "9999").localeCompare(q[0].exp || "9999")).map(([x, i]) => { const left = x.exp ? Math.round((new Date(x.exp + "T12:00") - new Date(today() + "T12:00")) / 864e5) : null;
       return `<div class="xrow"><span>${esc(x.n)}${x.qte ? ` <span class="small mute">· ${esc(x.qte)}</span>` : ""}<span class="small mute"> · ${x.id ? "reconnu" : "non relié aux recettes"}</span>
         ${left != null ? `<span class="small" style="display:block;${left <= 2 ? "color:var(--red);font-weight:700" : "color:var(--mute)"}">Se garde jusqu'au ${frDate(x.exp)} (${leftTxt(left)})</span>` : ""}</span>
       <label class="small mute">Date <input type="date" class="xprice" style="width:150px!important" data-invexp="${i}" value="${esc(x.exp || "")}"></label>
+      <select class="xprice" style="width:auto!important" data-invmove="${i}" aria-label="Déplacer">${Object.entries(ZONES).map(([k, v]) => `<option value="${k}" ${k === z ? "selected" : ""}>${v}</option>`).join("")}</select>
       <button class="x" data-invdel="${i}" aria-label="Retirer">×</button></div>`; }).join("") : `<p class="mute">Vide. Prends une photo, scanne un reçu ou ajoute à la main.</p>`}
     ${z === "congel" ? frigoBox().replace("<h2>Congélateur et restes</h2>", "<h2>Repas congelés</h2>") : ""}
     ${z === "garde" ? `<label class="chk" style="margin-top:10px"><input type="checkbox" id="spicesHome" ${S.spicesHome !== false ? "checked" : ""}>J'ai les épices et condiments de base (sel, poivre, huile, épices…)</label>` : ""}
@@ -2532,7 +2581,7 @@ ${ingCatalog()}
 Réponds UNIQUEMENT par cet objet JSON :
 {"n":"Nom","c":"${CATS.join('"|"')}","o":"Québécois|Italien|Français|Américain|Mexicain|Asiatique|Monde","l":"micro"|"thermos"|"froid","p":"id de l'ingrédient principal","t":minutes,"i":[["id",quantité],...],"s":["étape",...],"manque":["ingrédient sans équivalent",...]}`;
   try {
-    const j = AI.extractJSON(await askAI(prompt, { maxTokens: 8000, images: impFiles.slice(0, 4) }), "object");
+    const j = AI.extractJSON(await askAI(prompt, { maxTokens: 8000, images: await Promise.all(impFiles.slice(0, 4).map((f) => shrinkImg(f, 2200))) }), "object");
     const day = today();
     const r = cleanIA(Object.assign({}, j || {}, { id: "ia-imp-" + day.replace(/-/g, "") + "-" + Date.now().toString(36), cree: day, imp: 1, src: impSrc.trim() || "Importée",
       why: j && Array.isArray(j.manque) && j.manque.length ? "Pas dans le catalogue de l'app (à acheter à part) : " + j.manque.slice(0, 8).join(", ") : "" }));
@@ -3421,8 +3470,9 @@ document.addEventListener("click", (e) => {
   if (t.id === "shopOut") return closeShop();
   if (d.shop !== undefined && shop) { shop.store = d.shop; return renderShop(); }
   if (d.aisleUp !== undefined) { const o = aisleOrder(), i = Number(d.aisleUp); if (i > 0) { [o[i - 1], o[i]] = [o[i], o[i - 1]]; S.reg.aisles = o; save(); rReg(); } return; }
-  if (d.invtab) { S.invTab = d.invtab; save(false); invReview = null; return rHome(); }
+  if (d.invtab) { S.invTab = d.invtab; save(false); return rHome(); }
   if (d.invdel) { zoneList(S.invTab || "frigo").splice(Number(d.invdel), 1); rankCache = null; save(); return rHome(); }
+  if (t.id === "invSort") return sortInventory();
   if (t.id === "rvCancel") { invReview = null; invMsg = ""; return rHome(); }
   if (t.id === "rvAdd" && invReview) { if (invReview.receipt) logReceipt(invReview); const np = recordReceiptPrices(invReview); if (np) toast(`${np} vrais prix ajoutés à l'historique`); let n = 0; for (const x of invReview) if (x.keep) { addInv(x.zone, x); if (x.id && S.verif) delete S.verif[x.id]; n++; } invReview = null; invMsg = `${n} articles ajoutés.`; rankCache = null; save(); toast(`${n} articles ajoutés à l'inventaire`); return rHome(); }
   if (t.id === "invAsk") {
@@ -3568,6 +3618,7 @@ document.addEventListener("change", (e) => {
   if (t.id === "invPhoto" && t.files && t.files.length) return readFridgePhotos([...t.files].slice(0, 6), S.invTab || "frigo");
   if (t.id === "rcPhoto" && t.files && t.files.length) return readReceipt([...t.files].slice(0, 3));
   if (t.dataset.invexp !== undefined) { const x = zoneList(S.invTab || "frigo")[Number(t.dataset.invexp)]; if (x) { x.exp = t.value; save(); rHome(); } return; }
+  if (t.dataset.invmove !== undefined) { const from = S.invTab || "frigo", to = t.value; if (to !== from) { const it = zoneList(from).splice(Number(t.dataset.invmove), 1)[0]; if (it) { if (it.id) it.exp = addDays(today(), shelfDays(it.id, to)); zoneList(to).push(it); toast(`${it.n} → ${ZONES[to]}`); } save(); rHome(); } return; }
   if (t.dataset.rvk !== undefined && invReview) { invReview[Number(t.dataset.rvk)].keep = t.checked; return; }
   if (t.dataset.rvz !== undefined && invReview) { invReview[Number(t.dataset.rvz)].zone = t.value; return; }
   if (t.id === "spicesHome") { S.spicesHome = t.checked; rankCache = null; save(); return rHome(); }

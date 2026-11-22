@@ -40,13 +40,13 @@
     boeuf_bifteck: ["bifteck", ["bifteck|steak|surlonge|faux filet|contre filet|entrecote|t bone|ribeye"], ["hache", "burger", "sauce", "epice", "assaison", "porc", "saumon", "thon", "chou"]],
     boeuf_roti: ["rôti de boeuf", ["roti", "boeuf"], ["tranch", "charcut", "sous vide", "cuit"]],
     porc_filet: ["filet de porc", ["filet", "porc"], ["bacon", "tranch", "fume"]],
-    porc_epaule: ["épaule de porc", ["epaule", "porc"], ["fume", "effiloche", "cuit"]],
+    porc_epaule: ["épaule de porc", ["epaule", "porc"], ["fume", "effiloche", "cuit", "agneau", "veau"]],
     porc_cotelettes: ["côtelettes de porc", ["cotelette", "porc"], ["fume", "cuit"]],
     cotes_levees: ["côtes levées", ["cotes levees|cote levee|cotes levee"], ["sauce", "cuit", "poulet", "boeuf"]],
     porc_hache: ["porc haché", ["porc", "hache"], ["burger", "galette", "boulette"]],
     saucisses: ["saucisses", ["saucisse"], ["hot dog", "wiener", "cocktail", "pain", "seche", "pepperoni"]],
     dinde_hachee: ["dinde hachée", ["dinde", "hache"], ["burger", "galette"]],
-    jambon: ["jambon", ["jambon"], ["pizza", "sandwich", "pois", "soupe", "croquette"]],
+    jambon: ["jambon", ["jambon"], ["pizza", "sandwich", "pois", "soupe", "croquette", "prosciutto", "salami"]],
     bacon: ["bacon", ["bacon"], ["bits", "miettes", "morceaux", "croustil", "burger", "saveur", "dinde"]],
     dinde_tranchee: ["dinde tranchée", ["dinde", "tranch|charcut|fume|roti de dinde|poitrine de dinde"], ["hache", "entiere", "burger", "galette"]],
     saumon: ["filet de saumon", ["saumon"], ["fume", "farci", "tournedos", "conserve", "boite", "roulade", "burger", "galette", "sushi", "pate", "mousse", "croquette", "nourriture"]],
@@ -70,10 +70,10 @@
     brocoli: ["brocoli", ["brocoli"], ["surgel", "congel", "salade", "chou fleur", "soupe", "melange"]],
     chou_fleur: ["chou-fleur", ["chou fleur|choux fleurs"], ["surgel", "congel", "riz", "pizza", "croute", "brocoli et", "gratin"]],
     courgette: ["courgettes", ["courgette|zucchini"], ["spirale", "surgel", "pates", "muffin", "pain"]],
-    champignons: ["champignons", ["champignon"], ["soupe", "sauce", "conserve", "marine", "farci", "pizza", "creme", "seche"]],
+    champignons: ["champignons", ["champignon"], ["soupe", "sauce", "conserve", "marine", "farci", "pizza", "creme", "seche", "fromage", "gouda"]],
     epinards: ["épinards", ["epinard"], ["surgel", "congel", "trempette", "pates", "tortilla", "spanakopita", "boulette", "pizza", "feuillete"]],
     laitue: ["laitue romaine", ["laitue|romaine"], ["salade cesar|kit|ensemble|melange"]],
-    tomate: ["tomates", ["tomate"], ["cerise", "raisin", "conserve", "sauce", "pate", "jus", "en des", "seche", "ketchup", "soupe", "bruschetta", "salsa", "broye", "entieres en", "passata", "boite", "cocktail", "ml"]],
+    tomate: ["tomates", ["tomate"], ["cerise", "raisin", "conserve", "sauce", "pate", "jus", "en des", "seche", "ketchup", "soupe", "bruschetta", "salsa", "broye", "entieres en", "passata", "boite", "cocktail", "ml", "aylmer", "hunt", "primo", "conserve"]],
     tomate_cerise: ["tomates cerises", ["tomate", "cerise|raisin|cocktail|bouchee|melodie"], ["seche", "sauce", "conserve", "jus", "boite"]],
     concombre: ["concombres", ["concombre"], ["cornichon", "salade", "marine", "tzatziki", "eau", "boisson"]],
     poireau: ["poireaux", ["poireau"], ["soupe", "potage"]],
@@ -105,7 +105,7 @@
     feta: ["feta", ["feta"], ["pizza", "trempette", "spanakopita", "salade", "pate", "feuillete"]],
     pain_tranche: ["pain tranché", ["=pain|=pains"], ["raisin", "kaiser", "hamburger", "hot", "burger", "naan", "pita", "baguette", "dore", "miettes", "gateau", "viande", "sous marin", "bagel", "croissant", "ail", "epice", "banane", "courgette", "mais", "sucre", "chocolat", "fromage", "sandwich", "chapelure", "pizza", "panini", "ciabatta", "tortilla", "brioche", "muffin", "pita", "croute", "plat", "pudding", "pouding", "farine", "levure", "machine", "grille", "papier", "cereale", "savon", "repas", "chiens", "chats", "sushi", "panettone"]],
     kaiser: ["pains kaiser", ["kaiser"], []],
-    baguette: ["baguette", ["baguette"], ["pizza", "chips", "croustil", "fromage", "garnie", "sandwich", "ail"]],
+    baguette: ["baguette", ["baguette"], ["pizza", "chips", "croustil", "fromage", "garnie", "sandwich", "ail", "craquelin", "grissol", "melba"]],
     tortilla: ["tortillas", ["tortilla|wrap"], ["croustil", "chips", "nachos", "soupe", "trempette", "kit", "ensemble", "chips", "poulet", "porc"]],
     pita: ["pains pita", ["pita"], ["croustil", "chips", "craquelin", "trempette", "pizza"]],
     croissant: ["croissants", ["croissant"], ["surgel", "pate", "sandwich", "jambon", "pizza", "cereale"]],
@@ -285,7 +285,7 @@
   const PACK = { clementine: 12, poire: 6, orange: 8, oeufs: 12, pain_tranche: 20, kaiser: 6, bagel: 6, tortilla: 10, pita: 6, croissant: 6, ciabatta: 4, pain_sousmarin: 6, fromage_tranche: 16, ail: 10 };
   const NUM = (s) => Number(String(s).replace(",", "."));
   // about how many per pound, for fruits and vegetables counted by the unit
-  const EACH_LB = { orange: 2, pomme: 3, poire: 2.5, clementine: 5, citron: 4, lime: 7, concombre: 1.5, poivron: 2.5, oignon: 3, tomate: 3, avocat: 2.5, courgette: 2, aubergine: 1, brocoli: 1.5, chou_fleur: 0.5, laitue: 1, poireau: 2.5 };
+  const EACH_LB = { orange: 2, pomme: 3, poire: 2.5, clementine: 6, citron: 4, lime: 7, concombre: 1.5, poivron: 2.5, oignon: 3, tomate: 3, avocat: 2.5, courgette: 2, aubergine: 1, brocoli: 1.5, chou_fleur: 0.5, laitue: 1, poireau: 2.5 };
   function sizeOf(r, ingU) {
     const post = norm(r.post), nm = norm(r.name);
     const pm = String(r.pre || "").match(/^\s*(\d+)\s*(?:\/|pour\b)/i);
@@ -303,6 +303,8 @@
     if (!q && ingU === "ml" && r.ing === "lait" && !/(^| )(ml|l|litre)( |$)/.test(nm)) return { qte: 2000 * mult, unite: "ml" }; // milk without a size: the usual 2 L
     if (ingU === "u") {
       if (/douzaine/.test(nm)) return { qte: 12 * mult, unite: "u" };
+      m = raw.match(/\b(\d+)\s*\/\s*(\d+(?:[.,]\d+)?)\s*\$/); // "Citrons 5/2$" = 5 for the price
+      if (m && Math.abs(NUM(m[2]) - Number(r.prix)) < 0.02) return { qte: Number(m[1]), unite: "u" };
       m = raw.match(/(?:paq(?:uet)?\.?\s*de|pqt\s*de|sac\s*de|boite\s*de|caisse\s*de|emballage\s*de)\s*(\d+)(?!\s*(?:g|kg|ml|l|lb)\b)/) || raw.match(/\b(\d+)\s*(?:un\b|unités?\b|unites?\b|pains\b|bagels\b|tortillas\b|croissants\b|pitas\b|oeufs\b|œufs\b)/);
       if (m) return { qte: Number(m[1]) * mult, unite: "u" };
       if (/(^| )(ch|chacun|chacune|unite|l unite|un)( |$)/.test(post)) return { qte: 1 * mult, unite: "u" };

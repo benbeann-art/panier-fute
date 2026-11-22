@@ -972,8 +972,8 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
       return await new Promise((r) => c.toBlob((b) => r(b || blob), "image/jpeg", 0.82));
     } catch (e) { return blob; }
   }
-  async function put(id, blob) {
-    const small = await shrink(blob);
+  async function put(id, blob, raw) {
+    const small = raw ? blob : await shrink(blob);
     try { await tx("readwrite", (s) => s.put(small, id)); } catch (e) {}
     if (urls[id]) URL.revokeObjectURL(urls[id]);
     urls[id] = URL.createObjectURL(small);
@@ -1656,7 +1656,8 @@ function rSpec() {
   const shown = rows.filter((x) => !S.store || x.sp.mag === S.store);
   const card = (x) => { const on = x.ing && S.sel.includes(x.sp.ing);
     return `<button class="art ${on ? "on" : ""}" ${x.ing ? `data-sel="${x.sp.ing}"` : "disabled"} aria-pressed="${on}" style="${x.on ? "" : "opacity:.5"}">
-      ${x.sp.img && AIS.photos !== "off" ? `<div class="ph fl"><img src="${esc(x.sp.img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.classList.add('ph-empty');this.remove()"></div>` : x.ing ? ingPic(x.sp.ing) : `<div class="ph ph-empty"><span>${esc(x.sp.txt)}</span></div>`}
+      ${x.sp.box && x.sp.pdf ? ((u) => u ? `<div class="ph fl"><img src="${u}" alt=""></div>` : `<div class="ph fl ph-empty" data-crop="${cropKey(x.sp)}"><span>${esc(x.sp.txt)}</span></div>`)(flyerImg(x.sp))
+      : x.sp.img && AIS.photos !== "off" ? `<div class="ph fl"><img src="${esc(x.sp.img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.classList.add('ph-empty');this.remove()"></div>` : x.ing ? ingPic(x.sp.ing) : `<div class="ph ph-empty"><span>${esc(x.sp.txt)}</span></div>`}
       <span class="tag ${coteCls(x.sp, x.c)}">${x.c || "–"}<small>/10</small></span>${on ? `<span class="ok">✓ Choisi</span>` : ""}
       <span class="body"><span class="nm">${esc(x.sp.txt || (x.ing && x.ing.n))}</span>
       <span class="price">${L.fmtSpecial(x.sp)}</span><span class="meta">${S.store ? "" : esc(x.sp.mag) + " · "}${x.h ? (x.h.lowest ? "<b style='color:var(--green)'>Plus bas de l'année</b>" : `${Math.round(x.h.share * 100)} % moins cher déjà vu`) : x.ing && x.n ? `${x.n} recettes` : "Pas dans les recettes"}</span></span></button>`; };
@@ -2738,7 +2739,7 @@ Réponds UNIQUEMENT par un tableau JSON : [{"ing":"id ou null","mag":"magasin","
 }
 
 // ---------- Real photos from the web (Wikimedia Commons: free-licence photos, credited) ----------
-const WKEY = "panierfute.webphotos2"; try { localStorage.removeItem("panierfute.webphotos"); } catch (e) {}
+const WKEY = "panierfute.webphotos3"; try { localStorage.removeItem("panierfute.webphotos"); localStorage.removeItem("panierfute.webphotos2"); } catch (e) {}
 let WEB = {};
 try { WEB = JSON.parse(localStorage.getItem(WKEY) || "{}"); } catch (e) {}
 const saveWeb = () => { try { localStorage.setItem(WKEY, JSON.stringify(WEB)); } catch (e) {} };
@@ -2816,7 +2817,7 @@ async function commons(q) {
 const webQ = []; let webBusy = false, webPauseUntil = 0;
 // A photo is kept only if its file name speaks of the dish (not just of the meat), and each recipe gets a different photo
 const EN_MEAT = new Set(["beef", "pork", "chicken", "turkey", "ham", "salmon", "trout", "fish", "shrimp", "tofu", "sausage", "bacon", "egg", "tuna", "lentil", "chickpea", "black", "bean", "with", "and", "french", "italian", "homemade"]);
-const BAD_T = /logo|menu|sign|package|label|map|drawing|restaurant|store|market|advert|poster|book|cover|recipe card|screenshot|statue|plant|field|farm|cow|pig|hen/;
+const BAD_T = /singer|actor|actress|musician|rapper|band|concert|politician|player|portrait|wedding|celebrity|festival|premiere|award|person|people|man |woman|girl|boy|logo|menu|sign|package|label|map|drawing|restaurant|store|market|advert|poster|book|cover|recipe card|screenshot|statue|plant|field|farm|cow|pig|hen/;
 function relevant(list, q) {
   const words = q.toLowerCase().split(/[^a-z']+/).filter((w) => w.length >= 3);
   const dish = words.filter((w) => !EN_MEAT.has(w));
@@ -3388,8 +3389,9 @@ Associe chaque produit à un identifiant de cette liste (sinon "ing": null) :
 ${ids}
 Règles : prix au lb → "unite":"lb","qte":1 ; au kg → "kg" ; paquet de 375 g à 3,33 $ → "prix":3.33,"qte":375,"unite":"g" ; 2 pour 5 $ → "prix":5,"qte":2,"unite":"u" ; douzaine d'œufs → "qte":12,"unite":"u" ; 2 L → "qte":2,"unite":"L".
 Réponds UNIQUEMENT par un tableau JSON : [{"ing":"id ou null","prix":3.99,"qte":1,"unite":"lb|kg|g|ml|L|u","txt":"nom court + format","reg":0}]  ("reg" = prix régulier s'il est écrit, sinon 0)`;
-  const parse = (txt) => (AI.extractJSON(txt, "array") || []).filter((x) => x && Number(x.prix) > 0).map((x) => ({ ing: ING[x.ing] ? x.ing : null, mag: st.name, prix: Number(x.prix), qte: Number(x.qte) || 1,
-    unite: ["lb", "kg", "g", "ml", "L", "u"].includes(x.unite) ? x.unite : "u", txt: String(x.txt || (ING[x.ing] || {}).n || "").slice(0, 90), reg: Number(x.reg) > Number(x.prix) ? Number(x.reg) : 0 }));
+  const parse = (txt, withBox) => (AI.extractJSON(txt, "array") || []).filter((x) => x && Number(x.prix) > 0).map((x) => ({ ing: ING[x.ing] ? x.ing : null, mag: st.name, prix: Number(x.prix), qte: Number(x.qte) || 1,
+    unite: ["lb", "kg", "g", "ml", "L", "u"].includes(x.unite) ? x.unite : "u", txt: String(x.txt || (ING[x.ing] || {}).n || "").slice(0, 90), reg: Number(x.reg) > Number(x.prix) ? Number(x.reg) : 0,
+    box: withBox && Array.isArray(x.box) && x.box.length === 4 ? x.box.map((n) => Math.round(Number(n))) : undefined }));
   let items = [];
   try {
     const t = await repoFile(`data/custom/${st.id}/${wk}.txt`, false);
@@ -3398,15 +3400,14 @@ Réponds UNIQUEMENT par un tableau JSON : [{"ing":"id ou null","prix":3.99,"qte"
     } else {
       const r = await fetch(st.url);
       const type = r.headers.get("content-type") || "";
-      let docs = [];
-      if (/pdf/i.test(type)) docs = [new Blob([await r.blob()], { type: "application/pdf" })];
+      let pdfs = [];
+      if (/pdf/i.test(type)) pdfs = [st.url];
       else {
         const html = await r.text();
-        const pdfs = [...new Set((html.match(/(?:https?:)?\/\/[^"'\s>]+\.pdf(?:\?[^"'\s>]*)?/gi) || []).map((u) => (u.startsWith("//") ? "https:" + u : u).replace(/&amp;/g, "&")))].slice(0, 8);
-        for (const u of pdfs) { try { docs.push(new Blob([await (await fetch(u)).blob()], { type: "application/pdf" })); } catch (e) {} }
-        if (!docs.length) { const txt = html.replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " "); if (txt.length > 300) items.push(...parse(await askAI(ask + "\n--- texte de la page ---\n" + txt.slice(0, 20000), { maxTokens: 8000, quiet: true }))); }
+        pdfs = [...new Set((html.match(/(?:https?:)?\/\/[^"'\s>]+\.pdf(?:\?[^"'\s>]*)?/gi) || []).map((u) => (u.startsWith("//") ? "https:" + u : u).replace(/&amp;/g, "&")))].slice(0, 8);
+        if (!pdfs.length) { const txt = html.replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " "); if (txt.length > 300) items.push(...parse(await askAI(ask + "\n--- texte de la page ---\n" + txt.slice(0, 20000), { maxTokens: 8000, quiet: true }))); }
       }
-      for (const d of docs) { try { items.push(...parse(await askAI(ask, { images: [d], maxTokens: 8000, quiet: true }))); } catch (e) { if (/limite|quota|429/i.test(e.message || "")) break; } }
+      for (const u of pdfs) { try { items.push(...(await pdfFlyerItems(u, ask, st.name, parse))); } catch (e) { if (/limite|quota|429/i.test(e.message || "")) break; } }
     }
   } catch (e) {}
   if (items.length) { S.customSpec = Object.assign({}, S.customSpec, { [st.id]: { week: wk, items } }); save(); }
@@ -3424,6 +3425,84 @@ async function mergeCustom(onlyId, force) {
   if (total) { S.spec = SPEC; rankCache = null; save(); if (["speciaux", "epicerie"].includes(S.view)) render(S.view); }
   return total;
 }
+// ---------- Flyer pictures cut out of PDF flyers (pdf.js, loaded only when needed) ----------
+let pdfjsP = null;
+function loadPdfJs() {
+  if (pdfjsP) return pdfjsP;
+  pdfjsP = new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+    s.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"; res(window.pdfjsLib); };
+    s.onerror = () => { pdfjsP = null; rej(new Error("pdf.js")); };
+    document.head.appendChild(s);
+  });
+  return pdfjsP;
+}
+const pdfCache = new Map();
+function renderPdf(url) { // -> canvases of the first pages
+  if (pdfCache.has(url)) return pdfCache.get(url);
+  const p = (async () => {
+    const lib = await loadPdfJs();
+    const doc = await lib.getDocument({ data: await (await fetch(url)).arrayBuffer() }).promise;
+    const out = [];
+    for (let i = 1; i <= Math.min(doc.numPages, 6); i++) {
+      const pg = await doc.getPage(i), v0 = pg.getViewport({ scale: 1 }), vp = pg.getViewport({ scale: Math.min(3, 2200 / Math.max(v0.width, v0.height)) });
+      const c = document.createElement("canvas"); c.width = vp.width; c.height = vp.height;
+      await pg.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise; out.push(c);
+    }
+    return out;
+  })();
+  pdfCache.set(url, p); p.catch(() => pdfCache.delete(url));
+  return p;
+}
+const hashStr = (t) => { let h = 0; for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0; return (h >>> 0).toString(36); };
+const cropKey = (x) => "flyer:" + hashStr(x.pdf + "|" + (x.pg || 0) + "|" + x.box.join(","));
+const cropQ = []; let cropBusy = false;
+function flyerImg(x) {
+  if (!x || !x.pdf || !Array.isArray(x.box) || x.box.length !== 4) return null;
+  const k = cropKey(x), u = Photos.url(k);
+  if (u) return u;
+  if (!cropQ.some((y) => cropKey(y) === k)) { cropQ.push(x); setTimeout(runCrops, 50); }
+  return null;
+}
+async function runCrops() {
+  if (cropBusy) return;
+  cropBusy = true;
+  while (cropQ.length) {
+    const x = cropQ.shift(), k = cropKey(x);
+    try {
+      const c = (await renderPdf(x.pdf))[x.pg || 0]; if (!c) continue;
+      let [y0, x0, y1, x1] = x.box.map(Number);
+      const pad = 15; y0 = Math.max(0, y0 - pad); x0 = Math.max(0, x0 - pad); y1 = Math.min(1000, y1 + pad); x1 = Math.min(1000, x1 + pad);
+      const sx = (x0 / 1000) * c.width, sy = (y0 / 1000) * c.height, sw = ((x1 - x0) / 1000) * c.width, sh = ((y1 - y0) / 1000) * c.height;
+      if (sw < 20 || sh < 20) continue;
+      const k2 = Math.min(1, 600 / Math.max(sw, sh)), cc = document.createElement("canvas");
+      cc.width = Math.round(sw * k2); cc.height = Math.round(sh * k2);
+      cc.getContext("2d").drawImage(c, sx, sy, sw, sh, 0, 0, cc.width, cc.height);
+      const blob = await new Promise((r) => cc.toBlob(r, "image/jpeg", 0.85));
+      const u = await Photos.put(k, blob, true);
+      document.querySelectorAll(`[data-crop="${k}"]`).forEach((el) => { el.classList.remove("ph-empty"); el.innerHTML = `<img src="${u}" alt="">`; });
+    } catch (e) {}
+  }
+  cropBusy = false;
+}
+// Read one PDF flyer: each page is turned into a picture, the AI gives the products, prices and where they are on the page
+async function pdfFlyerItems(url, ask, mag, parse) {
+  let pages = null;
+  try { pages = await renderPdf(url); } catch (e) {}
+  const items = [];
+  if (pages && pages.length) {
+    for (let i = 0; i < pages.length; i++) {
+      const img = await new Promise((r) => pages[i].toBlob(r, "image/jpeg", 0.85));
+      const arr = parse(await askAI(ask + `\nAjoute aussi "box":[ymin,xmin,ymax,xmax] : le rectangle (de 0 à 1000) qui entoure la photo et le prix du produit sur la page.`, { images: [img], maxTokens: 8000, quiet: true }), true);
+      arr.forEach((x) => { if (x.box) { x.pdf = url; x.pg = i; } });
+      items.push(...arr);
+    }
+    return items;
+  }
+  const pdf = await (await fetch(url)).blob();
+  return parse(await askAI(ask, { images: [new Blob([pdf], { type: "application/pdf" })], maxTokens: 8000, quiet: true }), false);
+}
 // ---------- Marché Bonanza Lalumière: its weekly flyer is 4 PDF pages on its own site; the AI reads them (no web search) ----------
 let bonBusy = false;
 async function bonanzaSpecials(force) {
@@ -3434,29 +3513,26 @@ async function bonanzaSpecials(force) {
     const links = [...new Set((html.match(/(?:https?:)?\/\/[^"'\s>]+\.pdf(?:\?[^"'\s>]*)?/gi) || []).map((u) => (u.startsWith("//") ? "https:" + u : u).replace(/&amp;/g, "&")))].slice(0, 8);
     if (!links.length) return [];
     const key = links.map((u) => u.split("?")[0]).join("|");
-    if (!force && S.bonanza && S.bonanza.key === key && S.bonanza.items && S.bonanza.items.length) return S.bonanza.items;
+    if (!force && S.bonanza && S.bonanza.key === key && S.bonanza.v === 2 && S.bonanza.items && S.bonanza.items.length) return S.bonanza.items;
     const m = key.match(/(\d{1,2})_([a-zéû]+)_(\d{4})/i), MO = { jan: 1, fev: 2, fév: 2, mar: 3, avr: 4, mai: 5, juin: 6, juil: 7, aou: 8, aoû: 8, sep: 9, oct: 10, nov: 11, dec: 12, déc: 12 };
     let debut = today();
     if (m) { const mo = Object.entries(MO).find(([k]) => m[2].toLowerCase().startsWith(k)); if (mo) debut = `${m[3]}-${String(mo[1]).padStart(2, "0")}-${m[1].padStart(2, "0")}`; }
     const ids = Object.entries(ING).map(([k, v]) => `${k} = ${v.n} [${v.u}]`).join("\n");
     const items = [];
+    const parseB = (txt, withBox) => (AI.extractJSON(txt, "array") || []).filter((x) => x && Number(x.prix) > 0).map((x) => ({ ing: ING[x.ing] ? x.ing : null, mag: "Bonanza", prix: Number(x.prix), qte: Number(x.qte) || 1,
+      unite: ["lb", "kg", "g", "ml", "L", "u"].includes(x.unite) ? x.unite : "u", txt: String(x.txt || (ING[x.ing] || {}).n || "").slice(0, 90), reg: Number(x.reg) > Number(x.prix) ? Number(x.reg) : 0,
+      box: withBox && Array.isArray(x.box) && x.box.length === 4 ? x.box.map((n) => Math.round(Number(n))) : undefined }));
     for (const u of links) {
       try {
-        const pdf = await fetch(u).then((r) => r.blob());
         const prompt = `Voici une page de la circulaire de la semaine du Marché Bonanza Lalumière (Montréal), qui commence le ${debut}. Relève TOUS les produits en spécial avec leur prix, exactement comme écrit (n'invente rien).
 Associe chaque produit à un identifiant de cette liste (sinon "ing": null) :
 ${ids}
 Règles : prix au lb → "unite":"lb","qte":1 ; prix au kg → "kg" ; paquet de 375 g à 3,33 $ → "prix":3.33,"qte":375,"unite":"g" ; 2 pour 5 $ → "prix":5,"qte":2,"unite":"u" ; douzaine d'œufs → "qte":12,"unite":"u" ; 2 L → "qte":2,"unite":"L".
 Réponds UNIQUEMENT par un tableau JSON : [{"ing":"id ou null","prix":3.99,"qte":1,"unite":"lb|kg|g|ml|L|u","txt":"nom court + format","reg":0}]  ("reg" = prix régulier s'il est écrit, sinon 0)`;
-        const arr = AI.extractJSON(await askAI(prompt, { images: [new Blob([pdf], { type: "application/pdf" })], maxTokens: 8000, quiet: true }), "array") || [];
-        for (const x of arr) {
-          if (!x || !(Number(x.prix) > 0)) continue;
-          items.push({ ing: ING[x.ing] ? x.ing : null, mag: "Bonanza", prix: Number(x.prix), qte: Number(x.qte) || 1, unite: ["lb", "kg", "g", "ml", "L", "u"].includes(x.unite) ? x.unite : "u",
-            txt: String(x.txt || (ING[x.ing] || {}).n || "").slice(0, 90), reg: Number(x.reg) > Number(x.prix) ? Number(x.reg) : 0 });
-        }
+        items.push(...(await pdfFlyerItems(u, prompt, "Bonanza", parseB)));
       } catch (e) { if (/limite|quota|429/i.test(e.message || "")) break; }
     }
-    if (items.length) { S.bonanza = { key, debut, date: today(), items }; save(); }
+    if (items.length) { S.bonanza = { key, v: 2, debut, date: today(), items }; save(); }
     return items.length ? items : (S.bonanza && S.bonanza.items) || [];
   } catch (e) { return (S.bonanza && S.bonanza.items) || []; }
   finally { bonBusy = false; }
@@ -3627,7 +3703,7 @@ async function weeklyAuto() {
   try { await ensureCoords(); await loadRegistry(); addNearCustom(); } catch (e) {}
   try { await robotHistory(); } catch (e) {}
   if (aiOn() && SPEC && nearCustom().length) { try { await mergeCustom(); } catch (e) {} }
-  if (aiOn() && SPEC && S.reg.stores.includes("Bonanza") && !(S.bonanza && S.bonanza.date >= addDays(today(), -6) && SPEC.items.some((x) => x.mag === "Bonanza"))) { try { await mergeBonanza(false); } catch (e) {} }
+  if (aiOn() && SPEC && S.reg.stores.includes("Bonanza") && !(S.bonanza && S.bonanza.v === 2 && S.bonanza.date >= addDays(today(), -6) && SPEC.items.some((x) => x.mag === "Bonanza"))) { try { await mergeBonanza(false); } catch (e) {} }
   if (!aiOn()) return;
   if (S.iaWeek !== weekKey()) await iaGenerate(true);
   if (AIS.regAuto !== false && webOK() && regBatches().some(regDue)) await updateRegPrices(2, true); // regular prices: a few groups at each opening, all within 2 weeks

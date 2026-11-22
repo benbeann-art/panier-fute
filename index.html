@@ -184,6 +184,10 @@ body:has(#cook.on) #timers{bottom:calc(92px + env(safe-area-inset-bottom))}
 .rec .pic{display:block;border:0;padding:0;margin:-12px -14px 4px;background:none;border-radius:14px 14px 0 0;overflow:hidden}
 .rec .pic svg,.hero svg,.thumb svg{display:block;width:100%;height:auto}
 .ph{position:relative}.ph img{display:block;width:100%;aspect-ratio:8/5;object-fit:cover;background:var(--paper)}
+.ph.col{display:grid;grid-template-columns:2fr 1fr;grid-template-rows:1fr 1fr;gap:2px;aspect-ratio:8/5;overflow:hidden;background:#fff}
+.ph.col>.ph{min-height:0;overflow:hidden}.ph.col>.ph:first-child{grid-row:1/3}.ph.col>.ph img,.art .ph.col>.ph img{height:100%;aspect-ratio:auto}
+.ph.col>.ph .cred{display:none}.ph.col>.ph-empty{font-size:11px;padding:4px;aspect-ratio:auto}
+.art .ph.col{aspect-ratio:4/3}
 .ph .cred{position:absolute;right:6px;bottom:6px;max-width:80%;font-size:10px;line-height:1.3;color:#fff;background:rgba(0,0,0,.55);padding:1px 6px;border-radius:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hero{margin:0 0 10px;border-radius:14px;overflow:hidden;max-width:520px}
 .cook .thumb{width:84px;border:0;padding:0;border-radius:10px;overflow:hidden;background:none}
@@ -2649,7 +2653,7 @@ Réponds UNIQUEMENT par un tableau JSON : [{"ing":"id ou null","mag":"magasin","
 }
 
 // ---------- Real photos from the web (Wikimedia Commons: free-licence photos, credited) ----------
-const WKEY = "panierfute.webphotos";
+const WKEY = "panierfute.webphotos2"; try { localStorage.removeItem("panierfute.webphotos"); } catch (e) {}
 let WEB = {};
 try { WEB = JSON.parse(localStorage.getItem(WKEY) || "{}"); } catch (e) {}
 const saveWeb = () => { try { localStorage.setItem(WKEY, JSON.stringify(WEB)); } catch (e) {} };
@@ -2689,6 +2693,16 @@ function webQuery(r) {
   }
   if (r.k === "salade_froide") return /quinoa/i.test(r.n) ? "quinoa salad" : "pasta salad";
   if (r.k === "roti" && r.p === "poulet_entier") return "roast chicken with potatoes";
+  // stews: the style decides the photo (so they don't all look the same)
+  const rg = r.n.match(/^Ragoût de (bœuf|porc|poulet)/);
+  if (rg) {
+    const m = { "bœuf": "beef", porc: "pork", poulet: "chicken" }[rg[1]];
+    const st = [[/vin rouge/, m === "beef" ? "beef bourguignon" : m + " wine stew"], [/grands-pères/, m + " stew dumplings"], [/paprika/, "goulash"], [/irlandaise/, "irish stew"], [/chili et haricots/, "chili con carne"],
+      [/italienne/, "italian " + m + " stew"], [/provençale/, m === "beef" ? "daube provencale" : "provencal " + m + " stew"], [/orge/, m + " barley stew"], [/nouilles/, m + " stew noodles"], [/purée/, m + " stew mashed potatoes"],
+      [/mijoteuse/, "slow cooker " + m + " stew"], [/autocuiseur/, "pressure cooker " + m + " stew"], [/champignons/, m + " mushroom stew"], [/bière/, m + " beer stew"], [/patates douces/, m + " sweet potato stew"],
+      [/moutarde/, m + " stew mustard"], [/BBQ/, m + " stew"], [/érable/, m + " stew carrots"], [/légumes-racines/, m + " stew root vegetables"], [/farine grillée/, "ragout"]].find(([re]) => re.test(r.n));
+    return st ? st[1] : m + " stew";
+  }
   // newer recipes: the dish name tells what the photo must show
   const NAMEQ = [[/^Ragoût de boulettes/, "meatball stew"], [/^Ragoût de bœuf/, "beef stew"], [/^Ragoût de porc/, "pork stew"], [/^Ragoût de poulet/, "chicken stew"], [/^Pâté chinois/, "shepherd's pie"],
     [/^Tourtière|^Cipaille|^Pâté au |^Pâté à la |^Pâté végé|^Pâté mexicain|^Pot-en-pot/, "meat pie"], [/pot pie/i, "chicken pot pie"], [/^Soupe aux pois/, "pea soup"], [/^Soupe à l'oignon/, "french onion soup"],
@@ -2705,16 +2719,26 @@ function webQuery(r) {
   return dish.includes(prot) || !prot ? dish : prot + " " + dish;
 }
 async function commons(q) {
-  const u = "https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*&generator=search&gsrnamespace=6&gsrlimit=8&gsrsearch=" +
+  const u = "https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*&generator=search&gsrnamespace=6&gsrlimit=20&gsrsearch=" +
     encodeURIComponent(q + " filetype:bitmap -logo -map -drawing -label") + "&prop=imageinfo&iiprop=url|extmetadata&iiurlwidth=800";
   const j = await fetch(u).then((r) => r.json());
   const pages = Object.values((j.query && j.query.pages) || {}).sort((a, b) => (a.index || 0) - (b.index || 0));
   return pages.filter((p) => p.imageinfo && p.imageinfo[0] && p.imageinfo[0].thumburl).map((p) => {
     const m = p.imageinfo[0].extmetadata || {}, clean = (v) => String((v || {}).value || "").replace(/<[^>]+>/g, "").trim().slice(0, 60);
-    return { url: p.imageinfo[0].thumburl, page: p.imageinfo[0].descriptionurl, by: clean(m.Artist) || "Wikimedia Commons", lic: clean(m.LicenseShortName) || "licence libre" };
+    return { url: p.imageinfo[0].thumburl, page: p.imageinfo[0].descriptionurl, by: clean(m.Artist) || "Wikimedia Commons", lic: clean(m.LicenseShortName) || "licence libre", title: String(p.title || "").toLowerCase() };
   });
 }
 const webQ = []; let webBusy = false, webPauseUntil = 0;
+// A photo is kept only if its file name speaks of the dish (not just of the meat), and each recipe gets a different photo
+const EN_MEAT = new Set(["beef", "pork", "chicken", "turkey", "ham", "salmon", "trout", "fish", "shrimp", "tofu", "sausage", "bacon", "egg", "tuna", "lentil", "chickpea", "black", "bean", "with", "and", "french", "italian", "homemade"]);
+const BAD_T = /logo|menu|sign|package|label|map|drawing|restaurant|store|market|advert|poster|book|cover|recipe card|screenshot|statue|plant|field|farm|cow|pig|hen/;
+function relevant(list, q) {
+  const words = q.toLowerCase().split(/[^a-z']+/).filter((w) => w.length >= 3);
+  const dish = words.filter((w) => !EN_MEAT.has(w));
+  const need = dish.length ? dish : words;
+  return list.filter((x) => x.title && !BAD_T.test(x.title) && need.some((w) => x.title.includes(w.replace(/s$/, ""))));
+}
+const usedUrls = (except) => new Set(Object.entries(WEB).filter(([k, w]) => k !== except && !k.startsWith("ing:") && w && w.url).map(([, w]) => w.url));
 function wantWeb(id, next) {
   if (!next && ((WEB[id] && !WEB[id].tryFr) || webQ.includes(id))) return;
   if (Date.now() < webPauseUntil && !next) return;
@@ -2732,19 +2756,24 @@ async function runWeb() {
       let list = old && old.list;
       if (!list) {
         const bad = (old && old.bad) || [];
-        list = (await commons(old && old.tryFr && r.n ? r.n.replace(/\(.*?\)/g, "") : webQuery(r))).filter((x) => !bad.includes(x.url));
-        if (!list.length) list = (await commons(webQuery(r).split(" ").slice(-2).join(" "))).filter((x) => !bad.includes(x.url));
+        const q = webQuery(r);
+        list = relevant(await commons(q), q).filter((x) => !bad.includes(x.url));
+        const q2 = q.split(" ").filter((w, n, a) => EN_MEAT.has(w) || n === a.length - 1).join(" ");
+        if ((!list.length || (!next && list.every((x) => usedUrls(id).has(x.url)))) && q2 !== q) { list = list.concat(relevant(await commons(q2), q2).filter((x) => !bad.includes(x.url) && !list.some((y) => y.url === x.url))); }
         if (!list.length && old && old.bad) { WEB[id] = { none: true, bad }; saveWeb(); toast("Plus d'autres photos trouvées : le dessin reste"); document.querySelectorAll(`[data-ph="${CSS.escape(id)}"]`).forEach((el) => (el.outerHTML = pic(r))); continue; }
       }
       if (!list.length) { WEB[id] = { none: true }; saveWeb(); if (!r.ingId && AIS.photos === "web" && AI.imageReady(AIS).length) wantPhoto(id); continue; }
-      const i = next && old ? ((old.i || 0) + 1) % list.length : 0;
-      WEB[id] = Object.assign({}, list[i], { i, list: list.slice(0, 8), bad: (old && old.bad) || [] });
+      let i = next && old ? ((old.i || 0) + 1) % list.length : 0;
+      if (!next && !r.ingId) { const used = usedUrls(id); const j = list.findIndex((x) => !used.has(x.url)); if (j >= 0) i = j; else { WEB[id] = { none: true }; saveWeb(); document.querySelectorAll(`[data-ph="${CSS.escape(id)}"]`).forEach((el) => (el.outerHTML = pic(r))); continue; } }
+      WEB[id] = Object.assign({}, list[i], { i, list: list.slice(0, 12).map((x) => ({ url: x.url, page: x.page, by: x.by, lic: x.lic })), bad: (old && old.bad) || [] });
+      delete WEB[id].title;
       saveWeb();
       document.querySelectorAll(`[data-ph="${CSS.escape(id)}"]`).forEach((el) => (el.outerHTML = r.ingId ? ingPic(r.ingId) : pic(r)));
       const c = $("#photoCredit"); if (c && S.open === id) c.innerHTML = creditHTML(id);
     } catch (e) { webPauseUntil = Date.now() + 5 * 6e4; webQ.length = 0; }
   }
   webBusy = false;
+  hydratePhotos(); // collages bring new ingredient pictures to load
 }
 const creditHTML = (id) => { const w = WEB[id]; return w && w.url ? `Photo : ${esc(w.by)}, ${esc(w.lic)} — <a href="${esc(w.page)}" target="_blank" rel="noopener">Wikimedia Commons</a>` : ""; };
 
@@ -2758,7 +2787,14 @@ function pic(r) {
   const u = Photos.url(r.id), w = WEB[r.id];
   if (u) return `<div class="ph" data-ph="${r.id}"><img src="${u}" alt="Photo : ${esc(r.n)}" loading="lazy"></div>`;
   if (w && w.url && !(w.bad || []).includes(w.url) && AIS.photos !== "off") return `<div class="ph" data-ph="${r.id}"><img src="${esc(w.url)}" alt="Photo : ${esc(r.n)}" loading="lazy" referrerpolicy="no-referrer"><span class="cred">${esc(w.by)} · ${esc(w.lic)}</span></div>`;
+  if (w && w.none && AIS.photos !== "off") return collage(r);
   return `<div class="ph" data-ph="${r.id}">${Illus.svg(r)}</div>`;
+}
+// No good photo of the dish: show close-ups of what's in it (main protein + 2 main vegetables or starch)
+function collage(r) {
+  const skip = new Set(["sel", "poivre", "huile", "huile_olive", "eau", "bouillon_poulet", "bouillon_boeuf", "farine", "sucre", "beurre"]);
+  const main = [r.p].concat(r.i.filter(([k]) => k !== r.p && ING[k] && !skip.has(k) && !/épices/.test(ING[k].r)).sort((a, b) => b[1] * ING[b[0]].p - a[1] * ING[a[0]].p).map(([k]) => k)).filter((k, n, a) => ING[k] && a.indexOf(k) === n).slice(0, 3);
+  return `<div class="ph col" data-ph="${r.id}">${main.map((k) => ingPic(k)).join("")}<span class="cred">Ce qu'il y a dedans</span></div>`;
 }
 function photoPrompt(r) {
   const main = r.i.map(([k]) => ING[k]).filter((g) => g && !["Garde-manger et épices"].includes(g.r)).slice(0, 8).map((g) => g.n.split(" (")[0].toLowerCase());
@@ -2797,7 +2833,7 @@ function hydratePhotos() {
   const want = (id) => (id.startsWith("ing:") ? wantWeb(id) : AIS.photos === "auto" ? wantPhoto(id) : wantWeb(id));
   if (!photoObs && "IntersectionObserver" in window) photoObs = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { photoObs.unobserve(e.target); want(e.target.dataset.ph); } }), { rootMargin: "100px" });
   const skipRec = AIS.photos === "open" || (AIS.photos === "auto" && !AI.imageReady(AIS).length);
-  document.querySelectorAll(".view.on [data-ph]").forEach((el) => { if (!el.querySelector("img") && photoObs && (el.dataset.ph.startsWith("ing:") || !skipRec)) photoObs.observe(el); });
+  document.querySelectorAll(".view.on [data-ph], #sheetIn [data-ph]").forEach((el) => { if (!el.querySelector("img") && photoObs && (el.dataset.ph.startsWith("ing:") || !skipRec)) photoObs.observe(el); });
 }
 
 // ---------- voice commands ("ajoute du lait", "minuterie 10 minutes", "qu'est-ce que je fais pour souper") ----------

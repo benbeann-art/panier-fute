@@ -73,12 +73,12 @@
     champignons: ["champignons", ["champignon"], ["soupe", "sauce", "conserve", "marine", "farci", "pizza", "creme", "seche", "fromage", "gouda"]],
     epinards: ["épinards", ["epinard"], ["surgel", "congel", "trempette", "pates", "tortilla", "spanakopita", "boulette", "pizza", "feuillete"]],
     laitue: ["laitue romaine", ["laitue|romaine"], ["salade cesar|kit|ensemble|melange"]],
-    tomate: ["tomates", ["tomate"], ["cerise", "raisin", "conserve", "sauce", "pate", "jus", "en des", "seche", "ketchup", "soupe", "bruschetta", "salsa", "broye", "entieres en", "passata", "boite", "cocktail", "ml", "aylmer", "hunt", "primo", "conserve"]],
+    tomate: ["tomates", ["tomate"], ["cerise", "raisin", "conserve", "sauce", "pate", "jus", "en des", "seche", "ketchup", "soupe", "bruschetta", "salsa", "broye", "entieres en", "passata", "boite", "cocktail", "ml", "aylmer", "hunt", "primo", "conserve", "coulis", "compliments"]],
     tomate_cerise: ["tomates cerises", ["tomate", "cerise|raisin|cocktail|bouchee|melodie"], ["seche", "sauce", "conserve", "jus", "boite"]],
     concombre: ["concombres", ["concombre"], ["cornichon", "salade", "marine", "tzatziki", "eau", "boisson"]],
     poireau: ["poireaux", ["poireau"], ["soupe", "potage"]],
     chou: ["chou vert", ["=chou|=choux"], ["fleur", "fleurs", "bruxelles", "salade", "rave", "kale", "frise", "chinois", "nappa", "bok", "rouge", "brocoli", "creme", "cou", "farci", "coleslaw", "pak"]],
-    citron: ["citrons", ["citron"], ["jus", "the", "vinaigrette", "gateau", "limonade", "boisson", "sorbet", "biscuit", "tarte", "yogourt", "eau", "lime", "saveur", "poivre", "aromat", "assaison", "muffin", "cari", "herbes"]],
+    citron: ["citrons", ["citron"], ["jus", "the", "vinaigrette", "gateau", "limonade", "boisson", "sorbet", "biscuit", "tarte", "yogourt", "eau", "lime", "saveur", "poivre", "aromat", "assaison", "muffin", "cari", "herbes", "pandoro", "confiture", "creme", "tartinade", "marmelade"]],
     lime: ["limes", ["=lime|=limes"], ["jus", "limonade", "boisson", "biscuit", "tarte", "eau", "citron", "saveur", "tortilla", "croustil", "chips", "biere", "cooler"]],
     coriandre: ["coriandre", ["coriandre"], ["moulu", "graine", "seche", "pate"]],
     persil: ["persil", ["persil"], ["seche", "flocon"]],
@@ -302,13 +302,13 @@
     if (q) { if (q.unite === "l") q.unite = "L"; q.qte *= mult; }
     if (!q && ingU === "ml" && r.ing === "lait" && !/(^| )(ml|l|litre)( |$)/.test(nm)) return { qte: 2000 * mult, unite: "ml" }; // milk without a size: the usual 2 L
     if (ingU === "u") {
+      if (q && EACH_LB[r.ing] && ["lb", "kg", "g"].includes(q.unite)) return q.unite === "g" ? { qte: q.qte / 453.6, unite: "lb" } : q; // bag sold by weight
       if (/douzaine/.test(nm)) return { qte: 12 * mult, unite: "u" };
       m = raw.match(/\b(\d+)\s*\/\s*(\d+(?:[.,]\d+)?)\s*\$/); // "Citrons 5/2$" = 5 for the price
       if (m && Math.abs(NUM(m[2]) - Number(r.prix)) < 0.02) return { qte: Number(m[1]), unite: "u" };
       m = raw.match(/(?:paq(?:uet)?\.?\s*de|pqt\s*de|sac\s*de|boite\s*de|caisse\s*de|emballage\s*de)\s*(\d+)(?!\s*(?:g|kg|ml|l|lb)\b)/) || raw.match(/\b(\d+)\s*(?:un\b|unités?\b|unites?\b|pains\b|bagels\b|tortillas\b|croissants\b|pitas\b|oeufs\b|œufs\b)/);
       if (m) return { qte: Number(m[1]) * mult, unite: "u" };
       if (/(^| )(ch|chacun|chacune|unite|l unite|un)( |$)/.test(post)) return { qte: 1 * mult, unite: "u" };
-      if (q && EACH_LB[r.ing] && ["lb", "kg", "g"].includes(q.unite)) return q.unite === "g" ? { qte: q.qte / 453.6, unite: "lb" } : q; // bag sold by weight
       return null; // count not written (bag, pack, by weight): the AI reads it
 
     }

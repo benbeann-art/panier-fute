@@ -267,6 +267,7 @@
     if (!d.trim()) return x;
     const bag = d.match(/(\d+[.,]\d{2})\s*\$\s*(?:le|la|par)\s*(sac|filet|caisse|boite|boîte|paquet|emballage|contenant|barquette)\s*(?:de\s*)?(\d+(?:[.,]\d+)?)\s*(lb|kg|g)\b/);
     if (bag) { x.prix = NUM(bag[1]); addSize(x, `${bag[2]} de ${bag[3]} ${bag[4]}`); x.post = ""; return x; }
+    if (/^\s*ch/i.test(x.post || "") && !/\b(ch|chacun|chacune|l'unité|unité)\b/.test(d) && (/(sac|filet)/.test(d))) x.post = ""; // "ch." printed on a bag
     const size = d.match(/(sac|filet|caisse|boite|boîte|paquet|emballage|contenant|barquette)\s*(?:de\s*)?(\d+(?:[.,]\d+)?)\s*(lb|kg|g)\b/);
     const perLb = /la livre|le lb|la lb|\/\s*lb|par livre/.test(d);
     const perKg = /\/\s*kg|le kg|par kg/.test(d);
@@ -275,13 +276,16 @@
       const lb = size[3] === "kg" ? NUM(size[2]) * 2.2046 : size[3] === "g" ? NUM(size[2]) / 453.6 : NUM(size[2]);
       x.prix = Math.round(x.prix * lb * 100) / 100; addSize(x, `${size[1]} de ${size[2]} ${size[3]}`); x.post = ""; return x;
     }
-    if (perLb && !x.post) { x.post = "/lb"; return x; }
+    if (perLb && (!x.post || /^\s*ch/i.test(x.post))) { x.post = "/lb"; return x; }
     if (perKg && !x.post) { x.post = "/kg"; return x; }
-    if (size && !/\d\s*(lb|kg|g)\b/.test(x.name.toLowerCase())) addSize(x, `${size[1]} de ${size[2]} ${size[3]}`);
+    if (size && !/\d\s*(lb|kg|g)\b/.test(x.name.toLowerCase())) { addSize(x, `${size[1]} de ${size[2]} ${size[3]}`); return x; }
+    // a plain weight in the description ("Produits du Québec 907 g", "1,36 kg"): the size of the package (not "4,39/kg", a price)
+    const w = !x.post && !size && d.match(/(?<![\d,.\/$])(\d+(?:[.,]\d+)?)\s*(kg|g|lb)\b(?!\s*\/)/);
+    if (w && !/\d\s*(lb|kg|g)\b/.test(x.name.toLowerCase())) addSize(x, `${w[1]} ${w[2]}`);
     return x;
   }
   async function addDetails(out, opts) {
-    const todo = out.filter((x) => PRODUCE.has(x.ing) && !x.det && !x.post && !/\d\s*(lb|kg|g|un\.?)\b/i.test(x.name) && x.fid).slice(0, opts.maxDetails || 80);
+    const todo = out.filter((x) => PRODUCE.has(x.ing) && !x.det && (!x.post || /^\s*ch\.?\s*$|^\s*chacun/i.test(x.post)) && !/\d\s*(lb|kg|g|un\.?)\b/i.test(x.name) && x.fid).slice(0, opts.maxDetails || 200);
     let i = 0;
     const worker = async () => { while (i < todo.length) { const x = todo[i++]; const d = await detailOf(x.fid, opts.fetch); if (d.trim()) { applyDetail(x, d); x.det = 1; } } };
     await Promise.all([worker(), worker(), worker(), worker()]);

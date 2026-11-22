@@ -1124,7 +1124,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
     haricots_rouges: ["haricots rouges", ["haricot", "rouge"], ["sauce", "soupe"]],
     tofu: ["tofu", ["tofu"], ["dessert", "boisson", "pouding"]],
     oignon: ["oignons", ["oignon"], ["brochette", "kafta", "merguez", "vert", "rondelle", "frit", "soupe", "poudre", "croustil", "trempette", "sauce", "rouge et", "marine", "perle"]],
-    ail: ["ail", ["=ail"], ["poudre", "pain", "beurre", "sauce", "sel", "noir", "trempette", "croutons", "moulu", "aioli", "pate"]],
+    ail: ["ail", ["=ail"], ["poudre", "pain", "beurre", "sauce", "sel", "noir", "trempette", "croutons", "moulu", "aioli", "pate", "hache", "derlea", "puree", "confit"]],
     carotte: ["carottes", ["carotte"], ["gateau", "muffin", "jus", "nourriture", "carrot cake", "surgel", "congel"]],
     celeri: ["céleri", ["celeri"], ["sel", "rave", "graine", "soupe"]],
     patate: ["pommes de terre", ["pommes de terre|pomme de terre|patate"], ["douce", "frite", "rondelle", "quartier", "croustil", "chips", "pile", "salade", "pilee", "surgel", "congel", "galette", "pate", "gnocchi", "sachet", "pures"]],
@@ -1236,7 +1236,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
     poire: ["poires", ["=poire|=poires"], ["jus", "conserve", "coupe", "nectar", "sechee", "yogourt", "compote", "gourde", "boisson"]],
     clementine: ["clémentines", ["clementine|mandarine"], ["jus", "conserve", "coupe", "yogourt", "boisson", "gelee"]],
     orange: ["oranges", ["=orange|=oranges"], ["jus", "boisson", "marmelade", "saveur", "chocolat", "poivron", "carotte", "patate", "courge", "yogourt", "bonbon", "gelee", "nectar", "the", "tisane", "cheddar"]],
-    raisins: ["raisins", ["raisin"], ["sec", "secs", "sultana", "jus", "gelee", "pain", "biscuit", "muffin", "cereale", "yogourt", "vinaigre", "huile", "confiture", "boisson", "chocolat", "bagel", "son", "tomate"]],
+    raisins: ["raisins", ["raisin"], ["sec", "secs", "sultana", "jus", "gelee", "pain", "biscuit", "muffin", "cereale", "yogourt", "vinaigre", "huile", "confiture", "boisson", "chocolat", "bagel", "son", "tomate", "panettone", "confit", "gateau", "brioche"]],
     bleuets: ["bleuets", ["bleuet"], ["muffin", "yogourt", "jus", "confiture", "gaufre", "barre", "pain", "cereale", "seche", "sauce", "tarte", "boisson", "the", "gelee", "pancake", "crepe"]],
     fraises: ["fraises", ["fraise"], ["confiture", "yogourt", "jus", "gelee", "boisson", "barre", "saveur", "sirop", "tarte", "bonbon", "the", "lait", "creme glacee", "gateau", "smoothie", "rhubarbe et"]],
     avoine: ["flocons d'avoine", ["avoine|gruau"], ["barre", "biscuit", "cereale", "boisson", "lait", "sachet", "instantane", "saveur", "muffin", "pain", "son d", "granola", "galette", "bouchee"]],
@@ -1308,7 +1308,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
 
   // Fruits and vegetables: the search result often hides "the pound, when you buy a 4 lb bag: 3,96 $ the bag".
   // That text is in the item's own page: read it for these items and fix the price and size.
-  const PRODUCE = new Set(["pomme", "poire", "orange", "clementine", "citron", "lime", "banane", "raisins", "bleuets", "fraises", "concombre", "poivron", "tomate", "tomate_cerise",
+  const PRODUCE = new Set(["ail", "pomme", "poire", "orange", "clementine", "citron", "lime", "banane", "raisins", "bleuets", "fraises", "concombre", "poivron", "tomate", "tomate_cerise",
     "carotte", "patate", "patate_douce", "oignon", "celeri", "brocoli", "chou_fleur", "chou", "courgette", "champignons", "avocat", "laitue", "poireau", "navet", "ananas", "courge", "aubergine", "pois_mange_tout"]);
   const DETAIL = new Map();
   async function detailOf(id, fetchFn) {
@@ -1362,7 +1362,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
   // about how many per pound, for fruits and vegetables counted by the unit
   // the most one fruit or vegetable costs, even on special
   const MAXEACH = { oignon: 1.5, orange: 2, pomme: 2, poire: 2, clementine: 1, citron: 1.5, lime: 1, tomate: 2.5, concombre: 3.5, poivron: 3.5, avocat: 3.5, courgette: 3, poireau: 3, laitue: 5, brocoli: 5, chou_fleur: 6 };
-  const EACH_LB = { orange: 2, pomme: 3, poire: 2.5, clementine: 6, citron: 4, lime: 7, concombre: 1.5, poivron: 2.5, oignon: 3, tomate: 3, avocat: 2.5, courgette: 2, aubergine: 1, brocoli: 1.5, chou_fleur: 0.5, laitue: 1, poireau: 2.5 };
+  const EACH_LB = { ail: 90, orange: 2, pomme: 3, poire: 2.5, clementine: 6, citron: 4, lime: 7, concombre: 1.5, poivron: 2.5, oignon: 3, tomate: 3, avocat: 2.5, courgette: 2, aubergine: 1, brocoli: 1.5, chou_fleur: 0.5, laitue: 1, poireau: 2.5 };
   function sizeOf(r, ingU) {
     const post = norm(r.post), nm = norm(r.name);
     const pm = String(r.pre || "").match(/^\s*(\d+)\s*(?:\/|pour\b)/i);

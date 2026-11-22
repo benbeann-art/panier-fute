@@ -3454,7 +3454,7 @@ async function customSpecials(st, force) {
   const ask = `Relève TOUS les produits en spécial de la circulaire de la semaine de l'épicerie « ${st.name} » (Québec), avec leur prix, exactement comme écrit (n'invente rien).
 Associe chaque produit à un identifiant de cette liste (sinon "ing": null) :
 ${ids}
-Règles : prix au lb → "unite":"lb","qte":1 ; au kg → "kg" ; paquet de 375 g à 3,33 $ → "prix":3.33,"qte":375,"unite":"g" ; 2 pour 5 $ → "prix":5,"qte":2,"unite":"u" ; douzaine d'œufs → "qte":12,"unite":"u" ; 2 L → "qte":2,"unite":"L".
+Règles : prix au lb → "unite":"lb","qte":1 ; au kg → "kg" ; paquet de 375 g à 3,33 $ → "prix":3.33,"qte":375,"unite":"g" ; 2 pour 5 $ → "prix":5,"qte":2,"unite":"u" ; douzaine d'œufs → "qte":12,"unite":"u" ; 2 L → "qte":2,"unite":"L" ; sac de 3 lb à 3 $ → "prix":3,"qte":3,"unite":"lb" (un sac ou un paquet au poids se compte en lb, kg ou g, pas en unités).
 Réponds UNIQUEMENT par un tableau JSON : [{"ing":"id ou null","prix":3.99,"qte":1,"unite":"lb|kg|g|ml|L|u","txt":"nom court + format","reg":0}]  ("reg" = prix régulier s'il est écrit, sinon 0)`;
   const parse = (txt, withBox) => (AI.extractJSON(txt, "array") || []).filter((x) => x && Number(x.prix) > 0).map((x) => ({ ing: ING[x.ing] ? x.ing : null, mag: st.name, prix: Number(x.prix), qte: Number(x.qte) || 1,
     unite: ["lb", "kg", "g", "ml", "L", "u"].includes(x.unite) ? x.unite : "u", txt: String(x.txt || (ING[x.ing] || {}).n || "").slice(0, 90), reg: Number(x.reg) > Number(x.prix) ? Number(x.reg) : 0,
@@ -3594,7 +3594,7 @@ async function bonanzaSpecials(force) {
         const prompt = `Voici une page de la circulaire de la semaine du Marché Bonanza Lalumière (Montréal), qui commence le ${debut}. Relève TOUS les produits en spécial avec leur prix, exactement comme écrit (n'invente rien).
 Associe chaque produit à un identifiant de cette liste (sinon "ing": null) :
 ${ids}
-Règles : prix au lb → "unite":"lb","qte":1 ; prix au kg → "kg" ; paquet de 375 g à 3,33 $ → "prix":3.33,"qte":375,"unite":"g" ; 2 pour 5 $ → "prix":5,"qte":2,"unite":"u" ; douzaine d'œufs → "qte":12,"unite":"u" ; 2 L → "qte":2,"unite":"L".
+Règles : prix au lb → "unite":"lb","qte":1 ; prix au kg → "kg" ; paquet de 375 g à 3,33 $ → "prix":3.33,"qte":375,"unite":"g" ; 2 pour 5 $ → "prix":5,"qte":2,"unite":"u" ; douzaine d'œufs → "qte":12,"unite":"u" ; 2 L → "qte":2,"unite":"L" ; sac de 3 lb à 3 $ → "prix":3,"qte":3,"unite":"lb" (un sac ou un paquet au poids se compte en lb, kg ou g, pas en unités).
 Réponds UNIQUEMENT par un tableau JSON : [{"ing":"id ou null","prix":3.99,"qte":1,"unite":"lb|kg|g|ml|L|u","txt":"nom court + format","reg":0}]  ("reg" = prix régulier s'il est écrit, sinon 0)`;
         items.push(...(await pdfFlyerItems(u, prompt, "Bonanza", parseB)));
       } catch (e) { if (/limite|quota|429/i.test(e.message || "")) break; }
@@ -3763,6 +3763,7 @@ Réponds UNIQUEMENT par un tableau JSON : [{"id":"identifiant","prix":nombre}]`;
 }
 
 async function weeklyAuto() {
+  if (SPEC && !Object.keys(S.regStore || {}).length && learnRegular(SPEC.items, "flyer")) { save(); render(S.view); } // first time: learn this week's "au lieu de" prices
   if (AIS.autoMaj === false) return;
   const t = today();
   const recentTry = S.majTry && Date.now() - new Date(S.majTry).getTime() < 6 * 36e5;

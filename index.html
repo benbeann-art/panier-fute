@@ -3606,7 +3606,7 @@ const T_WORDS = { "quarante-cinq": 45, "vingt-cinq": 25, "soixante": 60, "cinqua
   "douze": 12, "dix": 10, "neuf": 9, "huit": 8, "sept": 7, "six": 6, "cinq": 5, "quatre": 4, "trois": 3, "deux": 2, "une": 1, "un": 1 };
 const T_H = "(?:heures?|hrs?|h)", T_M = "(?:minutes?|mins?|mn)", T_N = "(\\d+(?:\\.\\d+)?)";
 const T_RE = new RegExp(
-  `(?:${T_N}\\s*(?:${T_H}\\s*)?(?:à|-|–|ou)\\s*)?${T_N}\\s*${T_H}(?:\\s*(\\d{1,2})(?:\\s*${T_M})?)?(?![a-zà-ÿ])` +
+  `(?:${T_N}\\s*(?:${T_H}\\s*)?(?:à|-|–|ou)\\s*)?${T_N}\\s*${T_H}(?:\\s*(\\d{1,2})(?:\\s*${T_M})?|\\s*,?\\s*(?:et|plus)\\s+(\\d{1,2})\\s*${T_M})?(?![a-zà-ÿ])` +
   `|(?:(\\d+)\\s*(?:${T_M}\\s*)?(?:à|-|–|ou)\\s*)?(\\d+)\\s*${T_M}(?![a-zà-ÿ])`, "gi");
 function stepTimes(t) {
   let s = " " + String(t).toLowerCase().replace(/[’`]/g, "'") + " ";
@@ -3616,14 +3616,15 @@ function stepTimes(t) {
     .replace(/trois[ -]quarts? d'heure/g, "45 minutes").replace(/(?:une |1 )?demi-heure/g, "30 minutes").replace(/(?:un |1 )?quart d'heure/g, "15 minutes");
   for (const [w, n] of Object.entries(T_WORDS))
     s = s.replace(new RegExp(`(^|[^a-zà-ÿ-])${w}(?=\\s+(?:(?:à|ou)\\s+[a-zà-ÿ0-9-]+\\s+)?(?:heures?|minutes?)(?![a-zà-ÿ]))`, "g"), `$1${n}`);
-  s = s.replace(/(\d+(?:\.\d+)?)\s*heures? et demie/g, (m, n) => (+n + 0.5) + " heures");
+  s = s.replace(/(\d+(?:\.\d+)?)\s*heures? et demie/g, (m, n) => (+n + 0.5) + " heures").replace(/(\d+(?:\.\d+)?)\s*heures? et (?:un )?quart/g, (m, n) => (+n + 0.25) + " heures")
+    .replace(/(\d+(?:\.\d+)?)\s*heures? moins (?:le |un )?quart/g, (m, n) => (+n - 0.25) + " heures");
   const out = [];
   let m;
   T_RE.lastIndex = 0;
   while ((m = T_RE.exec(s))) {
     let sec = 0;
-    if (m[2]) sec = Math.round(Number(m[2]) * 3600 + (m[3] ? Number(m[3]) * 60 : 0));
-    else sec = Math.round(Number(m[5]) * 60);
+    if (m[2]) sec = Math.round(Number(m[2]) * 3600 + Number(m[3] || m[4] || 0) * 60);
+    else sec = Math.round(Number(m[6]) * 60);
     if (sec >= 60 && sec <= 12 * 3600 && !out.includes(sec)) out.push(sec);
   }
   return out.slice(0, 3);

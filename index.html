@@ -2510,7 +2510,7 @@ function rRec() {
     ${S.rf === "aime" && !pool.length ? `<div class="empty" style="margin-top:12px">Ouvre une recette et appuie sur « J'aime » : elle sera reproposée plus souvent.</div>` : ""}
     <div class="recs">${pool.slice(0, recLimit).map(card).join("")}</div>
     ${pool.length > recLimit ? `<div class="row" style="justify-content:center;margin-top:14px"><button class="btn" id="more">Voir plus (${pool.length - recLimit})</button></div>` : ""}
-    ${!pool.length && !["mes", "ia", "aime"].includes(S.rf) ? `<div class="empty" style="margin-top:12px">Aucune recette trouvée.${aiOn() && S.q.trim() ? ` <button class="btn sm red" data-askq="1">Demander « ${esc(S.q.trim())} » à l'IA</button>` : ""}</div>` : ""}`;
+    ${!pool.length && !["mes", "ia", "aime"].includes(S.rf) ? `<div class="empty" style="margin-top:12px">Aucune recette trouvée${S.cat || S.cuis || S.tag ? ` avec les filtres choisis (${[S.cat, S.cuis, { vite: "Vite fait", sante: "Santé", vege: "Végé" }[S.tag]].filter(Boolean).join(", ")}). <button class="btn sm red" id="clrF">Enlever les filtres</button>` : "."}${aiOn() && S.q.trim() ? ` <button class="btn sm red" data-askq="1">Demander « ${esc(S.q.trim())} » à l'IA</button>` : ""}</div>` : ""}`;
 }
 const fmtTime = (m) => (m >= 60 ? Math.floor(m / 60) + " h" + (m % 60 ? " " + (m % 60) : "") : m + " min");
 
@@ -3298,7 +3298,7 @@ async function weeklyAuto() {
   if (AIS.autoMaj === false) return;
   const t = today();
   const recentTry = S.majTry && Date.now() - new Date(S.majTry).getTime() < 6 * 36e5;
-  if ((!SPEC || SPEC.fin < t || SPEC.debut < weekKey() || /lu par/.test(SPEC.source || "")) && !recentTry) await updateFlyers(true);
+  if ((!SPEC || SPEC.fin < t || SPEC.debut < weekKey() || !/Flipp/.test(SPEC.source || "")) && !recentTry) await updateFlyers(true);
   try { await robotHistory(); } catch (e) {}
   if (!aiOn()) return;
   if (S.iaWeek !== weekKey()) await iaGenerate(true);
@@ -3405,7 +3405,7 @@ document.addEventListener("click", (e) => {
   if (d.ck) { S.coches[d.ck] = !S.coches[d.ck]; if (!S.coches[d.ck]) delete S.coches[d.ck]; pendingCk[d.ck] = 1; save(); if (Sync.on()) { clearTimeout(saveTimer); saveTimer = setTimeout(() => syncNow(), 600); } return rList(), updateBadge(); }
   if (d.rm) { S.menu = S.menu.filter((x) => x !== d.rm); save(); return rMenu(); }
   if (d.rf) { S.rf = d.rf; recLimit = 40; save(); return rRec(); }
-  if (d.ing) { S.rf = "spec"; S.q = ING[d.ing].n.split(" (")[0]; S.cat = ""; return show("recettes", false); }
+  if (d.ing) { S.rf = "spec"; S.q = ING[d.ing].n.split(" (")[0]; S.cat = ""; S.cuis = ""; S.tag = ""; return show("recettes", false); }
   if (d.del) { S.extra = S.extra.filter((x) => x.perso !== d.del); rankCache = null; save(); return rSpec(); }
   if (d.go === "menu-auto") { autoMenu(); return show("menu", false); }
   if (d.go === "menu-clear") { S.menu = []; save(); return rMenu(); }
@@ -3466,7 +3466,8 @@ document.addEventListener("click", (e) => {
   if (d.tagf !== undefined) { S.tag = d.tagf; recLimit = 40; save(); return rRec(); }
   if (t.id === "myPhotoDel") { const id = S.open; Photos.del(id).then(() => { delete MYPH[id]; saveMyPh(); openRec(id); render(S.view); }); return; }
   if (t.id === "impGo") return importRecipe();
-  if (t.id === "selGo") { S.rf = "sel"; S.q = ""; S.cat = ""; return show("recettes", false); }
+  if (t.id === "clrF") { S.cat = ""; S.cuis = ""; S.tag = ""; save(); return rRec(); }
+  if (t.id === "selGo") { S.rf = "sel"; S.q = ""; S.cat = ""; S.cuis = ""; S.tag = ""; return show("recettes", false); }
   if (t.id === "regGo") { updateRegPrices(20, false); return; }
   if (t.id === "histGo") { backfillHistory(10, false); return rSpec(); }
   if (t.id === "histStop") { histStop = true; return; }

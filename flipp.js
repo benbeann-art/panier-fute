@@ -252,7 +252,12 @@
     if (DETAIL.has(id)) return DETAIL.get(id);
     const f = fetchFn || fetch;
     let d = "";
-    try { const r = await f("https://backflipp.wishabi.com/flipp/items/" + id); if (r.ok) { const j = await r.json(); const it = j.item || j; d = String(it.description || "") + " " + String(it.post_price_text || ""); } } catch (e) {}
+    for (let k = 0; k < 2 && !d; k++) {
+      try {
+        const r = await f("https://backflipp.wishabi.com/flipp/items/" + id, { headers: { accept: "application/json" } });
+        if (r.ok) { const j = await r.json(); const it = j.item || j; d = String(it.description || "") + " " + String(it.post_price_text || ""); }
+      } catch (e) {}
+    }
     DETAIL.set(id, d);
     return d;
   }
@@ -276,9 +281,9 @@
     return x;
   }
   async function addDetails(out, opts) {
-    const todo = out.filter((x) => PRODUCE.has(x.ing) && !x.post && !/\d\s*(lb|kg|g|un\.?)\b/i.test(x.name) && x.fid).slice(0, opts.maxDetails || 80);
+    const todo = out.filter((x) => PRODUCE.has(x.ing) && !x.det && !x.post && !/\d\s*(lb|kg|g|un\.?)\b/i.test(x.name) && x.fid).slice(0, opts.maxDetails || 80);
     let i = 0;
-    const worker = async () => { while (i < todo.length) { const x = todo[i++]; applyDetail(x, await detailOf(x.fid, opts.fetch)); } };
+    const worker = async () => { while (i < todo.length) { const x = todo[i++]; const d = await detailOf(x.fid, opts.fetch); if (d.trim()) { applyDetail(x, d); x.det = 1; } } };
     await Promise.all([worker(), worker(), worker(), worker()]);
   }
 
@@ -353,7 +358,7 @@
     return Object.values(best).map((b) => b.x);
   }
 
-  const api = { STORES, REGIONS, distKm, nearestRegion, TERMS: T, norm, matches, search, collect, sizeOf, toItems, pretty, bestPerStore, LB, applyDetail, excluded };
+  const api = { STORES, REGIONS, distKm, nearestRegion, TERMS: T, norm, matches, search, collect, sizeOf, toItems, pretty, bestPerStore, LB, applyDetail, excluded, addDetails };
   if (typeof module === "object" && module.exports) module.exports = api;
   root.Flipp = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

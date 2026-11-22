@@ -808,13 +808,26 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
   }
 
   // ---- Gemini (Google AI Studio, generateContent) ----
+  // Each Gemini model has its own free quota: when one is used up, the next one answers
+  const GEM_BACKUP = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-flash-lite-latest", "gemini-flash-latest", "gemini-3-flash-preview", "gemini-3.8-flash"];
+  const gemTired = {};
   async function callGemini(cfg, prompt, opt) {
+    const list = [cfg.model || PROVIDERS.gemini.model].concat(cfg.model || opt.web ? [] : GEM_BACKUP);
+    let last;
+    for (const m of list) {
+      if (gemTired[m] && Date.now() - gemTired[m] < 15 * 60e3) continue;
+      try { return await gemOnce(cfg, m, prompt, opt); }
+      catch (e) { last = e; if (e.code !== "limit" && e.code !== "model") throw e; gemTired[m] = Date.now(); }
+    }
+    throw last || new AIError("limit", "Limite atteinte pour cette IA.");
+  }
+  async function gemOnce(cfg, modelName, prompt, opt) {
     const parts = [];
     for (const img of opt.images || []) parts.push({ inline_data: { mime_type: img.type || "image/jpeg", data: await blobToB64(img) } });
     parts.push({ text: prompt });
     const body = { contents: [{ role: "user", parts }], generationConfig: { maxOutputTokens: opt.maxTokens || 8000 } };
     if (opt.web) body.tools = [{ google_search: {} }];
-    const model = encodeURIComponent(cfg.model || PROVIDERS.gemini.model);
+    const model = encodeURIComponent(modelName);
     const data = await post(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, { "x-goog-api-key": cfg.key }, body, opt.signal);
     const c = (data.candidates || [])[0];
     if (!c) throw new AIError("other", "Gemini n'a rien répondu.");
@@ -2936,12 +2949,17 @@ async function repoFile(rel, json) {
 }
 const UNIT_TXT = { g: "grammes", ml: "millilitres", u: "unités", cs: "c. à soupe", ct: "c. à thé" };
 // Real flyer items (Flipp) -> specials. Sizes are read from the name; the AI (no web search) only fills the missing ones.
+// Formats already read by the AI are kept (same article = same format), so the AI is asked only once per article
+let SIZES = {};
+try { SIZES = JSON.parse(localStorage.getItem("panierfute.sizes") || "{}"); } catch (e) {}
+const saveSizes = () => { try { const k = Object.keys(SIZES); if (k.length > 3000) for (const x of k.slice(0, k.length - 3000)) delete SIZES[x]; localStorage.setItem("panierfute.sizes", JSON.stringify(SIZES)); } catch (e) {} };
 async function rawToSpec(raw, debut, fin, source, useAI) {
-  let { unknown } = Flipp.toItems(raw, ING);
-  const sizes = {};
+  raw = raw.filter((r) => Flipp.matches(r.ing, r.name)); // today's filters, even on older robot files
+  const sizes = SIZES;
+  let { unknown } = Flipp.toItems(raw, ING, { sizes });
   if (useAI && unknown.length && aiOn()) {
-    for (let i = 0; i < unknown.length && i < 320; i += 80) {
-      const part = unknown.slice(i, i + 80);
+    for (let i = 0; i < unknown.length && i < 320; i += 60) {
+      const part = unknown.slice(i, i + 60);
       const lines = part.map((r, k) => `${k}|${ING[r.ing].n} [${UNIT_TXT[ING[r.ing].u]}]|${r.mag}|${r.name}|${r.pre} ${r.prix} $ ${r.post}`.replace(/\s+/g, " ")).join("\n");
       const prompt = `Articles de circulaires d'épicerie du Québec (n°|ingrédient visé [unité]|magasin|nom dans la circulaire|prix).
 Pour chacun, dis ce que le prix achète : "qte" et "unite" (lb, kg, g, ml, L ou u).
@@ -2961,6 +2979,7 @@ Réponds UNIQUEMENT par un tableau JSON : [{"n":0,"qte":2,"unite":"L"}]`;
         }
       } catch (e) { break; }
     }
+    saveSizes();
   }
   const items = Flipp.bestPerStore(Flipp.toItems(raw, ING, { sizes, guess: true }).items, L.unitPrice, ING);
   return { debut, fin, source, items };

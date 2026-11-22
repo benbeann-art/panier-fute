@@ -1290,19 +1290,61 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
         const key = id + "|" + (it.flyer_item_id || it.id);
         if (seen.has(key)) continue;
         seen.add(key);
-        out.push({ ing: id, mag, name: String(it.name || "").slice(0, 140), pre: it.pre_price_text || "", prix: Number(it.current_price),
+        out.push({ ing: id, mag, fid: it.flyer_item_id || it.id, name: String(it.name || "").slice(0, 140), pre: it.pre_price_text || "", prix: Number(it.current_price),
           post: it.post_price_text || "", orig: Number(it.original_price) || 0, story: String(it.sale_story || "").slice(0, 60),
           img: it.clean_image_url || "", du: day(it.valid_from), au: day(it.valid_to) });
       }
       if (opts.pause) await new Promise((res) => setTimeout(res, opts.pause));
     }
+    if (opts.details !== false) await addDetails(out, opts);
     return out;
+  }
+
+  // Fruits and vegetables: the search result often hides "the pound, when you buy a 4 lb bag: 3,96 $ the bag".
+  // That text is in the item's own page: read it for these items and fix the price and size.
+  const PRODUCE = new Set(["pomme", "poire", "orange", "clementine", "citron", "lime", "banane", "raisins", "bleuets", "fraises", "concombre", "poivron", "tomate", "tomate_cerise",
+    "carotte", "patate", "patate_douce", "oignon", "celeri", "brocoli", "chou_fleur", "chou", "courgette", "champignons", "avocat", "laitue", "poireau", "navet", "ananas", "courge", "aubergine", "pois_mange_tout"]);
+  const DETAIL = new Map();
+  async function detailOf(id, fetchFn) {
+    if (DETAIL.has(id)) return DETAIL.get(id);
+    const f = fetchFn || fetch;
+    let d = "";
+    try { const r = await f("https://backflipp.wishabi.com/flipp/items/" + id); if (r.ok) { const j = await r.json(); const it = j.item || j; d = String(it.description || "") + " " + String(it.post_price_text || ""); } } catch (e) {}
+    DETAIL.set(id, d);
+    return d;
+  }
+  const addSize = (x, t) => { const h = x.name.split(" | ")[0]; if (h === h.toUpperCase()) t = t.toUpperCase(); x.name = /\s\|\s/.test(x.name) ? x.name.replace(/\s\|\s/, " " + t + " | ") : x.name + " " + t; };
+  function applyDetail(x, desc) {
+    const d = String(desc || "").toLowerCase().replace(/\s+/g, " ");
+    if (!d.trim()) return x;
+    const bag = d.match(/(\d+[.,]\d{2})\s*\$\s*(?:le|la|par)\s*(sac|filet|caisse|boite|boîte|paquet|emballage|contenant|barquette)\s*(?:de\s*)?(\d+(?:[.,]\d+)?)\s*(lb|kg|g)\b/);
+    if (bag) { x.prix = NUM(bag[1]); addSize(x, `${bag[2]} de ${bag[3]} ${bag[4]}`); x.post = ""; return x; }
+    const size = d.match(/(sac|filet|caisse|boite|boîte|paquet|emballage|contenant|barquette)\s*(?:de\s*)?(\d+(?:[.,]\d+)?)\s*(lb|kg|g)\b/);
+    const perLb = /la livre|le lb|la lb|\/\s*lb|par livre/.test(d);
+    const perKg = /\/\s*kg|le kg|par kg/.test(d);
+    if (perLb && size && /l'achat|achat d/.test(d)) {
+      // per-pound price, sold only in a bag: the bag price is what you pay
+      const lb = size[3] === "kg" ? NUM(size[2]) * 2.2046 : size[3] === "g" ? NUM(size[2]) / 453.6 : NUM(size[2]);
+      x.prix = Math.round(x.prix * lb * 100) / 100; addSize(x, `${size[1]} de ${size[2]} ${size[3]}`); x.post = ""; return x;
+    }
+    if (perLb && !x.post) { x.post = "/lb"; return x; }
+    if (perKg && !x.post) { x.post = "/kg"; return x; }
+    if (size && !/\d\s*(lb|kg|g)\b/.test(x.name.toLowerCase())) addSize(x, `${size[1]} de ${size[2]} ${size[3]}`);
+    return x;
+  }
+  async function addDetails(out, opts) {
+    const todo = out.filter((x) => PRODUCE.has(x.ing) && !x.post && !/\d\s*(lb|kg|g|un\.?)\b/i.test(x.name) && x.fid).slice(0, opts.maxDetails || 80);
+    let i = 0;
+    const worker = async () => { while (i < todo.length) { const x = todo[i++]; applyDetail(x, await detailOf(x.fid, opts.fetch)); } };
+    await Promise.all([worker(), worker(), worker(), worker()]);
   }
 
   // Price -> what it buys, without AI. Returns {qte, unite} or null when the size is unknown.
   // usual count in one package, for "unit" ingredients sold in packs (used only when the AI can't tell)
   const PACK = { clementine: 12, poire: 6, orange: 8, oeufs: 12, pain_tranche: 20, kaiser: 6, bagel: 6, tortilla: 10, pita: 6, croissant: 6, ciabatta: 4, pain_sousmarin: 6, fromage_tranche: 16, ail: 10 };
   const NUM = (s) => Number(String(s).replace(",", "."));
+  // about how many per pound, for fruits and vegetables counted by the unit
+  const EACH_LB = { orange: 2, pomme: 3, poire: 2.5, clementine: 5, citron: 4, lime: 7, concombre: 1.5, poivron: 2.5, oignon: 3, tomate: 3, avocat: 2.5, courgette: 2, aubergine: 1, brocoli: 1.5, chou_fleur: 0.5, laitue: 1, poireau: 2.5 };
   function sizeOf(r, ingU) {
     const post = norm(r.post), nm = norm(r.name);
     const pm = String(r.pre || "").match(/^\s*(\d+)\s*(?:\/|pour\b)/i);
@@ -1323,6 +1365,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
       m = raw.match(/(?:paq(?:uet)?\.?\s*de|pqt\s*de|sac\s*de|boite\s*de|caisse\s*de|emballage\s*de)\s*(\d+)(?!\s*(?:g|kg|ml|l|lb)\b)/) || raw.match(/\b(\d+)\s*(?:un\b|unités?\b|unites?\b|pains\b|bagels\b|tortillas\b|croissants\b|pitas\b|oeufs\b|œufs\b)/);
       if (m) return { qte: Number(m[1]) * mult, unite: "u" };
       if (/(^| )(ch|chacun|chacune|unite|l unite|un)( |$)/.test(post)) return { qte: 1 * mult, unite: "u" };
+      if (q && EACH_LB[r.ing] && ["lb", "kg", "g"].includes(q.unite)) return q.unite === "g" ? { qte: q.qte / 453.6, unite: "lb" } : q; // bag sold by weight
       return null; // count not written (bag, pack, by weight): the AI reads it
 
     }
@@ -1339,6 +1382,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
       let s = sizeOf(r, ing.u) || (fix && fix.qte ? fix : null);
       if (!s && opts.guess && ing.u === "u" && PACK[r.ing] && !sizeOf(r, "g")) s = { qte: PACK[r.ing], unite: "u" };
       if (!s) { unknown.push(r); continue; }
+      if (ing.u === "u" && (s.unite === "lb" || s.unite === "kg") && EACH_LB[r.ing]) s = { qte: Math.max(1, Math.round(s.qte * (s.unite === "kg" ? 2.2046 : 1) * EACH_LB[r.ing])), unite: "u" };
       if (ing.u === "u" && s.unite !== "u") { unknown.push(r); continue; }
       if (ing.u === "g" && !["lb", "kg", "g"].includes(s.unite)) { unknown.push(r); continue; }
       if (ing.u === "ml" && !["L", "ml"].includes(s.unite)) { unknown.push(r); continue; }
@@ -1364,7 +1408,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
     return Object.values(best).map((b) => b.x);
   }
 
-  const api = { STORES, REGIONS, distKm, nearestRegion, TERMS: T, norm, matches, search, collect, sizeOf, toItems, pretty, bestPerStore, LB };
+  const api = { STORES, REGIONS, distKm, nearestRegion, TERMS: T, norm, matches, search, collect, sizeOf, toItems, pretty, bestPerStore, LB, applyDetail };
   if (typeof module === "object" && module.exports) module.exports = api;
   root.Flipp = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

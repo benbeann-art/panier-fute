@@ -1680,7 +1680,11 @@ function cleanIA(x) {
   for (const l of i) if (ING[l[0]].u === "g" && l[1] < 10 && !/gingembre|ail|piment|safran/.test(l[0])) l[1] = Math.round(l[1] * 8);
   // an ingredient named in the steps but missing from the list (leeks to slice, but no leeks to buy): add it with a usual quantity
   let txt = x.s.join(" ");
-  for (const [k] of i) txt = txt.replace(new RegExp(aiKeyRe(ING[k].n.split(" (")[0].split(" / ")[0]).source, "giu"), " "); // "tomates cerises" is not "tomates"
+  // "tomates cerises", "tomates en dés" or just "tomates" when cherry tomatoes are listed: not fresh tomatoes to add
+  for (const [k] of i) {
+    const w = ING[k].n.split(" (")[0].split(" / ")[0].split(/\s+/);
+    for (let n = w.length; n >= 1; n--) if (!AI_STOPW.has(w[n - 1].toLowerCase())) txt = txt.replace(new RegExp(aiKeyRe(w.slice(0, n).join(" ")).source, "giu"), " ");
+  }
   for (const id of Object.keys(ING)) {
     if (i.some((l) => l[0] === id) || !ING[id].n) continue;
     if (aiKeyRe(ING[id].n.split(" (")[0].split(" / ")[0]).test(txt)) { const q = usualQty(id); if (q > 0) i.push([id, q]); }

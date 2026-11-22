@@ -2489,7 +2489,10 @@ function rRec() {
     <details class="card" id="impBox" ${impOpen ? "open" : ""} style="margin-bottom:12px"><summary>Importer une recette (Ricardo, un livre, ta mère…)</summary>
       <p class="small">Copie le texte d'une recette que tu aimes (ingrédients et étapes) et colle-le ici. ${aiOn() ? "L'IA la met au format de l'app : portions ajustables, liste d'épicerie, minuteries et spéciaux. Elle reste dans tes recettes, pour toi." : "Il faut une clé d'IA dans Réglages pour importer."}</p>
       <label class="f" for="impSrc">D'où vient-elle ? (optionnel)</label><input id="impSrc" placeholder="Ex. : Ricardo, livre de grand-maman" value="${esc(impSrc)}">
-      <label class="f" for="impText">Texte de la recette</label><textarea id="impText" rows="7" placeholder="Colle ici le nom, les ingrédients et les étapes">${esc(impText)}</textarea>
+      <div class="row" style="margin-top:8px"><label class="btn sm" for="impPhoto">📷 Photo de la recette (livre, fiche)</label><input type="file" id="impPhoto" accept="image/*" multiple hidden>
+        <label class="btn sm" for="impDish">🍲 Photo du plat (optionnel)</label><input type="file" id="impDish" accept="image/*" hidden></div>
+      <p class="small mute" id="impFiles">${impFiles.length ? `${impFiles.length} photo${impFiles.length > 1 ? "s" : ""} de recette choisie${impFiles.length > 1 ? "s" : ""}` : ""}${impDish ? (impFiles.length ? " · " : "") + "photo du plat choisie" : ""}</p>
+      <label class="f" for="impText">Texte de la recette (ou seulement la photo)</label><textarea id="impText" rows="7" placeholder="Colle ici le nom, les ingrédients et les étapes">${esc(impText)}</textarea>
       ${aiOn() ? `<button class="btn red sm" id="impGo" ${impBusy ? "disabled" : ""}>${impBusy ? "Importation…" : "Importer la recette"}</button>` : ""} <span class="small mute" id="impMsg">${esc(impMsg)}</span>
     </details>
     <div class="seg" role="group" aria-label="Quelles recettes">${(S.sel.length ? [["sel", `Avec mes choix (${S.sel.length})`]] : []).concat([["spec", "Avec les spéciaux"]]).concat([["ia", `Nouvelles IA (${REC.filter((r) => r.ia).length})`], ["mes", `Mes recettes (${S.mes.length})`], ["aime", "J'aime"], ["all", `Toutes (${REC.length})`]]).map(([k, t]) => `<button data-rf="${k}" aria-pressed="${S.rf === k}">${t}</button>`).join("")}</div>
@@ -2508,18 +2511,16 @@ function rRec() {
 const fmtTime = (m) => (m >= 60 ? Math.floor(m / 60) + " h" + (m % 60 ? " " + (m % 60) : "") : m + " min");
 
 // ---------- Import a recipe the user pasted (for personal use) ----------
-let impOpen = false, impBusy = false, impText = "", impSrc = "", impMsg = "";
+let impOpen = false, impBusy = false, impText = "", impSrc = "", impMsg = "", impFiles = [], impDish = null;
 async function importRecipe() {
   const box = $("#impText"), src = $("#impSrc");
   impText = box ? box.value : impText; impSrc = src ? src.value : impSrc; impOpen = true;
   const text = String(impText || "").trim();
-  if (text.length < 60) { impMsg = "Colle le texte complet de la recette (ingrédients et étapes)."; return rRec(); }
+  if (text.length < 60 && !impFiles.length) { impMsg = "Colle le texte de la recette ou choisis une photo de la recette."; return rRec(); }
   if (impBusy) return;
   impBusy = true; impMsg = "L'IA lit ta recette…"; rRec();
-  const prompt = `Voici le texte d'une recette que l'utilisateur veut garder dans son application d'épicerie pour son usage personnel.
----
-${text.slice(0, 12000)}
----
+  const prompt = `Voici ${impFiles.length ? (impFiles.length > 1 ? "des photos" : "une photo") + " d'une recette (lis tout le texte de la recette sur l'image)" + (text ? " et des notes" : "") : "le texte d'une recette"} que l'utilisateur veut garder dans son application d'épicerie pour son usage personnel.
+${text ? "---\n" + text.slice(0, 12000) + "\n---" : ""}
 Mets cette recette au format de l'application, pour 12 portions : trouve pour combien de portions est le texte et multiplie TOUTES les quantités en conséquence (s'il n'est pas indiqué, suppose 4 portions).
 Chaque ingrédient doit utiliser un identifiant de cette liste (id = nom [unité] ; g = grammes, ml = millilitres, u = unités, cs = c. à soupe, ct = c. à thé). Convertis les tasses et les livres dans l'unité de la liste. Si un ingrédient n'a pas d'équivalent, prends le plus proche ; s'il n'y en a vraiment aucun, laisse-le de côté et nomme-le dans "manque".
 ${ingCatalog()}
@@ -2527,14 +2528,15 @@ ${ingCatalog()}
 Réponds UNIQUEMENT par cet objet JSON :
 {"n":"Nom","c":"${CATS.join('"|"')}","o":"Québécois|Italien|Français|Américain|Mexicain|Asiatique|Monde","l":"micro"|"thermos"|"froid","p":"id de l'ingrédient principal","t":minutes,"i":[["id",quantité],...],"s":["étape",...],"manque":["ingrédient sans équivalent",...]}`;
   try {
-    const j = AI.extractJSON(await askAI(prompt, { maxTokens: 8000 }), "object");
+    const j = AI.extractJSON(await askAI(prompt, { maxTokens: 8000, images: impFiles.slice(0, 4) }), "object");
     const day = today();
     const r = cleanIA(Object.assign({}, j || {}, { id: "ia-imp-" + day.replace(/-/g, "") + "-" + Date.now().toString(36), cree: day, imp: 1, src: impSrc.trim() || "Importée",
       why: j && Array.isArray(j.manque) && j.manque.length ? "Pas dans le catalogue de l'app (à acheter à part) : " + j.manque.slice(0, 8).join(", ") : "" }));
     if (!r) throw new Error("je n'ai pas réussi à lire les ingrédients et les étapes");
     S.ia = (S.ia || []).concat(r); addIA([r]);
     if (!S.mes.includes(r.id)) S.mes.unshift(r.id);
-    save(); impText = ""; impMsg = `✓ « ${r.n} » ajoutée à Mes recettes.`;
+    if (impDish) { try { await Photos.put(r.id, impDish); MYPH[r.id] = 1; saveMyPh(); } catch (e) {} }
+    save(); impText = ""; impFiles = []; impDish = null; impMsg = `✓ « ${r.n} » ajoutée à Mes recettes.`;
     impBusy = false; rRec(); openRec(r.id);
   } catch (e) { impBusy = false; impMsg = "Ça n'a pas marché : " + (e.message || "erreur") + "."; rRec(); }
 }
@@ -3542,6 +3544,8 @@ document.addEventListener("change", (e) => {
   if (t.id === "aiPhotoBy") { AIS.photoBy = t.value; saveAI(); return; }
   if (t.id === "aiMaj") { AIS.autoMaj = t.checked; saveAI(); return; }
   if (t.id === "myPhoto" && t.files && t.files[0]) return setMyPhoto(S.open, t.files[0]);
+  if (t.id === "impPhoto") { impFiles = [...(t.files || [])].filter((f) => /^image\//.test(f.type)).slice(0, 4); impOpen = true; return rRec(); }
+  if (t.id === "impDish") { impDish = t.files && t.files[0] && /^image\//.test(t.files[0].type) ? t.files[0] : null; impOpen = true; return rRec(); }
   if (t.id === "rPostal") { const v = t.value.replace(/\s/g, "").toUpperCase(); if (/^[A-Z]\d[A-Z]\d[A-Z]\d$/.test(v)) { S.reg.postal = v; S.majTry = ""; save(); toast("Code postal enregistré"); } else toast("Code postal invalide (ex. H2X 1Y4)"); return; }
   if (t.id === "rHome") S.reg.home = t.value;
   else if (t.id === "rPen") S.reg.pen = Math.max(0, Number(t.value) || 0);

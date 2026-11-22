@@ -3600,15 +3600,30 @@ const TKEY = "panierfute.timers";
 let TIMERS = [];
 try { TIMERS = JSON.parse(localStorage.getItem(TKEY) || "[]").filter((t) => t.end > Date.now() - 6e5); } catch (e) {}
 const saveTimers = () => { try { localStorage.setItem(TKEY, JSON.stringify(TIMERS)); } catch (e) {} };
-// "8 à 10 min" -> 10 min, "1 h 30" -> 90 min, "20-25 min" -> 25 min, "2 h" -> 120 min
+// "8 à 10 min" -> 10 min, "1 h 30" / "1 heure 30 minutes" -> 90 min, "2 heures" -> 120 min, "1½ heure" / "1,5 heure" -> 90 min,
+// "une heure" -> 60 min, "une demi-heure" -> 30 min, "trois quarts d'heure" -> 45 min, "2 à 2 h 30" -> 150 min
+const T_WORDS = { "quarante-cinq": 45, "vingt-cinq": 25, "soixante": 60, "cinquante": 50, "quarante": 40, "trente": 30, "vingt": 20, "quinze": 15,
+  "douze": 12, "dix": 10, "neuf": 9, "huit": 8, "sept": 7, "six": 6, "cinq": 5, "quatre": 4, "trois": 3, "deux": 2, "une": 1, "un": 1 };
+const T_H = "(?:heures?|hrs?|h)", T_M = "(?:minutes?|mins?|mn)", T_N = "(\\d+(?:\\.\\d+)?)";
+const T_RE = new RegExp(
+  `(?:${T_N}\\s*(?:${T_H}\\s*)?(?:à|-|–|ou)\\s*)?${T_N}\\s*${T_H}(?:\\s*(\\d{1,2})(?:\\s*${T_M})?)?(?![a-zà-ÿ])` +
+  `|(?:(\\d+)\\s*(?:${T_M}\\s*)?(?:à|-|–|ou)\\s*)?(\\d+)\\s*${T_M}(?![a-zà-ÿ])`, "gi");
 function stepTimes(t) {
-  const out = [], s = String(t);
-  const re = /(\d+)\s*h\s*(\d+)?(?!\w)|(\d+)(?:\s*(?:à|-|–)\s*(\d+))?\s*(?:min|minutes)\b/gi;
+  let s = " " + String(t).toLowerCase().replace(/[’`]/g, "'") + " ";
+  s = s.replace(/(\d),(\d)/g, "$1.$2")
+    .replace(/(\d)\s*½/g, "$1.5").replace(/(\d)\s*¼/g, "$1.25").replace(/(\d)\s*¾/g, "$1.75")
+    .replace(/½/g, "0.5").replace(/¼/g, "0.25").replace(/¾/g, "0.75")
+    .replace(/trois[ -]quarts? d'heure/g, "45 minutes").replace(/(?:une |1 )?demi-heure/g, "30 minutes").replace(/(?:un |1 )?quart d'heure/g, "15 minutes");
+  for (const [w, n] of Object.entries(T_WORDS))
+    s = s.replace(new RegExp(`(^|[^a-zà-ÿ-])${w}(?=\\s+(?:(?:à|ou)\\s+[a-zà-ÿ0-9-]+\\s+)?(?:heures?|minutes?)(?![a-zà-ÿ]))`, "g"), `$1${n}`);
+  s = s.replace(/(\d+(?:\.\d+)?)\s*heures? et demie/g, (m, n) => (+n + 0.5) + " heures");
+  const out = [];
   let m;
-  while ((m = re.exec(s))) {
+  T_RE.lastIndex = 0;
+  while ((m = T_RE.exec(s))) {
     let sec = 0;
-    if (m[1]) sec = Number(m[1]) * 3600 + (m[2] ? Number(m[2]) * 60 : 0);
-    else sec = Number(m[4] || m[3]) * 60;
+    if (m[2]) sec = Math.round(Number(m[2]) * 3600 + (m[3] ? Number(m[3]) * 60 : 0));
+    else sec = Math.round(Number(m[5]) * 60);
     if (sec >= 60 && sec <= 12 * 3600 && !out.includes(sec)) out.push(sec);
   }
   return out.slice(0, 3);
@@ -4260,7 +4275,7 @@ async function weeklyAuto() {
 }
 
 // ---------- AI: new recipes for our tastes, perfect scaling ----------
-const AI_STEP_RULE = `Dans les étapes, n'écris JAMAIS une quantité en chiffres : écris le jeton {=id} juste après le nom de l'ingrédient, la première fois qu'il est utilisé (ex. « Faire fondre le beurre {=beurre} et dorer les poireaux {=poireau} émincés »). L'application le remplace par la bonne quantité. Chaque ingrédient de "i" doit être utilisé dans une étape qui dit QUAND l'ajouter (ex. pour un ragoût : « Quand il reste 40 min, ajouter les carottes {=carotte} et le navet {=navet} en morceaux »), et tout ingrédient nommé dans les étapes doit être dans "i". Les quantités en g sont de vrais grammes (4 c. à soupe de farine = 32 g). Températures en °F seulement, jamais en °C. Températures internes de Santé Canada : volaille 165 °F (entière 180 °F), viande hachée 160 °F (volaille hachée 165 °F), porc 160 °F, bœuf en morceaux 145 °F mi-saignant, poisson 158 °F, crevettes 165 °F.`;
+const AI_STEP_RULE = `Dans les étapes, n'écris JAMAIS une quantité en chiffres : écris le jeton {=id} juste après le nom de l'ingrédient, la première fois qu'il est utilisé (ex. « Faire fondre le beurre {=beurre} et dorer les poireaux {=poireau} émincés »). L'application le remplace par la bonne quantité. Chaque ingrédient de "i" doit être utilisé dans une étape qui dit QUAND l'ajouter (ex. pour un ragoût : « Quand il reste 40 min, ajouter les carottes {=carotte} et le navet {=navet} en morceaux »), et tout ingrédient nommé dans les étapes doit être dans "i". Les quantités en g sont de vrais grammes (4 c. à soupe de farine = 32 g). Écris les durées en chiffres (ex. « 45 min », « 1 h 30 », « 2 h »). Températures en °F seulement, jamais en °C. Températures internes de Santé Canada : volaille 165 °F (entière 180 °F), viande hachée 160 °F (volaille hachée 165 °F), porc 160 °F, bœuf en morceaux 145 °F mi-saignant, poisson 158 °F, crevettes 165 °F.`;
 const ingCatalog = () => Object.entries(ING).map(([k, v]) => `${k} = ${v.n} [${v.u}]`).join("\n");
 const likedNames = (v) => REC.filter((r) => S.aime[r.id] === v).map((r) => r.n).slice(0, 40);
 // Ask the AI for a specific dish: it proposes 3 recipes; the one you keep stays in the app (and syncs)

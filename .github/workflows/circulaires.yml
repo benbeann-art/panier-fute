@@ -9,7 +9,7 @@ on:
     inputs:
       backfill:
         description: "Combien de semaines passées aller chercher (Noovo Moi)"
-        default: "52"
+        default: "4"
       force:
         description: "Refaire la semaine même si elle est déjà faite (oui/non)"
         default: "non"
@@ -24,19 +24,29 @@ concurrency:
 jobs:
   robot:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - name: Lire les circulaires
-        run: node robot/circulaires.mjs --backfill=${{ github.event.inputs.backfill || '4' }} ${{ github.event.inputs.force == 'oui' && '--force' || '' }}
-      - name: Enregistrer
+      - name: Outils (lecture des PDF)
+        run: npm install --no-save --no-package-lock pdf-parse@1.1.1
+      - name: Reprendre les données des semaines passées
         run: |
-          git config user.name "panier-fute-robot"
-          git config user.email "robot@users.noreply.github.com"
-          git add data
-          if git diff --cached --quiet; then echo "Rien de nouveau"; exit 0; fi
-          git commit -m "Circulaires $(date -u +%Y-%m-%d)"
-          git push
+          mkdir -p ../d
+          if git fetch -q origin data; then git archive origin/data | tar -x -C ../d; fi
+          # first run: keep what is already on main
+          if [ ! -d ../d/data ] && [ -d data ]; then cp -r data ../d/; fi
+      - name: Lire les circulaires
+        run: node robot/circulaires.mjs --out=../d --backfill=${{ github.event.inputs.backfill || '2' }} ${{ github.event.inputs.force == 'oui' && '--force' || '' }}
+      - name: Enregistrer (branche data, refaite chaque fois pour rester petite)
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd ../d
+          git init -q
+          git checkout -q -b data
+          git add -A
+          git -c user.name="panier-fute-robot" -c user.email="robot@users.noreply.github.com" commit -qm "Circulaires $(date -u +%Y-%m-%d)"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" data

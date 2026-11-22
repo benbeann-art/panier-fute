@@ -452,13 +452,58 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
     return Object.values(tot).map((t) => ({ ...t, buy: ING[t.id].u === "u" ? Math.ceil(t.q) : t.q }));
   }
 
+  // Usual package size in recipe units (g, ml, units, spoons). 0 = sold by weight (meat, loose vegetables): pay what you take.
+  // At the store you pay the whole package: 200 ml needed in a 500 ml jar costs the 500 ml jar.
+  const PACK = {
+    jambon: 175, bacon: 375, dinde_tranchee: 175, boeuf_hache: 454, porc_hache: 454, dinde_hachee: 450, saucisses: 375, crevettes: 340,
+    oeufs: 12, ail: 10, carotte: 907, celeri: 600, patate: 2268, champignons: 227, epinards: 142, tomate_cerise: 340, feves_germees: 227, pois_mange_tout: 227,
+    mais: 750, petits_pois: 750, legumes_mel: 750, edamame: 500, kale: 312, bleuets: 310, fraises: 454,
+    lait: 2000, creme: 473, beurre: 454, mozzarella: 320, cheddar: 400, parmesan: 250, fromage_creme: 250, creme_sure: 500, fromage_tranche: 24, yogourt: 750,
+    feta: 200, ricotta: 475, gruyere: 320, fromage_grains: 300,
+    pain_tranche: 20, kaiser: 6, tortilla: 10, pita: 6, croissant: 6, ciabatta: 4, bagel: 6, pain_sousmarin: 6, pain_burger: 8, pate_pizza: 500,
+    riz: 2000, riz_basmati: 2000, pates: 900, spaghetti: 900, macaroni: 900, lasagne: 500, nouilles_oeufs: 350, nouilles_riz: 454, nouilles_lomein: 454,
+    couscous: 500, quinoa: 900, orge: 900, chapelure: 425, farine: 2500, farine_ble: 2500, olives: 200, gnocchi: 500, riz_arborio: 1000, semoule_mais: 1000,
+    avoine: 1000, dattes: 400, raisins_secs: 500, graines_tournesol: 300, graines_citrouille: 300, mais_eclater: 1000, beurre_tournesol: 500, graines_lin: 400,
+    pois_jaunes: 900, feves_seches: 900,
+    sauce_tomate: 680, bouillon_poulet: 900, bouillon_boeuf: 900, salsa: 650, pesto: 270, sauce_bbq: 455, sauce_teriyaki: 350, sauce_hoisin: 400,
+    vinaigrette_cesar: 475, vin_rouge: 750, vin_blanc: 750, biere: 473, sirop_erable: 540,
+    huile: 67, huile_olive: 34, sauce_soya: 40, vinaigre: 67, moutarde: 17, mayo: 59, ketchup: 67, miel: 23, cassonade: 80, sucre: 160, fecule: 56,
+    sriracha: 32, worcestershire: 19, huile_sesame: 14, melasse: 33,
+    sel: 166, poivre: 40, vanille: 9, bicarbonate: 100, poudre_pate: 50, laurier: 50,
+  };
+  const BY_WEIGHT = /^(poulet_|boeuf_(cubes|bifteck|roti)|porc_(filet|epaule|cotelettes)|cotes_levees|lard_sale|saumon|truite|tilapia|patate_douce|chou$|gingembre|navet|panais|courge|haricots_verts|banane|raisins$)/;
+  function packOf(id, ING) {
+    if (PACK[id] != null) return PACK[id];
+    const g = ING[id]; if (!g || BY_WEIGHT.test(id)) return 0;
+    if (g.u === "ct") return 20; // spice jar
+    if (g.u === "u") return 1;
+    return 0;
+  }
+  // packages to buy and their cost; perUnit = price of one recipe unit
+  function packCost(id, qty, perUnit, ING, pack) {
+    pack = pack != null ? pack : packOf(id, ING);
+    if (!(qty > 0)) return { cost: 0, packs: 0, size: pack };
+    if (!pack) return { cost: perUnit * qty, packs: 0, size: 0 };
+    const packs = Math.max(1, Math.ceil(qty / pack - 0.03));
+    return { cost: perUnit * pack * packs, packs, size: pack };
+  }
+  // a flyer special: its own format when it is a package (not a price per lb / kg)
+  function specPack(sp, ING) {
+    if (!sp || !(sp.pu > 0)) return null;
+    if ((sp.unite === "lb" || sp.unite === "kg") && !(sp.qte > 1)) return 0;
+    const size = sp.prix / sp.pu;
+    return size > 0 ? size : null;
+  }
+
   // Choose which store(s) to visit. Another stop must save at least `penalty` $ or we stay in fewer stores.
   function chooseStores(list, ING, idx, stores, home, penalty, maxStores) {
-    const price = (it, s) => {
+    const buyAt = (it, s) => {
       const sp = (idx[it.id] || []).find((x) => x.mag === s);
-      const r = regAt(it.id, s, ING);
-      return (sp ? Math.min(sp.pu, r) : r) * it.buy;
+      const reg = packCost(it.id, it.buy, regAt(it.id, s, ING), ING);
+      if (sp) { const sz = specPack(sp, ING), c = packCost(it.id, it.buy, sp.pu, ING, sz == null ? undefined : sz); if (c.cost < reg.cost) return Object.assign(c, { sp }); }
+      return Object.assign(reg, { sp: null });
     };
+    const price = (it, s) => buyAt(it, s).cost;
     const cand = stores.slice();
     const subsets = [];
     const rec = (start, cur) => {
@@ -482,11 +527,11 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
     const assign = {};
     let regular = 0;
     for (const it of list) {
-      regular += Math.min(...stores.map((s) => regAt(it.id, s, ING))) * it.buy;
-      let bs = mainStore, bp = price(it, mainStore);
-      for (const s of order) { const p = price(it, s); if (p < bp - 0.005) { bs = s; bp = p; } }
+      regular += packCost(it.id, it.buy, Math.min(...stores.map((s) => regAt(it.id, s, ING))), ING).cost;
+      let bs = mainStore, bb = buyAt(it, mainStore);
+      for (const s of order) { const b2 = buyAt(it, s); if (b2.cost < bb.cost - 0.005) { bs = s; bb = b2; } }
       const sp = (idx[it.id] || []).find((x) => x.mag === bs) || null;
-      assign[it.id] = { mag: bs, cost: bp, sp };
+      assign[it.id] = { mag: bs, cost: bb.cost, sp, packs: bb.packs, size: bb.size };
     }
     const used = order.filter((s) => Object.values(assign).some((a) => a.mag === s));
     return { stores: used.length ? used : [mainStore], assign, cost: best.cost, regular };
@@ -524,7 +569,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
     return pre + FR(sp.prix) + " $" + u;
   }
 
-  root.Logic = { setRegs, setHistory, histInfo, STORES, DAYS, unitPrice, cote, indexSpecials, scoreRecipe, planWeek, scaleRecipe, portions, autoPick, buildList, chooseStores, fmtQty, fmtSpecial, FR };
+  root.Logic = { setRegs, setHistory, histInfo, STORES, DAYS, unitPrice, cote, indexSpecials, scoreRecipe, planWeek, scaleRecipe, portions, autoPick, buildList, chooseStores, fmtQty, fmtSpecial, FR, packOf, packCost };
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
@@ -2068,7 +2113,7 @@ function finishShopping() {
   const bought = list.filter((it) => S.coches[it.id]);
   if (!bought.length) return toast("Coche d'abord ce que tu as acheté");
   let total = 0, regular = 0;
-  for (const it of bought) { const a2 = ch.assign[it.id]; total += a2 ? a2.cost : 0; regular += ING[it.id].p * it.buy; }
+  for (const it of bought) { const a2 = ch.assign[it.id]; total += a2 ? a2.cost : 0; regular += L.packCost(it.id, it.buy, ING[it.id].p, ING).cost; }
   const mags = [...new Set(bought.map((it) => ch.assign[it.id] && ch.assign[it.id].mag).filter(Boolean))];
   logTrip({ date: today(), mags, total: Math.round(total * 100) / 100, saved: Math.round(Math.max(0, regular - total) * 100) / 100, src: "liste" });
   // what was bought goes to the home inventory, then the list is cleared for next time
@@ -2601,6 +2646,17 @@ function addBox() {
   </div>`;
 }
 
+// "· achète 1 pot de 500 ml": the package you pay for, when it differs from the amount the recipes use
+function packTxt(id, a) {
+  const g = ING[id]; if (!g || !a || !a.packs || !a.size) return "";
+  let f;
+  if (g.u === "cs" || g.u === "ct") { const ml = a.size * (g.u === "cs" ? 15 : 5); f = g.u === "ct" && a.size <= 50 && id !== "vanille" ? "pot" : id === "sel" ? "1 kg" : ml >= 950 ? L.FR(Math.round(ml / 100) / 10, 1).replace(/,0$/, "") + " L" : Math.round(ml / 10) * 10 + " ml"; }
+  else if (g.u === "u") { if (a.size <= 1) return ""; f = "paquet de " + Math.round(a.size); }
+  else f = L.fmtQty(g, a.size);
+  if (id === "ail") return ` · achète ${a.packs} tête${a.packs > 1 ? "s" : ""}`;
+  if (/^(pot|paquet)/.test(f)) return ` · achète ${a.packs} ${f.replace(/^(pot|paquet)/, (m) => m + (a.packs > 1 ? "s" : ""))}`;
+  return ` · achète ${a.packs} × ${f}`;
+}
 function rList() {
   if (!S.menu.length && !S.extras.length && !S.col.length) {
     $("#v-epicerie").innerHTML = `<h1>Liste d'épicerie</h1>${addBox()}<div id="sumHost" style="display:none"></div><div class="empty"><p>Choisis tes recettes et la liste se fait toute seule, ou ajoute tes articles ci-dessus.</p><button class="btn red" data-go="menu-auto">Faire mon menu</button></div>${summaryBox()}`;
@@ -2612,7 +2668,7 @@ function rList() {
     const ing = ING[it.id], a = ch.assign[it.id], done = !!S.coches[it.id];
     return `<button class="item ${done ? "done" : ""}" data-ck="${it.id}" aria-pressed="${done}">
       <span class="bx">${done ? "✓" : ""}</span>
-      <span><span class="nm">${esc(ing.n)}</span><span class="q">${L.fmtQty(ing, it.buy)}${it.partial ? ` (il en manque; tu en as déjà ${L.fmtQty(ing, it.partial)})` : ""}${done ? " · " + esc(a.mag) : ""}</span></span>
+      <span><span class="nm">${esc(ing.n)}</span><span class="q">${L.fmtQty(ing, it.buy)}${it.partial ? ` (il en manque; tu en as déjà ${L.fmtQty(ing, it.partial)})` : ""}${packTxt(it.id, a)}${done ? " · " + esc(a.mag) : ""}</span></span>
       <span class="p">${a.sp ? `<span class="tag mini ${a.sp.cote >= 8 ? "c-g" : a.sp.cote >= 5 ? "c-y" : "c-r"}">${a.sp.cote}</span> ` : ""}${a.cost >= 0.5 ? "≈ " + L.FR(a.cost) + " $" : ""}</span></button>`;
   };
   const todo = list.filter((it) => !S.coches[it.id]);
@@ -2633,11 +2689,11 @@ function rList() {
     <div class="sum"><div><span class="small mute">Où aller</span><b>${ch.stores.map(esc).join(" + ")}</b></div>
       <div><span class="small mute">Total de l'épicerie</span><b>${L.FR(ch.cost)} $</b></div>
       <div><span class="small mute">Sauvé grâce aux spéciaux</span><b style="color:var(--green)">${L.FR(Math.max(0, saved), 0)} $</b></div></div>
-    <p class="small mute">${why} Prix réguliers estimés (moyenne Montréal) ; sel, épices et huile comptés à la portion utilisée.</p>
+    <p class="small mute">${why} Prix réguliers estimés (moyenne Montréal). Le prix est celui du format complet que tu paies au magasin (il te faut 200 ml d'un pot de 500 ml : c'est le prix du 500 ml), taxes en plus.</p>
     ${checkItems.length ? `<div class="store"><h3 style="background:#b7791f"><span>À vérifier : tu en as à la maison</span><span class="small">${checkItems.length}</span></h3>
       <p class="small" style="margin:6px 2px">Ton inventaire dit que tu en as. Regarde si c'est assez pour la recette.</p>
       ${checkItems.map((it) => { const h = invHas(it.id), ing = ING[it.id], ix = rankCache ? rankCache.ix : {}, sp = (ix[it.id] || []).find((x) => S.reg.stores.includes(x.mag));
-        const price = (sp ? Math.min(sp.pu, ing.p) : ing.p) * it.buy;
+        const price = L.packCost(it.id, it.buy, sp ? Math.min(sp.pu, ing.p) : ing.p, ING).cost;
         return `<div class="vrow"><div><b>${esc(ing.n)}</b><span class="q">Il faut : ${L.fmtQty(ing, it.buy)}${h ? ` · tu as : ${esc(h.qte || "une quantité inconnue")} (${{ frigo: "frigo", congel: "congélateur", garde: "garde-manger" }[h.z]})` : ""}${price >= 0.5 ? ` · si tu l'achètes : ≈ ${L.FR(price)} $${sp ? " chez " + esc(sp.mag) : ""}` : ""}</span></div>
           <div class="row"><button class="btn sm" data-vf="${it.id}" data-v2="have">J'en ai assez</button><button class="btn sm red" data-vf="${it.id}" data-v2="buy">À acheter</button></div></div>`; }).join("")}</div>` : ""}
     ${todo.length ? byStore : checkItems.length ? "" : `<div class="empty" style="margin-top:14px"><b>Tout est coché.</b> Bonne cuisine !</div>`}

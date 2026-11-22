@@ -3,7 +3,28 @@
 (function (root) {
   "use strict";
   const API = "https://backflipp.wishabi.com/flipp/items/search";
-  const STORES = ["Maxi", "Super C", "IGA", "Metro", "Provigo", "Walmart", "Adonis"];
+  const STORES = ["Maxi", "Super C", "IGA", "Metro", "Provigo", "Walmart", "Adonis", "Marché Tradition", "Tigre Géant"];
+  // Quebec regions whose flyers the GitHub robot keeps every week (the app picks the nearest one)
+  const REGIONS = [
+    ["mtl", "Montréal", "H2X1Y4", 45.55, -73.65], ["laval", "Laval", "H7N1A1", 45.57, -73.75], ["longueuil", "Longueuil / Rive-Sud", "J4K1A1", 45.53, -73.47],
+    ["terrebonne", "Terrebonne", "J6W1A1", 45.70, -73.65], ["repentigny", "Repentigny", "J6A1A1", 45.75, -73.47], ["st-jerome", "Saint-Jérôme", "J7Z1A1", 45.78, -74.00],
+    ["blainville", "Blainville / Sainte-Thérèse", "J7E1A1", 45.64, -73.84], ["mirabel", "Mirabel", "J7J1A1", 45.68, -74.08], ["vaudreuil", "Vaudreuil", "J7V1A1", 45.40, -74.03],
+    ["chateauguay", "Châteauguay", "J6J1A1", 45.36, -73.75], ["st-jean", "Saint-Jean-sur-Richelieu", "J3B1A1", 45.31, -73.26], ["granby", "Granby", "J2G1A1", 45.40, -72.73],
+    ["st-hyacinthe", "Saint-Hyacinthe", "J2S1A1", 45.63, -72.96], ["drummondville", "Drummondville", "J2B1A1", 45.88, -72.48], ["st-liboire", "Saint-Liboire", "J0H1R0", 45.65, -72.76],
+    ["sorel", "Sorel-Tracy", "J3P1A1", 46.04, -73.11], ["joliette", "Joliette", "J6E1A1", 46.02, -73.44], ["salaberry", "Salaberry-de-Valleyfield", "J6T1A1", 45.25, -74.13],
+    ["sherbrooke", "Sherbrooke", "J1H1A1", 45.40, -71.89], ["magog", "Magog", "J1X1A1", 45.27, -72.15], ["cowansville", "Cowansville", "J2K1A1", 45.20, -72.75],
+    ["victoriaville", "Victoriaville", "G6P1A1", 46.05, -71.96], ["trois-rivieres", "Trois-Rivières", "G9A1A1", 46.35, -72.55], ["shawinigan", "Shawinigan", "G9N1A1", 46.57, -72.75],
+    ["quebec", "Québec", "G1R1A1", 46.81, -71.21], ["levis", "Lévis", "G6V1A1", 46.74, -71.25], ["st-georges", "Saint-Georges", "G5Y1A1", 46.12, -70.67],
+    ["thetford", "Thetford Mines", "G6G1A1", 46.09, -71.30], ["montmagny", "Montmagny", "G5V1A1", 46.98, -70.55], ["riviere-du-loup", "Rivière-du-Loup", "G5R1A1", 47.83, -69.53],
+    ["rimouski", "Rimouski", "G5L1A1", 48.45, -68.52], ["matane", "Matane", "G4W1A1", 48.85, -67.53], ["gaspe", "Gaspé", "G4X1A1", 48.83, -64.48],
+    ["saguenay", "Saguenay", "G7H1A1", 48.43, -71.07], ["alma", "Alma", "G8B1A1", 48.55, -71.65], ["baie-comeau", "Baie-Comeau", "G4Z1A1", 49.22, -68.15],
+    ["sept-iles", "Sept-Îles", "G4R1A1", 50.21, -66.38], ["gatineau", "Gatineau", "J8Y1A1", 45.48, -75.70], ["rouyn", "Rouyn-Noranda", "J9X1A1", 48.24, -79.02],
+    ["val-dor", "Val-d'Or", "J9P1A1", 48.10, -77.78], ["ste-adele", "Sainte-Adèle / Laurentides", "J8B1A1", 45.95, -74.13], ["mont-laurier", "Mont-Laurier", "J9L1A1", 46.55, -75.50],
+    ["lachute", "Lachute", "J8H1A1", 45.65, -74.33],
+  ].map(([id, name, postal, lat, lon]) => ({ id, name, postal, lat, lon }));
+  const distKm = (a, b) => { const R = 6371, t = Math.PI / 180, dLa = (b.lat - a.lat) * t, dLo = (b.lon - a.lon) * t; const h = Math.sin(dLa / 2) ** 2 + Math.cos(a.lat * t) * Math.cos(b.lat * t) * Math.sin(dLo / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };
+  const nearestRegion = (p, maxKm) => { let best = null, d = 1e9; for (const r of REGIONS) { const x = distKm(p, r); if (x < d) { d = x; best = r; } } return best && d <= (maxKm || 35) ? best : null; };
+  const ALIAS = { "les marches tradition": "Marché Tradition", "marches tradition": "Marché Tradition", "marche tradition": "Marché Tradition", "tigre geant": "Tigre Géant", "giant tiger": "Tigre Géant" };
   const LB = 453.592;
 
   // ingredient id -> [Flipp search, words needed, words refused]
@@ -162,7 +183,7 @@
     if (t[2].some((w) => has(all, at, w))) return false;
     return true;
   }
-  const storeOf = (m) => { m = norm(m); return STORES.find((s) => norm(s) === m) || null; };
+  const storeOf = (m) => { m = norm(m); return ALIAS[m] || STORES.find((s) => norm(s) === m) || null; };
   const day = (s) => String(s || "").slice(0, 10);
 
   async function search(q, postal, fetchFn) {
@@ -266,7 +287,7 @@
     return Object.values(best).map((b) => b.x);
   }
 
-  const api = { STORES, TERMS: T, norm, matches, search, collect, sizeOf, toItems, pretty, bestPerStore, LB };
+  const api = { STORES, REGIONS, distKm, nearestRegion, TERMS: T, norm, matches, search, collect, sizeOf, toItems, pretty, bestPerStore, LB };
   if (typeof module === "object" && module.exports) module.exports = api;
   root.Flipp = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

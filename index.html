@@ -284,7 +284,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
 ;</script><script>
 // Pure logic: prices, deal scores, store choice, weekly plan, grocery list. Shared by the page and the Node tests.
 (function (root) {
-  const STORES = ["Maxi", "Super C", "IGA", "Metro", "Provigo", "Walmart", "Adonis"];
+  const STORES = ["Maxi", "Super C", "IGA", "Metro", "Provigo", "Walmart", "Adonis", "Bonanza", "Marché Tradition", "Tigre Géant"];
   const DAYS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
   const LB = 453.6;
 
@@ -805,7 +805,8 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
   // ---- Claude (Anthropic Messages API) ----
   async function callClaude(cfg, prompt, opt) {
     const content = [];
-    for (const img of opt.images || []) content.push({ type: "image", source: { type: "base64", media_type: img.type || "image/jpeg", data: await blobToB64(img) } });
+    for (const img of opt.images || []) content.push(img.type === "application/pdf" ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: await blobToB64(img) } }
+      : { type: "image", source: { type: "base64", media_type: img.type || "image/jpeg", data: await blobToB64(img) } });
     content.push({ type: "text", text: prompt });
     const body = { model: cfg.model || PROVIDERS.claude.model, max_tokens: opt.maxTokens || 8000, messages: [{ role: "user", content }] };
     if (opt.web) body.tools = [{ type: "web_search_20250305", name: "web_search", max_uses: 8 }];
@@ -1039,7 +1040,9 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
   }
   function disconnect() { cfg = { token: "", gist: "", last: "" }; saveCfg(); }
 
-  root.Sync = { connect, pull, push, disconnect, on: () => !!(cfg.token && cfg.gist), last: () => cfg.last };
+  // used by the shared store list (public gist owned by the app's owner)
+  const api = (path, opt) => gh(path, opt);
+  root.Sync = { api, hasToken: () => !!cfg.token, connect, pull, push, disconnect, on: () => !!(cfg.token && cfg.gist), last: () => cfg.last };
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
@@ -1049,7 +1052,28 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
 (function (root) {
   "use strict";
   const API = "https://backflipp.wishabi.com/flipp/items/search";
-  const STORES = ["Maxi", "Super C", "IGA", "Metro", "Provigo", "Walmart", "Adonis"];
+  const STORES = ["Maxi", "Super C", "IGA", "Metro", "Provigo", "Walmart", "Adonis", "Marché Tradition", "Tigre Géant"];
+  // Quebec regions whose flyers the GitHub robot keeps every week (the app picks the nearest one)
+  const REGIONS = [
+    ["mtl", "Montréal", "H2X1Y4", 45.55, -73.65], ["laval", "Laval", "H7N1A1", 45.57, -73.75], ["longueuil", "Longueuil / Rive-Sud", "J4K1A1", 45.53, -73.47],
+    ["terrebonne", "Terrebonne", "J6W1A1", 45.70, -73.65], ["repentigny", "Repentigny", "J6A1A1", 45.75, -73.47], ["st-jerome", "Saint-Jérôme", "J7Z1A1", 45.78, -74.00],
+    ["blainville", "Blainville / Sainte-Thérèse", "J7E1A1", 45.64, -73.84], ["mirabel", "Mirabel", "J7J1A1", 45.68, -74.08], ["vaudreuil", "Vaudreuil", "J7V1A1", 45.40, -74.03],
+    ["chateauguay", "Châteauguay", "J6J1A1", 45.36, -73.75], ["st-jean", "Saint-Jean-sur-Richelieu", "J3B1A1", 45.31, -73.26], ["granby", "Granby", "J2G1A1", 45.40, -72.73],
+    ["st-hyacinthe", "Saint-Hyacinthe", "J2S1A1", 45.63, -72.96], ["drummondville", "Drummondville", "J2B1A1", 45.88, -72.48], ["st-liboire", "Saint-Liboire", "J0H1R0", 45.65, -72.76],
+    ["sorel", "Sorel-Tracy", "J3P1A1", 46.04, -73.11], ["joliette", "Joliette", "J6E1A1", 46.02, -73.44], ["salaberry", "Salaberry-de-Valleyfield", "J6T1A1", 45.25, -74.13],
+    ["sherbrooke", "Sherbrooke", "J1H1A1", 45.40, -71.89], ["magog", "Magog", "J1X1A1", 45.27, -72.15], ["cowansville", "Cowansville", "J2K1A1", 45.20, -72.75],
+    ["victoriaville", "Victoriaville", "G6P1A1", 46.05, -71.96], ["trois-rivieres", "Trois-Rivières", "G9A1A1", 46.35, -72.55], ["shawinigan", "Shawinigan", "G9N1A1", 46.57, -72.75],
+    ["quebec", "Québec", "G1R1A1", 46.81, -71.21], ["levis", "Lévis", "G6V1A1", 46.74, -71.25], ["st-georges", "Saint-Georges", "G5Y1A1", 46.12, -70.67],
+    ["thetford", "Thetford Mines", "G6G1A1", 46.09, -71.30], ["montmagny", "Montmagny", "G5V1A1", 46.98, -70.55], ["riviere-du-loup", "Rivière-du-Loup", "G5R1A1", 47.83, -69.53],
+    ["rimouski", "Rimouski", "G5L1A1", 48.45, -68.52], ["matane", "Matane", "G4W1A1", 48.85, -67.53], ["gaspe", "Gaspé", "G4X1A1", 48.83, -64.48],
+    ["saguenay", "Saguenay", "G7H1A1", 48.43, -71.07], ["alma", "Alma", "G8B1A1", 48.55, -71.65], ["baie-comeau", "Baie-Comeau", "G4Z1A1", 49.22, -68.15],
+    ["sept-iles", "Sept-Îles", "G4R1A1", 50.21, -66.38], ["gatineau", "Gatineau", "J8Y1A1", 45.48, -75.70], ["rouyn", "Rouyn-Noranda", "J9X1A1", 48.24, -79.02],
+    ["val-dor", "Val-d'Or", "J9P1A1", 48.10, -77.78], ["ste-adele", "Sainte-Adèle / Laurentides", "J8B1A1", 45.95, -74.13], ["mont-laurier", "Mont-Laurier", "J9L1A1", 46.55, -75.50],
+    ["lachute", "Lachute", "J8H1A1", 45.65, -74.33],
+  ].map(([id, name, postal, lat, lon]) => ({ id, name, postal, lat, lon }));
+  const distKm = (a, b) => { const R = 6371, t = Math.PI / 180, dLa = (b.lat - a.lat) * t, dLo = (b.lon - a.lon) * t; const h = Math.sin(dLa / 2) ** 2 + Math.cos(a.lat * t) * Math.cos(b.lat * t) * Math.sin(dLo / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };
+  const nearestRegion = (p, maxKm) => { let best = null, d = 1e9; for (const r of REGIONS) { const x = distKm(p, r); if (x < d) { d = x; best = r; } } return best && d <= (maxKm || 35) ? best : null; };
+  const ALIAS = { "les marches tradition": "Marché Tradition", "marches tradition": "Marché Tradition", "marche tradition": "Marché Tradition", "tigre geant": "Tigre Géant", "giant tiger": "Tigre Géant" };
   const LB = 453.592;
 
   // ingredient id -> [Flipp search, words needed, words refused]
@@ -1208,7 +1232,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
     if (t[2].some((w) => has(all, at, w))) return false;
     return true;
   }
-  const storeOf = (m) => { m = norm(m); return STORES.find((s) => norm(s) === m) || null; };
+  const storeOf = (m) => { m = norm(m); return ALIAS[m] || STORES.find((s) => norm(s) === m) || null; };
   const day = (s) => String(s || "").slice(0, 10);
 
   async function search(q, postal, fetchFn) {
@@ -1312,7 +1336,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
     return Object.values(best).map((b) => b.x);
   }
 
-  const api = { STORES, TERMS: T, norm, matches, search, collect, sizeOf, toItems, pretty, bestPerStore, LB };
+  const api = { STORES, REGIONS, distKm, nearestRegion, TERMS: T, norm, matches, search, collect, sizeOf, toItems, pretty, bestPerStore, LB };
   if (typeof module === "object" && module.exports) module.exports = api;
   root.Flipp = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);
@@ -1435,6 +1459,8 @@ const fresh = () => ({ t: 0, view: "speciaux", menu: [], mes: [], coches: {}, ex
   reg: { postal: "H2X1Y4", stores: L.STORES.slice(), home: "Maxi", pen: 15, max: 2, debut: 0, pers: 4, jours: 3, rpj: 1, budget: 0, ban: [] } });
 let S = fresh();
 try { const j = JSON.parse(localStorage.getItem(KEY) || "null"); if (j) S = Object.assign(fresh(), j, { reg: Object.assign(fresh().reg, j.reg || {}) }); } catch (e) {}
+try { const c = JSON.parse(localStorage.getItem("panierfute.registry") || "{}"); for (const x of (c.list || []).concat(S.myStores || [])) if (x && x.name && !L.STORES.includes(x.name)) L.STORES.push(x.name); } catch (e) {}
+if (!S.bonanzaAdded) { if (!S.reg.stores.includes("Bonanza")) S.reg.stores.push("Bonanza"); S.bonanzaAdded = 1; } // v3.7: Marché Bonanza Lalumière added
 
 // ---------- save (local + account sync) ----------
 let dbRef = null, writing = false, pending = false, saveTimer = null; // (no account sync in the standalone app)
@@ -1637,12 +1663,13 @@ function rSpec() {
   const selBar = S.sel.length ? `<div class="selbar"><span><b>${S.sel.length}</b> article${S.sel.length > 1 ? "s" : ""} choisi${S.sel.length > 1 ? "s" : ""}</span><button class="btn sm" id="selClear">Effacer</button><button class="btn sm red" id="selGo">Voir les recettes →</button></div>` : "";
   const FLYER = { Maxi: "https://www.circulaire-en-ligne.ca/circulaire-maxi/speciaux-promotions-rabais-semaine", "Super C": "https://www.circulaire-en-ligne.ca/circulaire-super-c",
     IGA: "https://www.iga.net/fr/circulaire", Metro: "https://www.circulaire-en-ligne.ca/circulaire-metro", Provigo: "https://www.circulaire-en-ligne.ca/circulaire-provigo/speciaux-promotions-rabais-semaine",
-    Walmart: "https://www.circulaire-en-ligne.ca/circulaire-walmart/speciaux-promotions-rabais-semaine", Adonis: "https://www.circulaire-en-ligne.ca/circulaire-adonis" };
+    Walmart: "https://www.circulaire-en-ligne.ca/circulaire-walmart/speciaux-promotions-rabais-semaine", Adonis: "https://www.circulaire-en-ligne.ca/circulaire-adonis", Bonanza: "https://bonanzalalumiere.com/pages/circulaire", "Marché Tradition": "https://www.marchestradition.com/fr/circulaire/" };
   const hot = rows.filter((x) => x.c >= 8), rest = rows.filter((x) => !(x.c >= 8));
   const exp = SPEC && SPEC.fin < now;
   $("#v-speciaux").innerHTML = `
   <div class="split"><div>
     ${[3, 4].includes(new Date().getDay()) && S.bannerWk !== weekKey() + new Date().getDay() ? `<div class="warn">${new Date().getDay() === 3 ? "Les nouvelles circulaires arrivent demain : c'est le bon moment pour vider le frigo." : "Les nouvelles circulaires sont là : fais ton menu de la semaine !"} <button class="btn sm" id="bannerOk" style="margin-left:6px">OK</button></div>` : ""}
+    ${S.reg.postalSet ? "" : `<div class="warn">Pour voir les circulaires et les épiceries de <b>ton coin</b> : <button class="btn sm red" id="geoGo">📍 Utiliser ma position</button> ou mets ton code postal dans Réglages.</div>`}
     <h1>Les spéciaux de la semaine</h1>
     <div class="week"><b>${SPEC ? "Du " + frDate(SPEC.debut) + " au " + frDate(SPEC.fin) : "Aucune circulaire chargée"}</b><span class="mute small">${esc(SPEC ? SPEC.source : "")}</span></div>
     ${exp ? `<div class="warn">Ces spéciaux sont terminés. L'app va lire les nouvelles circulaires toute seule (ou touche « Mettre à jour les circulaires »).</div>` : ""}
@@ -1743,9 +1770,18 @@ function rReg() {
     <h2>Mes magasins</h2>
     <div class="card">
       <fieldset><legend class="small mute">Magasins où je veux bien aller</legend>
-      <div class="grid2">${L.STORES.map((s) => `<label class="chk"><input type="checkbox" data-store="${s}" ${S.reg.stores.includes(s) ? "checked" : ""}>${s}</label>`).join("")}</div></fieldset>
+      <div class="grid2">${L.STORES.filter((s) => nearStore(s) || S.reg.stores.includes(s)).map((s) => `<label class="chk"><input type="checkbox" data-store="${s}" ${S.reg.stores.includes(s) ? "checked" : ""}>${s}${nearStore(s) ? "" : ` <span class="small mute">(pas dans ton coin)</span>`}</label>`).join("")}</div></fieldset>
       <label class="f" for="rPostal">Mon code postal (pour les circulaires de mon coin)</label>
-      <input id="rPostal" value="${esc(S.reg.postal || "")}" maxlength="7" autocomplete="postal-code" style="width:130px;text-transform:uppercase">
+      <div class="row" style="flex-wrap:nowrap"><input id="rPostal" value="${esc(S.reg.postal || "")}" maxlength="7" autocomplete="postal-code" style="width:130px;text-transform:uppercase"><button class="btn sm" id="geoGo">📍 Utiliser ma position</button></div>
+      <details style="margin-top:12px" ${stMsg ? "open" : ""}><summary><b>Ajouter une épicerie avec le lien de sa circulaire</b></summary>
+        <p class="small">Colle le lien de la page de sa circulaire (ou d'un PDF). L'IA lit les prix chaque semaine. Elle s'affichera pour tous ceux qui sont à moins de 30 km.</p>
+        <label class="f" for="stName">Nom de l'épicerie</label><input id="stName" placeholder="Ex. : Marché Bonichoix Saint-Liboire">
+        <label class="f" for="stUrl">Lien de la circulaire</label><input id="stUrl" type="url" placeholder="https://…">
+        <label class="f" for="stWhere">Adresse ou ville de l'épicerie</label><input id="stWhere" placeholder="Ex. : 123 rue Principale, Saint-Liboire">
+        <button class="btn sm red" id="stAdd" style="margin-top:8px">Ajouter l'épicerie</button> <span class="small" id="stMsg">${esc(stMsg)}</span>
+        ${allCustom().length ? `<div style="margin-top:10px">${allCustom().map((x) => `<div class="xrow"><span>${esc(x.name)} <span class="small mute">· ${esc(x.place || "")}${nearCustom().some((y) => y.id === x.id) ? "" : " · pas dans ton coin"}${(S.myStores || []).some((y) => y.id === x.id) && !CUSTOM.some((y) => y.id === x.id) ? " · seulement dans ton app" : ""}</span></span>${(S.myStores || []).some((y) => y.id === x.id) ? `<button class="x" data-stdel="${esc(x.id)}" aria-label="Retirer">×</button>` : ""}</div>`).join("")}</div>` : ""}
+      </details>
+      <p class="small mute" id="geoMsg">${S.reg.postalSet ? "" : "Mets ton code postal (ou ta position) pour avoir les circulaires et les épiceries de ton coin."}</p>
       <label class="f" for="rHome">Mon épicerie habituelle</label>
       <select id="rHome">${L.STORES.map((s) => `<option ${s === S.reg.home ? "selected" : ""}>${s}</option>`).join("")}</select>
       <label class="f" for="rPen">Aller dans un autre magasin seulement si ça me fait sauver au moins</label>
@@ -1989,7 +2025,7 @@ async function readFridgePhotos(files, zone) {
     invMsg = `L'IA regarde ${files.length > 1 ? `tes photos (${Math.min(files.length, g * 2 + groups[g].length)} sur ${files.length})` : "ta photo"}…`; rHome();
     const imgs = await Promise.all(groups[g].map((f) => shrinkImg(f)));
     const prompt = `Voici ${imgs.length > 1 ? imgs.length + " photos" : "une photo"} de mon ${ZONES[zone].toLowerCase()} (on est au Québec).
-Identifie TOUS les aliments et produits visibles, même partiellement ou au fond, un par un (chaque pot, chaque contenant, chaque légume), sans en inventer. Si 2 photos montrent le même article, ne le compte qu'une fois.
+Identifie TOUS les aliments et produits visibles, même partiellement ou au fond, un par un (chaque pot, chaque contenant, chaque légume), sans en inventer. Si 2 photos montrent le même article, ne le compte qu'une fois. Ignore tout ce qui n'est pas de la nourriture ou un ingrédient (vaisselle, tasses, contenants vides, tablettes). Ne fais pas de ligne vague comme « légumes dans le tiroir » : nomme seulement les aliments que tu vois vraiment.
 Pour chacun : le nom en français, une quantité estimée (ex. « 1 litre », « environ 500 g », « 6 », « 1 pot »), et l'identifiant le plus proche dans cette liste (sinon null) :
 ${invIdCatalog()}
 Ajoute « jours » : combien de jours ça se garde encore dans le ${ZONES[zone].toLowerCase()} (si une date est lisible sur l'emballage, calcule à partir de cette date ; aujourd'hui = ${today()}).
@@ -3139,8 +3175,9 @@ Règles : prix au lb → unite "lb", qte 1 ; paquet de 375 g à 3,33 $ → prix 
 }
 // Files made each week by the GitHub robot (same site, or straight from GitHub for copies of the app)
 const RAWBASE = "https://raw.githubusercontent.com/benbeann-art/panier-fute/main/";
+const RAWDATA = "https://raw.githubusercontent.com/benbeann-art/panier-fute/data/";
 async function repoFile(rel, json) {
-  for (const u of [rel, RAWBASE + rel]) {
+  for (const u of [RAWDATA + rel, rel, RAWBASE + rel]) {
     try { const r = await fetch(u + "?t=" + Date.now(), { cache: "no-store" }); if (r.ok) { const t = await r.text(); if (!json) return /^\s*</.test(t) ? null : t; return JSON.parse(t); } } catch (e) {}
   }
   return null;
@@ -3185,12 +3222,13 @@ Réponds UNIQUEMENT par un tableau JSON : [{"n":0,"qte":2,"unite":"L"}]`;
 // One week of flyers: robot file -> live Flipp (current week) -> Noovo Moi text (past weeks) -> AI web search
 async function fetchWeek(debut, current, msg) {
   const fin = addDays(debut, 6);
-  const f = await repoFile(`data/flyers/${debut}.json`, true);
+  const f = robotDir() ? await repoFile(`${robotDir()}${debut}.json`, true) : null;
+  if (f && Array.isArray(f.raw) && f.raw.length >= 20 && current) setNear(f.raw);
   if (f && Array.isArray(f.raw) && f.raw.length >= 20) return rawToSpec(f.raw, f.debut || debut, f.fin || fin, "Vraies circulaires de la semaine (Flipp)", current);
   if (current) {
     try {
       const raw = await Flipp.collect(S.reg.postal || "H2X1Y4", debut, { progress: (n, t) => msg && msg(`Lecture des vraies circulaires… ${Math.round((100 * n) / t)} %`) });
-      if (raw.length >= 20) { if (msg) msg("Lecture des formats…"); return rawToSpec(raw, debut, fin, "Vraies circulaires de la semaine (Flipp)", true); }
+      if (raw.length >= 20) { setNear(raw); if (msg) msg("Lecture des formats…"); return rawToSpec(raw, debut, fin, "Vraies circulaires de la semaine (Flipp)", true); }
     } catch (e) {}
   } else {
     const txt = await repoFile(`data/noovo/${debut}.txt`, false);
@@ -3200,14 +3238,250 @@ async function fetchWeek(debut, current, msg) {
   if (!webOK()) throw new Error("circulaires introuvables (recherche web de l'IA en pause : limite atteinte)");
   return aiWeek(debut, current, null);
 }
+// ---------- Where am I: postal code -> flyers and stores of my area ----------
+const inMtl = () => /^H/.test(S.reg.postal || "H"); // Montreal island and Laval
+// Regions whose flyers the GitHub robot keeps every week (same list as in robot/circulaires.mjs)
+// The robot keeps the flyers of 43 Quebec regions (Flipp.REGIONS): use the nearest one (35 km max), else read the flyers live
+function myRegion() {
+  if (inMtl()) return Flipp.REGIONS.find((r) => r.id === "mtl");
+  const g = S.reg.geo;
+  return g && g.lat ? Flipp.nearestRegion(g) : null;
+}
+function robotDir() { const r = myRegion(); return r ? `data/flyers/${r.id}/` : null; }
+// Coordinates of my postal code (or of my position), to find the nearest region and the stores near me
+async function ensureCoords() {
+  const pc = S.reg.postal || "";
+  if (S.reg.geo && S.reg.geo.postal === pc && S.reg.geo.lat) return S.reg.geo;
+  try {
+    const q = pc.length === 6 ? pc.slice(0, 3) + " " + pc.slice(3) : pc;
+    let j = await fetch(`https://nominatim.openstreetmap.org/search?format=json&countrycodes=ca&limit=1&postalcode=${encodeURIComponent(q)}`).then((r) => r.json());
+    if (!j.length) j = await fetch(`https://nominatim.openstreetmap.org/search?format=json&countrycodes=ca&limit=1&postalcode=${encodeURIComponent(pc.slice(0, 3))}`).then((r) => r.json());
+    if (j.length) { S.reg.geo = { postal: pc, lat: Number(j[0].lat), lon: Number(j[0].lon) }; save(false); }
+  } catch (e) {}
+  return S.reg.geo;
+}
+function nearStore(s) {
+  if (s === "Bonanza") return inMtl();
+  if (allCustom().some((x) => x.name === s)) return nearCustom().some((x) => x.name === s);
+  if (!S.near || !S.near.length) return s !== "Marché Tradition"; // not known yet: the usual big chains
+  return S.near.includes(s);
+}
+function setNear(raw) {
+  const found = [...new Set(raw.map((r) => r.mag))];
+  if (inMtl()) found.push("Bonanza");
+  if (found.length < 2) return;
+  const was = S.near || [];
+  S.near = found;
+  for (const s of found) if (!was.includes(s) && !(S.reg.storesOff || []).includes(s) && !S.reg.stores.includes(s)) S.reg.stores.push(s); // a store just found nearby is turned on
+  for (const x of nearCustom()) found.push(x.name);
+  S.reg.stores = L.STORES.filter((x) => S.reg.stores.includes(x) && (found.includes(x) || !was.length));
+  if (!S.reg.stores.includes(S.reg.home)) S.reg.home = S.reg.stores[0] || S.reg.home;
+}
+async function setPostal(v, how) {
+  const geo = S.reg.geo && S.reg.geo.postal === v ? S.reg.geo : null;
+  S.reg.postal = v; S.reg.postalSet = 1; S.majTry = ""; S.near = []; S.reg.geo = geo; save();
+  await ensureCoords(); addNearCustom();
+  toast(`Code postal ${v.slice(0, 3)} ${v.slice(3)}${how ? " (" + how + ")" : ""} : je cherche les circulaires de ton coin…`);
+  await updateFlyers(true); render(S.view);
+}
+function geoLocate() {
+  const m = (t) => { const el = $("#geoMsg"); if (el) el.textContent = t; else toast(t); };
+  if (!navigator.geolocation) return m("Ta position n'est pas disponible sur cet appareil : écris ton code postal.");
+  m("Je cherche ta position…");
+  navigator.geolocation.getCurrentPosition(async (p) => {
+    try {
+      const j = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&zoom=16&addressdetails=1&accept-language=fr&lat=${p.coords.latitude}&lon=${p.coords.longitude}`).then((r) => r.json());
+      let pc = String((j.address || {}).postcode || "").replace(/\s/g, "").toUpperCase();
+      const town = (j.address || {}).city || (j.address || {}).town || (j.address || {}).village || "";
+      if (/^[A-Z]\d[A-Z]$/.test(pc)) pc += "1A1";
+      if (!/^[A-Z]\d[A-Z]\d[A-Z]\d$/.test(pc)) return m("Je n'ai pas trouvé le code postal de ta position" + (town ? ` (${town})` : "") + " : écris-le.");
+      m(`Position trouvée : ${town || pc.slice(0, 3)}.`);
+      S.reg.geo = { postal: pc, lat: p.coords.latitude, lon: p.coords.longitude, town };
+      await setPostal(pc, town);
+    } catch (e) { m("La recherche de la position n'a pas marché : écris ton code postal."); }
+  }, () => m("Position refusée ou introuvable : écris ton code postal."), { timeout: 15000, maximumAge: 3600e3 });
+}
+// ---------- Stores added by the link of their flyer, shared with everyone who lives near them ----------
+// Shared list = a public gist owned by the app's owner (data/registry.json says which one). Anyone can read it;
+// only the owner's app (its GitHub key) can add to it. Each store keeps where it is (lat/lon) and shows only within 30 km.
+let CUSTOM = [];
+try { CUSTOM = JSON.parse(localStorage.getItem("panierfute.registry") || "{}").list || []; } catch (e) {}
+const allCustom = () => { const m = new Map(); for (const x of CUSTOM.concat(S.myStores || [])) if (x && x.id && !m.has(x.id)) m.set(x.id, x); return [...m.values()]; };
+const nearCustom = () => { const g = S.reg.geo; return allCustom().filter((x) => (S.myStores || []).some((y) => y.id === x.id) || (g && g.lat && x.lat && Flipp.distKm(g, x) <= 30)); };
+let regGist = null;
+// The shared list is the public gist "panierfute-epiceries.json" of the app's owner (no key needed to read it)
+async function findRegistry() {
+  try { const reg = await repoFile("data/registry.json", true); if (reg && reg.gist) return reg.gist; } catch (e) {}
+  try { const l = await fetch("https://api.github.com/users/benbeann-art/gists?per_page=100").then((r) => r.json()); const g = (l || []).find((x) => x.files && x.files["panierfute-epiceries.json"]); return g ? g.id : null; } catch (e) { return null; }
+}
+async function loadRegistry(force) {
+  try {
+    const c = JSON.parse(localStorage.getItem("panierfute.registry") || "{}");
+    if (!force && c.t && Date.now() - c.t < 12 * 36e5) { CUSTOM = c.list || []; regGist = c.gist; return CUSTOM; }
+    const gid = await findRegistry();
+    if (!gid) return CUSTOM;
+    regGist = gid;
+    const g = await fetch(`https://api.github.com/gists/${gid}`).then((r) => r.json());
+    const f = Object.values(g.files || {})[0];
+    CUSTOM = JSON.parse((f && f.content) || "[]").filter((x) => x && x.id && x.name && x.url);
+    localStorage.setItem("panierfute.registry", JSON.stringify({ t: Date.now(), gist: gid, list: CUSTOM }));
+  } catch (e) {}
+  return CUSTOM;
+}
+// a custom store near me becomes a store of the app (lists, best store, specials)
+function addNearCustom() {
+  for (const x of nearCustom()) {
+    if (!L.STORES.includes(x.name)) L.STORES.push(x.name);
+    S.near = S.near || [];
+    if (S.near.length && !S.near.includes(x.name)) S.near.push(x.name);
+    if (!S.reg.stores.includes(x.name) && !(S.reg.storesOff || []).includes(x.name) && !(S.knownCustom || []).includes(x.id)) S.reg.stores.push(x.name);
+    S.knownCustom = [...new Set((S.knownCustom || []).concat(x.id))];
+  }
+}
+async function geocodePlace(q) {
+  try {
+    const j = await fetch(`https://nominatim.openstreetmap.org/search?format=json&countrycodes=ca&limit=1&q=${encodeURIComponent(q + ", Québec")}`).then((r) => r.json());
+    return j.length ? { lat: Number(j[0].lat), lon: Number(j[0].lon), place: String(j[0].display_name || "").split(",").slice(0, 3).join(",") } : null;
+  } catch (e) { return null; }
+}
+let stMsg = "";
+async function addStoreByLink() {
+  const name = ($("#stName") || {}).value?.trim(), url = ($("#stUrl") || {}).value?.trim(), where = ($("#stWhere") || {}).value?.trim();
+  const msg = (t) => { stMsg = t; const el = $("#stMsg"); if (el) el.textContent = t; };
+  if (!name || !/^https?:\/\//.test(url || "")) return msg("Écris le nom de l'épicerie et colle le lien de sa circulaire (il commence par https://).");
+  if (L.STORES.includes(name) && !allCustom().some((x) => x.name === name)) return msg("Cette épicerie est déjà dans l'app.");
+  msg("Je cherche où elle est…");
+  const g = (where && (await geocodePlace(where))) || (S.reg.geo && S.reg.geo.lat ? { lat: S.reg.geo.lat, lon: S.reg.geo.lon, place: S.reg.geo.town || "près de chez toi" } : null);
+  const st = { id: (norm(name).replace(/\s+/g, "-").slice(0, 30) + "-" + Math.random().toString(36).slice(2, 6)), name: name.slice(0, 40), url, lat: g && g.lat, lon: g && g.lon, place: (g && g.place) || where || "", added: today() };
+  S.myStores = (S.myStores || []).concat(st); addNearCustom(); save();
+  msg(`${name} ajoutée. Je lis sa circulaire…`);
+  const n = await mergeCustom(st.id, true);
+  msg(n ? `✓ ${name} : ${n} spéciaux lus.` + (await shareStore(st)) : `${name} est ajoutée, mais je n'ai pas pu lire sa circulaire${aiOn() ? "" : " (il faut une clé d'IA)"}. Le robot essaiera jeudi.` + (await shareStore(st)));
+  rReg();
+}
+// Add to the shared list (works from the app of the owner, who has the GitHub key of the shared list)
+async function shareStore(st) {
+  if (!Sync.hasToken()) return " Elle est seulement dans ton app : pour la partager à tout le monde, envoie le lien au propriétaire de l'app.";
+  try {
+    const me = await Sync.api("/user");
+    if (!me || me.login !== "benbeann-art") return " Elle est dans ton app. Pour la partager à tout le monde, envoie le lien au propriétaire de l'app.";
+    let gid = regGist || (await findRegistry());
+    if (!gid) { const mine = await Sync.api("/gists?per_page=100"); const g = (mine || []).find((x) => x.files && x.files["panierfute-epiceries.json"]); if (g) gid = g.id; }
+    let list = [];
+    if (gid) { const g = await Sync.api(`/gists/${gid}`); list = JSON.parse((Object.values(g.files || {})[0] || {}).content || "[]"); }
+    list = list.filter((x) => x.id !== st.id && x.name !== st.name).concat({ id: st.id, name: st.name, url: st.url, lat: st.lat, lon: st.lon, place: st.place, added: st.added });
+    const body = JSON.stringify({ description: "Panier futé - épiceries ajoutées par lien (liste partagée)", files: { "panierfute-epiceries.json": { content: JSON.stringify(list, null, 1) } } });
+    if (gid) await Sync.api(`/gists/${gid}`, { method: "PATCH", body });
+    else { const g = await Sync.api("/gists", { method: "POST", body: JSON.stringify(Object.assign(JSON.parse(body), { public: true })) }); gid = g.id; S.newRegistry = gid; save(); }
+    localStorage.removeItem("panierfute.registry"); await loadRegistry(true);
+    return " Elle est partagée : tous ceux qui sont dans le coin la verront.";
+  } catch (e) { return " Elle est dans ton app, mais je n'ai pas pu la partager (" + (e.message || "erreur") + ")."; }
+}
+// Read the flyer of one added store: robot text first, else the link itself (PDF, page with PDFs, or web page)
+async function customSpecials(st, force) {
+  const wk = weekKey(), c = (S.customSpec || {})[st.id];
+  if (!force && c && c.week === wk && c.items && c.items.length) return c.items;
+  if (!aiOn()) return (c && c.items) || [];
+  const ids = Object.entries(ING).map(([k, v]) => `${k} = ${v.n} [${v.u}]`).join("\n");
+  const ask = `Relève TOUS les produits en spécial de la circulaire de la semaine de l'épicerie « ${st.name} » (Québec), avec leur prix, exactement comme écrit (n'invente rien).
+Associe chaque produit à un identifiant de cette liste (sinon "ing": null) :
+${ids}
+Règles : prix au lb → "unite":"lb","qte":1 ; au kg → "kg" ; paquet de 375 g à 3,33 $ → "prix":3.33,"qte":375,"unite":"g" ; 2 pour 5 $ → "prix":5,"qte":2,"unite":"u" ; douzaine d'œufs → "qte":12,"unite":"u" ; 2 L → "qte":2,"unite":"L".
+Réponds UNIQUEMENT par un tableau JSON : [{"ing":"id ou null","prix":3.99,"qte":1,"unite":"lb|kg|g|ml|L|u","txt":"nom court + format","reg":0}]  ("reg" = prix régulier s'il est écrit, sinon 0)`;
+  const parse = (txt) => (AI.extractJSON(txt, "array") || []).filter((x) => x && Number(x.prix) > 0).map((x) => ({ ing: ING[x.ing] ? x.ing : null, mag: st.name, prix: Number(x.prix), qte: Number(x.qte) || 1,
+    unite: ["lb", "kg", "g", "ml", "L", "u"].includes(x.unite) ? x.unite : "u", txt: String(x.txt || (ING[x.ing] || {}).n || "").slice(0, 90), reg: Number(x.reg) > Number(x.prix) ? Number(x.reg) : 0 }));
+  let items = [];
+  try {
+    const t = await repoFile(`data/custom/${st.id}/${wk}.txt`, false);
+    if (t && t.length > 300) {
+      for (let i = 0; i < Math.min(t.length, 60000); i += 20000) items.push(...parse(await askAI(ask + "\n--- texte de la circulaire ---\n" + t.slice(i, i + 20000), { maxTokens: 8000, quiet: true })));
+    } else {
+      const r = await fetch(st.url);
+      const type = r.headers.get("content-type") || "";
+      let docs = [];
+      if (/pdf/i.test(type)) docs = [new Blob([await r.blob()], { type: "application/pdf" })];
+      else {
+        const html = await r.text();
+        const pdfs = [...new Set((html.match(/(?:https?:)?\/\/[^"'\s>]+\.pdf(?:\?[^"'\s>]*)?/gi) || []).map((u) => (u.startsWith("//") ? "https:" + u : u).replace(/&amp;/g, "&")))].slice(0, 8);
+        for (const u of pdfs) { try { docs.push(new Blob([await (await fetch(u)).blob()], { type: "application/pdf" })); } catch (e) {} }
+        if (!docs.length) { const txt = html.replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " "); if (txt.length > 300) items.push(...parse(await askAI(ask + "\n--- texte de la page ---\n" + txt.slice(0, 20000), { maxTokens: 8000, quiet: true }))); }
+      }
+      for (const d of docs) { try { items.push(...parse(await askAI(ask, { images: [d], maxTokens: 8000, quiet: true }))); } catch (e) { if (/limite|quota|429/i.test(e.message || "")) break; } }
+    }
+  } catch (e) {}
+  if (items.length) { S.customSpec = Object.assign({}, S.customSpec, { [st.id]: { week: wk, items } }); save(); }
+  return items.length ? items : (c && c.items) || [];
+}
+async function mergeCustom(onlyId, force) {
+  if (!SPEC) return 0;
+  let total = 0;
+  for (const st of nearCustom().filter((x) => (!onlyId || x.id === onlyId) && S.reg.stores.includes(x.name))) {
+    const items = await customSpecials(st, force);
+    if (!items.length) continue;
+    SPEC.items = SPEC.items.filter((x) => x.mag !== st.name).concat(items);
+    recordWeek({ debut: SPEC.debut, items }); total += items.length;
+  }
+  if (total) { S.spec = SPEC; rankCache = null; save(); if (["speciaux", "epicerie"].includes(S.view)) render(S.view); }
+  return total;
+}
+// ---------- Marché Bonanza Lalumière: its weekly flyer is 4 PDF pages on its own site; the AI reads them (no web search) ----------
+let bonBusy = false;
+async function bonanzaSpecials(force) {
+  if (bonBusy || !aiOn() || !inMtl() || !S.reg.stores.includes("Bonanza")) return S.bonanza && S.bonanza.items || [];
+  bonBusy = true;
+  try {
+    const html = await fetch("https://bonanzalalumiere.com/pages/circulaire", { cache: "no-store" }).then((r) => r.text());
+    const links = [...new Set((html.match(/(?:https?:)?\/\/[^"'\s>]+\.pdf(?:\?[^"'\s>]*)?/gi) || []).map((u) => (u.startsWith("//") ? "https:" + u : u).replace(/&amp;/g, "&")))].slice(0, 8);
+    if (!links.length) return [];
+    const key = links.map((u) => u.split("?")[0]).join("|");
+    if (!force && S.bonanza && S.bonanza.key === key && S.bonanza.items && S.bonanza.items.length) return S.bonanza.items;
+    const m = key.match(/(\d{1,2})_([a-zéû]+)_(\d{4})/i), MO = { jan: 1, fev: 2, fév: 2, mar: 3, avr: 4, mai: 5, juin: 6, juil: 7, aou: 8, aoû: 8, sep: 9, oct: 10, nov: 11, dec: 12, déc: 12 };
+    let debut = today();
+    if (m) { const mo = Object.entries(MO).find(([k]) => m[2].toLowerCase().startsWith(k)); if (mo) debut = `${m[3]}-${String(mo[1]).padStart(2, "0")}-${m[1].padStart(2, "0")}`; }
+    const ids = Object.entries(ING).map(([k, v]) => `${k} = ${v.n} [${v.u}]`).join("\n");
+    const items = [];
+    for (const u of links) {
+      try {
+        const pdf = await fetch(u).then((r) => r.blob());
+        const prompt = `Voici une page de la circulaire de la semaine du Marché Bonanza Lalumière (Montréal), qui commence le ${debut}. Relève TOUS les produits en spécial avec leur prix, exactement comme écrit (n'invente rien).
+Associe chaque produit à un identifiant de cette liste (sinon "ing": null) :
+${ids}
+Règles : prix au lb → "unite":"lb","qte":1 ; prix au kg → "kg" ; paquet de 375 g à 3,33 $ → "prix":3.33,"qte":375,"unite":"g" ; 2 pour 5 $ → "prix":5,"qte":2,"unite":"u" ; douzaine d'œufs → "qte":12,"unite":"u" ; 2 L → "qte":2,"unite":"L".
+Réponds UNIQUEMENT par un tableau JSON : [{"ing":"id ou null","prix":3.99,"qte":1,"unite":"lb|kg|g|ml|L|u","txt":"nom court + format","reg":0}]  ("reg" = prix régulier s'il est écrit, sinon 0)`;
+        const arr = AI.extractJSON(await askAI(prompt, { images: [new Blob([pdf], { type: "application/pdf" })], maxTokens: 8000, quiet: true }), "array") || [];
+        for (const x of arr) {
+          if (!x || !(Number(x.prix) > 0)) continue;
+          items.push({ ing: ING[x.ing] ? x.ing : null, mag: "Bonanza", prix: Number(x.prix), qte: Number(x.qte) || 1, unite: ["lb", "kg", "g", "ml", "L", "u"].includes(x.unite) ? x.unite : "u",
+            txt: String(x.txt || (ING[x.ing] || {}).n || "").slice(0, 90), reg: Number(x.reg) > Number(x.prix) ? Number(x.reg) : 0 });
+        }
+      } catch (e) { if (/limite|quota|429/i.test(e.message || "")) break; }
+    }
+    if (items.length) { S.bonanza = { key, debut, date: today(), items }; save(); }
+    return items.length ? items : (S.bonanza && S.bonanza.items) || [];
+  } catch (e) { return (S.bonanza && S.bonanza.items) || []; }
+  finally { bonBusy = false; }
+}
+// add Bonanza's specials to this week's specials (keeps the other stores)
+async function mergeBonanza(force) {
+  if (!SPEC) return 0;
+  const b = await bonanzaSpecials(force);
+  if (!b.length) return 0;
+  SPEC.items = SPEC.items.filter((x) => x.mag !== "Bonanza").concat(b);
+  recordWeek({ debut: SPEC.debut, items: b });
+  S.spec = SPEC; rankCache = null; save();
+  if (S.view === "speciaux" || S.view === "epicerie") render(S.view);
+  return b.length;
+}
 // Weeks saved by the robot that the app has not seen yet go into the 12-month history
 async function robotHistory() {
-  const idx = await repoFile("data/flyers/index.json", true);
+  const dir = robotDir();
+  if (!dir) return 0;
+  const idx = await repoFile(dir + "index.json", true);
   if (!Array.isArray(idx)) return 0;
   let n = 0;
   for (const w of idx) {
     if (w >= weekKey() || S.histWeeks.some((h) => Math.abs((new Date(h) - new Date(w)) / 864e5) <= 3)) continue;
-    const f = await repoFile(`data/flyers/${w}.json`, true);
+    const f = await repoFile(`${dir}${w}.json`, true);
     if (!f || !Array.isArray(f.raw)) continue;
     recordWeek(await rawToSpec(f.raw, f.debut || w, f.fin || addDays(w, 6), "", false)); n++;
   }
@@ -3277,6 +3551,8 @@ async function updateFlyers(silent) {
     SPEC = got;
     recordWeek(SPEC); regFromFlyers(SPEC);
     S.spec = SPEC; S.majTry = ""; rankCache = null; save();
+    if (S.reg.stores.includes("Bonanza") && aiOn()) { msg("Lecture de la circulaire Bonanza…"); await mergeBonanza(false); }
+    if (aiOn() && nearCustom().length) { msg("Lecture des circulaires ajoutées par lien…"); await mergeCustom(); }
     render(S.view);
     msg(`✓ ${items.length} spéciaux du ${frDate(j.debut)} au ${frDate(j.fin)}.`);
     if (silent) toast(`Circulaires à jour : ${items.length} spéciaux`);
@@ -3347,8 +3623,11 @@ async function weeklyAuto() {
   if (AIS.autoMaj === false) return;
   const t = today();
   const recentTry = S.majTry && Date.now() - new Date(S.majTry).getTime() < 6 * 36e5;
-  if ((!SPEC || SPEC.fin < t || SPEC.debut < weekKey() || !/Flipp/.test(SPEC.source || "")) && !recentTry) await updateFlyers(true);
+  if ((!SPEC || SPEC.fin < t || SPEC.debut < weekKey() || !/Flipp/.test(SPEC.source || "") || !(S.near && S.near.length)) && !recentTry) await updateFlyers(true);
+  try { await ensureCoords(); await loadRegistry(); addNearCustom(); } catch (e) {}
   try { await robotHistory(); } catch (e) {}
+  if (aiOn() && SPEC && nearCustom().length) { try { await mergeCustom(); } catch (e) {} }
+  if (aiOn() && SPEC && S.reg.stores.includes("Bonanza") && !(S.bonanza && S.bonanza.date >= addDays(today(), -6) && SPEC.items.some((x) => x.mag === "Bonanza"))) { try { await mergeBonanza(false); } catch (e) {} }
   if (!aiOn()) return;
   if (S.iaWeek !== weekKey()) await iaGenerate(true);
   if (AIS.regAuto !== false && webOK() && regBatches().some(regDue)) await updateRegPrices(2, true); // regular prices: a few groups at each opening, all within 2 weeks
@@ -3473,6 +3752,9 @@ document.addEventListener("click", (e) => {
   if (d.invtab) { S.invTab = d.invtab; save(false); return rHome(); }
   if (d.invdel) { zoneList(S.invTab || "frigo").splice(Number(d.invdel), 1); rankCache = null; save(); return rHome(); }
   if (t.id === "invSort") return sortInventory();
+  if (t.id === "geoGo") return geoLocate();
+  if (t.id === "stAdd") return addStoreByLink();
+  if (d.stdel) { const x = (S.myStores || []).find((y) => y.id === d.stdel); S.myStores = (S.myStores || []).filter((y) => y.id !== d.stdel); if (x && !CUSTOM.some((y) => y.name === x.name)) { S.reg.stores = S.reg.stores.filter((s) => s !== x.name); if (SPEC) SPEC.items = SPEC.items.filter((i) => i.mag !== x.name); } save(); return rReg(); }
   if (t.id === "rvCancel") { invReview = null; invMsg = ""; return rHome(); }
   if (t.id === "rvAdd" && invReview) { if (invReview.receipt) logReceipt(invReview); const np = recordReceiptPrices(invReview); if (np) toast(`${np} vrais prix ajoutés à l'historique`); let n = 0; for (const x of invReview) if (x.keep) { addInv(x.zone, x); if (x.id && S.verif) delete S.verif[x.id]; n++; } invReview = null; invMsg = `${n} articles ajoutés.`; rankCache = null; save(); toast(`${n} articles ajoutés à l'inventaire`); return rHome(); }
   if (t.id === "invAsk") {
@@ -3600,6 +3882,7 @@ document.addEventListener("change", (e) => {
   if (t.dataset.store) {
     const s = t.dataset.store;
     S.reg.stores = t.checked ? [...new Set(S.reg.stores.concat(s))] : S.reg.stores.filter((x) => x !== s);
+    S.reg.storesOff = t.checked ? (S.reg.storesOff || []).filter((x) => x !== s) : [...new Set((S.reg.storesOff || []).concat(s))];
     S.reg.stores = L.STORES.filter((x) => S.reg.stores.includes(x));
     rankCache = null; save(); return rReg();
   }
@@ -3634,7 +3917,7 @@ document.addEventListener("change", (e) => {
   if (t.id === "myPhoto" && t.files && t.files[0]) return setMyPhoto(S.open, t.files[0]);
   if (t.id === "impPhoto") { impFiles = [...(t.files || [])].filter((f) => /^image\//.test(f.type)).slice(0, 4); impOpen = true; return rRec(); }
   if (t.id === "impDish") { impDish = t.files && t.files[0] && /^image\//.test(t.files[0].type) ? t.files[0] : null; impOpen = true; return rRec(); }
-  if (t.id === "rPostal") { const v = t.value.replace(/\s/g, "").toUpperCase(); if (/^[A-Z]\d[A-Z]\d[A-Z]\d$/.test(v)) { S.reg.postal = v; S.majTry = ""; save(); toast("Code postal enregistré"); } else toast("Code postal invalide (ex. H2X 1Y4)"); return; }
+  if (t.id === "rPostal") { const v = t.value.replace(/\s/g, "").toUpperCase(); if (/^[A-Z]\d[A-Z]\d[A-Z]\d$/.test(v)) { setPostal(v); } else toast("Code postal invalide (ex. H2X 1Y4)"); return; }
   if (t.id === "rHome") S.reg.home = t.value;
   else if (t.id === "rPen") S.reg.pen = Math.max(0, Number(t.value) || 0);
   else if (t.id === "rMax") S.reg.max = Number(t.value);

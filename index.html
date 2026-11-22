@@ -2650,6 +2650,8 @@ function addBox() {
 function packTxt(id, a) {
   const g = ING[id]; if (!g || !a || !a.packs || !a.size) return "";
   let f;
+  const NAMED = { fecule: "boîte de 454 g", cassonade: "sac de 1 kg", sucre: "sac de 2 kg", miel: "pot de 500 g", moutarde: "pot de 250 ml", mayo: "pot de 890 ml", melasse: "pot de 500 ml" };
+  if (NAMED[id]) return ` · achète ${a.packs} ${NAMED[id].replace(/^(\S+)/, (m) => a.packs > 1 ? (m === "boîte" ? "boîtes" : m + "s") : m)}`;
   if (g.u === "cs" || g.u === "ct") { const ml = a.size * (g.u === "cs" ? 15 : 5); f = g.u === "ct" && a.size <= 50 && id !== "vanille" ? "pot" : id === "sel" ? "1 kg" : ml >= 950 ? L.FR(Math.round(ml / 100) / 10, 1).replace(/,0$/, "") + " L" : Math.round(ml / 10) * 10 + " ml"; }
   else if (g.u === "u") { if (a.size <= 1) return ""; f = "paquet de " + Math.round(a.size); }
   else f = L.fmtQty(g, a.size);

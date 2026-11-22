@@ -31,7 +31,7 @@
     saumon: ["filet de saumon", ["saumon"], ["fume", "farci", "tournedos", "conserve", "boite", "roulade", "burger", "galette", "sushi", "pate", "mousse", "croquette", "nourriture"]],
     truite: ["truite", ["truite"], ["fume", "farci", "conserve"]],
     tilapia: ["tilapia", ["tilapia"], ["pane", "farci"]],
-    crevettes: ["crevettes", ["crevette"], ["anneau", "cocktail", "pane", "pates", "surimi", "batonnet", "poisson", "tempura", "sauce", "croustil", "chips", "dumpling", "rouleau", "won"]],
+    crevettes: ["crevettes", ["crevette"], ["anneau", "cocktail", "pane", "pates", "surimi", "batonnet", "poisson", "goberge", "salade", "bouchee", "moghrabieh", "tempura", "sauce", "croustil", "chips", "dumpling", "rouleau", "won"]],
     thon: ["thon en conserve", ["thon"], ["steak", "frais", "sushi", "longe", "tataki", "salade", "chat", "nourriture"]],
     oeufs: ["oeufs", ["oeuf"], ["chocolat", "paques", "nouille", "pate", "blanc d oeufs|blancs d oeufs", "liquide", "cuit", "kinder", "sandwich", "muffin"]],
     pois_chiches: ["pois chiches", ["pois chiche"], ["trempette", "hummus", "houmous", "croustil", "farine", "pate"]],
@@ -133,6 +133,19 @@
     sriracha: ["sriracha", ["sriracha"], ["mayo", "chips", "croustil", "poulet", "ailes", "nouille", "ramen"]],
     worcestershire: ["sauce worcestershire", ["worcestershire"], ["chips", "croustil"]],
     huile_sesame: ["huile de sésame", ["huile", "sesame"], ["graine", "vinaigrette", "sauce"]],
+    panais: ["panais", ["panais"], ["soupe", "croustil", "chips"]],
+    pate_tarte: ["pâte à tarte", ["pate a tarte|croute a tarte|abaisse|pate brisee"], ["pizza", "tarte aux", "tarte au", "tartelette"]],
+    sirop_erable: ["sirop d'érable", ["sirop", "erable"], ["saveur", "biscuit", "cereale", "gruau", "bacon", "jambon", "saucisse", "bonbon", "beurre", "tire", "sucre", "the", "cafe", "creme", "yogourt", "barre", "noix"]],
+    fromage_grains: ["fromage en grains", ["fromage", "grain|grains|crottes"], ["poutine kit", "chips"]],
+    aubergine: ["aubergines", ["aubergine"], ["trempette", "baba", "parmigiana", "grille", "marine"]],
+    pomme: ["pommes", ["=pomme|=pommes"], ["terre", "jus", "compote", "tarte", "chips", "croustil", "sauce", "cidre", "vinaigre", "chausson", "muffin", "barre", "boisson", "puree", "gateau", "beigne", "cannelle et", "sechees", "pain", "yogourt", "gourde", "collation", "frite", "rondelle"]],
+    ricotta: ["ricotta", ["ricotta"], ["ravioli", "cannelloni", "pizza", "lasagne", "tortellini", "gateau"]],
+    gnocchi: ["gnocchis", ["gnocchi"], ["sauce", "repas", "plat"]],
+    haricots_blancs: ["haricots blancs", ["haricot|haricots|feve", "blanc|cannellini|romano"], ["sauce", "soupe", "lard", "beans", "au lard"]],
+    haricots_verts: ["haricots verts", ["haricot", "vert|jaune"], ["surgel", "congel", "conserve", "boite", "salade"]],
+    courge: ["courge musquée", ["courge|butternut"], ["soupe", "potage", "ravioli", "surgel", "spaghetti", "puree", "muffin"]],
+    kale: ["chou kale", ["kale|frise"], ["chips", "croustil", "salade cesar", "salade de", "smoothie"]],
+    gruyere: ["fromage gruyère", ["gruyere|suisse|emmental|jarlsberg"], ["tranche", "pain", "chips", "craquelin", "fondue", "quiche", "sandwich"]],
     poivre: ["poivre noir moulu", ["=poivre"], ["poivron", "citron", "chips", "croustil", "saucisse", "bifteck", "steak", "salami", "sauce", "rose", "vert", "assaison", "sel et poivre", "melange", "moulin a", "jambon", "pepperoni", "dinde", "poulet", "boeuf", "porc", "fromage", "craquelin"]],
     sel: ["sel de table", ["=sel"], ["sans sel", "poivre", "ail", "celeri", "assaison", "croustil", "chips", "vinaigre", "noix", "arachide", "beurre", "bain", "epsom", "deglacage", "fondant", "adoucisseur", "chlorure", "piscine", "eau", "caramel", "chocolat", "biscuit", "craquelin", "bretzel", "pretzel", "pistache", "amande", "edamame", "morue", "sachets", "faible", "reduit", "graines", "tournesol", "cajou", "rose de l himalaya|himalaya", "fleur de sel", "fumee", "epices", "sel de mer et", "beurre", "pop", "mais"]],
   };
@@ -206,6 +219,7 @@
     if (m) q = { qte: Number(m[1]) * NUM(m[2]), unite: m[3] };
     else if ((m = raw.match(/(\d+(?:[.,]\d+)?)\s*(kg|g|ml|l|lb)\b/))) q = { qte: NUM(m[1]), unite: m[2] };
     if (q) { if (q.unite === "l") q.unite = "L"; q.qte *= mult; }
+    if (!q && ingU === "ml" && r.ing === "lait" && !/(^| )(ml|l|litre)( |$)/.test(nm)) return { qte: 2000 * mult, unite: "ml" }; // milk without a size: the usual 2 L
     if (ingU === "u") {
       if (/douzaine/.test(nm)) return { qte: 12 * mult, unite: "u" };
       m = raw.match(/(?:paq(?:uet)?\.?\s*de|pqt\s*de|sac\s*de|boite\s*de|caisse\s*de|emballage\s*de)\s*(\d+)(?!\s*(?:g|kg|ml|l|lb)\b)/) || raw.match(/\b(\d+)\s*(?:un\b|unités?\b|unites?\b|pains\b|bagels\b|tortillas\b|croissants\b|pitas\b|oeufs\b|œufs\b)/);
@@ -224,7 +238,7 @@
       const ing = ING[r.ing]; if (!ing) continue;
       const fix = opts.sizes && opts.sizes[r.ing + "|" + r.name];
       if (fix && fix.skip) continue;
-      let s = fix || sizeOf(r, ing.u);
+      let s = sizeOf(r, ing.u) || (fix && fix.qte ? fix : null);
       if (!s && opts.guess && ing.u === "u" && PACK[r.ing] && !sizeOf(r, "g")) s = { qte: PACK[r.ing], unite: "u" };
       if (!s) { unknown.push(r); continue; }
       if (ing.u === "u" && s.unite !== "u") { unknown.push(r); continue; }

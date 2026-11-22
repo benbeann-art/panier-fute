@@ -505,10 +505,14 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
         const kg = FR(q / 1000, 1) + " kg";
         return ing.r.startsWith("Viandes") || ing.r.startsWith("Poissons") ? kg + " (≈ " + FR(q / LB, 1) + " lb)" : kg;
       }
-      return Math.round(q / 10) * 10 + " g";
+      return (q < 10 ? Math.max(1, Math.round(q)) : Math.round(q / 10) * 10) + " g";
     }
-    if (ing.u === "ml") return q >= 1000 ? FR(q / 1000, 1) + " L" : Math.round(q / 10) * 10 + " ml";
-    if (ing.u === "u" && ing.n.startsWith("Ail")) { const n = Math.ceil(q); return n + " gousses (≈ " + Math.ceil(n / 10) + " tête" + (n > 10 ? "s" : "") + ")"; }
+    if (ing.u === "ml") return q >= 1000 ? FR(q / 1000, 1) + " L" : (q < 10 ? Math.max(1, Math.round(q)) : Math.round(q / 10) * 10) + " ml";
+    if (ing.u === "u" && ing.n.startsWith("Ail")) {
+      // a head has about 10 cloves: only talk about heads when it is close to one or more
+      const n = Math.max(1, Math.ceil(q)), h = Math.round(n / 10);
+      return n + (n > 1 ? " gousses" : " gousse") + (n >= 8 ? " (≈ " + Math.max(1, h) + " tête" + (h > 1 ? "s" : "") + ")" : "");
+    }
     if (ing.u === "u") return exact ? String(Math.round(q * 100) / 100).replace(".", ",") : String(Math.ceil(q));
     if (ing.u === "cs") return fmtSpoon(q) + " c. à soupe";
     if (ing.u === "ct") return fmtSpoon(q) + " c. à thé";

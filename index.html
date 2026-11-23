@@ -334,7 +334,36 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
   let REGS = null, LOWREG = null;
   function setRegs(perStore, lowest) { REGS = perStore; LOWREG = lowest; }
   const regAt = (id, s, ING) => (REGS && REGS(id, s)) || ING[id].p;
+  // This week's scores per ingredient, adjusted so a lower price never gets a lower score than a higher one,
+  // and only the lowest price of the week can get 10 (set by setWeek)
+  let WEEKC = null;
+  const wkey = (sp) => [sp.ing, sp.mag, sp.prix, sp.qte || 1, sp.unite || "", sp.txt || "", sp.perso || ""].join("|");
+  function setWeek(items, ING, stores) {
+    WEEKC = new Map();
+    const by = {};
+    for (const sp of items || []) {
+      const ing = sp && ING[sp.ing];
+      if (!ing || (stores && stores.length && !sp.perso && !stores.includes(sp.mag))) continue;
+      const pu = unitPrice(sp, ing), b = baseCote(sp, ing);
+      if (pu == null || b == null) continue;
+      (by[sp.ing] = by[sp.ing] || []).push({ k: wkey(sp), pu, b });
+    }
+    for (const id in by) {
+      const l = by[id].sort((a, c) => a.pu - c.pu || c.b - a.b);
+      const min = l[0].pu; let run = 10;
+      for (const x of l) {
+        run = Math.min(run, x.b);
+        WEEKC.set(x.k, x.pu > min * 1.005 ? Math.min(run, 9) : run);
+      }
+    }
+  }
   function cote(sp, ing) {
+    const b = baseCote(sp, ing);
+    if (b == null || !WEEKC) return b;
+    const w = WEEKC.get(wkey(sp));
+    return w == null ? b : w;
+  }
+  function baseCote(sp, ing) {
     if (sp.cote >= 1 && sp.cote <= 10) return Math.round(sp.cote);
     const pu = unitPrice(sp, ing);
     if (pu == null) return null;
@@ -574,7 +603,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
     return pre + FR(sp.prix) + " $" + u;
   }
 
-  root.Logic = { setRegs, setHistory, histInfo, STORES, DAYS, unitPrice, cote, indexSpecials, scoreRecipe, planWeek, scaleRecipe, portions, autoPick, buildList, chooseStores, fmtQty, fmtSpecial, FR, packOf, packCost };
+  root.Logic = { setRegs, setHistory, setWeek, histInfo, STORES, DAYS, unitPrice, cote, indexSpecials, scoreRecipe, planWeek, scaleRecipe, portions, autoPick, buildList, chooseStores, fmtQty, fmtSpecial, FR, packOf, packCost };
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
@@ -1736,7 +1765,7 @@ function allSpecials() {
   const mine = S.extra.filter((x) => !x.fin || x.fin >= now);
   return base.concat(mine);
 }
-function idx() { return L.indexSpecials(allSpecials(), ING, S.reg.stores); }
+function idx() { const all = allSpecials(); L.setWeek(all, ING, S.reg.stores); return L.indexSpecials(all, ING, S.reg.stores); }
 let rankCache = null;
 // ---------- allergies and forbidden foods (hidden everywhere) ----------
 const BANS = {
@@ -1843,6 +1872,7 @@ function render(v) {
 // ---------- SPECIALS ----------
 function rSpec() {
   const items = allSpecials().filter((sp) => sp.perso || !S.reg.stores.length || S.reg.stores.includes(sp.mag)); // unchecked stores are hidden
+  L.setWeek(items, ING, S.reg.stores);
   const now = new Date().toISOString().slice(0, 10);
   const rows = items.map((sp) => {
     const ing = ING[sp.ing];
@@ -1856,7 +1886,7 @@ function rSpec() {
       <span class="tag ${coteCls(x.sp, x.c)}" title="Cote ${x.c || "?"} sur 10">${x.c || "–"}<small>/10</small></span>
       <div><div class="nm">${esc(x.sp.txt || (x.ing && x.ing.n))}</div>
         <div class="meta">${esc(x.sp.mag)}${x.on ? "" : " · magasin non coché"}${x.sp.perso ? " · ajouté par toi" : ""}</div>${notRealTxt(x.sp) ? `<div class="meta">${notRealTxt(x.sp)}</div>` : ""}</div>
-      ${x.h ? `<div class="meta" style="grid-column:2/4">${x.h.lowest ? "<b style='color:var(--green)'>Plus bas prix de l'année</b>" : `${Math.round(x.h.share * 100)} % des prix vus en 12 mois étaient plus bas`} · plus bas vu : ${perUnitTxt(x.ing, x.h.min[2])} chez ${esc(x.h.min[1])} (${frDate(x.h.min[0])})</div>` : ""}
+      ${x.h ? `<div class="meta" style="grid-column:2/4">${x.h.lowest && x.c === 10 ? "<b style='color:var(--green)'>Plus bas prix de l'année</b>" : `${Math.round(x.h.share * 100)} % des prix vus en 12 mois étaient plus bas`} · plus bas vu : ${perUnitTxt(x.ing, x.h.min[2])} chez ${esc(x.h.min[1])} (${frDate(x.h.min[0])})</div>` : ""}
       <div class="row" style="gap:2px;grid-row:1;grid-column:3"><span class="price">${L.fmtSpecial(x.sp)}</span>${x.sp.perso ? `<button class="x" data-del="${esc(x.sp.perso)}" aria-label="Retirer">×</button>` : ""}</div>
       ${x.n ? `<button class="go" data-ing="${x.sp.ing}">${x.n} recettes avec ça →</button>` : x.nc ? `<button class="go" data-go="collations">${x.nc} collation${x.nc > 1 ? "s" : ""} avec ça →</button>` : `<span class="meta" style="grid-column:2/4">Pas utilisé dans les recettes</span>`}
     </div>`;
@@ -1868,7 +1898,7 @@ function rSpec() {
       : x.sp.img && AIS.photos !== "off" ? `<div class="ph fl"><img src="${esc(x.sp.img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.classList.add('ph-empty');this.remove()"></div>` : x.ing ? ingPic(x.sp.ing) : `<div class="ph ph-empty"><span>${esc(x.sp.txt)}</span></div>`}
       <span class="tag ${coteCls(x.sp, x.c)}">${x.c || "–"}<small>/10</small></span>${on ? `<span class="ok">✓ Choisi</span>` : ""}
       <span class="body"><span class="nm">${esc(x.sp.txt || (x.ing && x.ing.n))}</span>
-      <span class="price">${L.fmtSpecial(x.sp)}</span><span class="meta">${S.store ? "" : esc(x.sp.mag) + " · "}${notRealTxt(x.sp) ? notRealTxt(x.sp) : x.h ? (x.h.lowest ? "<b style='color:var(--green)'>Plus bas de l'année</b>" : `${Math.round(x.h.share * 100)} % des prix vus en 1 an étaient plus bas`) : x.ing && x.n ? `${x.n} recettes` : x.nc ? `${x.nc} collation${x.nc > 1 ? "s" : ""}` : "Pas dans les recettes"}</span></span></button>`; };
+      <span class="price">${L.fmtSpecial(x.sp)}</span><span class="meta">${S.store ? "" : esc(x.sp.mag) + " · "}${notRealTxt(x.sp) ? notRealTxt(x.sp) : x.h ? (x.h.lowest && x.c === 10 ? "<b style='color:var(--green)'>Plus bas de l'année</b>" : `${Math.round(x.h.share * 100)} % des prix vus en 1 an étaient plus bas`) : x.ing && x.n ? `${x.n} recettes` : x.nc ? `${x.nc} collation${x.nc > 1 ? "s" : ""}` : "Pas dans les recettes"}</span></span></button>`; };
   const selBar = S.sel.length ? `<div class="selbar"><span><b>${S.sel.length}</b> article${S.sel.length > 1 ? "s" : ""} choisi${S.sel.length > 1 ? "s" : ""}</span><button class="btn sm" id="selClear">Effacer</button><button class="btn sm red" id="selGo">Voir les recettes →</button></div>` : "";
   const FLYER = { Maxi: "https://www.circulaire-en-ligne.ca/circulaire-maxi/speciaux-promotions-rabais-semaine", "Super C": "https://www.circulaire-en-ligne.ca/circulaire-super-c",
     IGA: "https://www.iga.net/fr/circulaire", Metro: "https://www.circulaire-en-ligne.ca/circulaire-metro", Provigo: "https://www.circulaire-en-ligne.ca/circulaire-provigo/speciaux-promotions-rabais-semaine",

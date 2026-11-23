@@ -3,9 +3,11 @@
   "short_name": "Panier futé",
   "description": "Spéciaux d'épicerie, recettes, menu de la semaine et liste d'épicerie",
   "lang": "fr-CA",
+  "id": "./",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
+  "launch_handler": { "client_mode": ["navigate-existing", "auto"] },
   "background_color": "#ffffff",
   "theme_color": "#d4241b",
   "icons": [

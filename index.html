@@ -3016,8 +3016,8 @@ function openRec(id) {
   const like = S.aime[id] || 0;
   $("#sheetIn").innerHTML = `<button class="close" id="closeSheet" aria-label="Fermer">×</button>
     <div class="hero">${pic(r)}</div>
-    <p class="small mute" id="photoCredit" style="margin:-6px 0 6px">${MYPH[r.id] && Photos.url(r.id) ? "Ta photo" : Photos.url(r.id) ? "Photo faite par l'IA" : creditHTML(r.id)}</p>
-    <div class="row small" style="margin:0 0 8px">${AIS.photos !== "off" && !Photos.url(r.id) ? `<button class="btn sm" id="photoWebNext">Cette photo n'est pas la bonne</button>` : ""}
+    <p class="small mute" id="photoCredit" style="margin:-6px 0 6px">${MYPH[r.id] && Photos.url(r.id) ? "Ta photo" : Photos.url(r.id) ? "Photo faite par l'IA" : REPO_PH.has(r.id) ? "Photo faite par l'IA (Gemini) pour cette recette" : creditHTML(r.id)}</p>
+    <div class="row small" style="margin:0 0 8px">${AIS.photos !== "off" && !Photos.url(r.id) && !REPO_PH.has(r.id) ? `<button class="btn sm" id="photoWebNext">Cette photo n'est pas la bonne</button>` : ""}
       <label class="btn sm" for="myPhoto" title="Ou glisse une photo sur l'image">📷 Mettre ma photo</label><input type="file" id="myPhoto" accept="image/*" hidden>
       ${MYPH[r.id] && Photos.url(r.id) ? `<button class="btn sm" id="myPhotoDel">Enlever ma photo</button>` : ""}
       ${AI.imageReady(AIS).length ? `<button class="btn sm" id="photoNew">${Photos.url(r.id) ? "Refaire la photo IA" : "Photo faite par l'IA"}</button>` : ""}<span class="mute" id="photoMsg"></span></div>
@@ -3285,10 +3285,12 @@ function ingPic(id) {
   if (w && w.url && AIS.photos !== "off") return `<div class="ph" data-ph="ing:${id}"><img src="${esc(w.url)}" alt="" loading="lazy" referrerpolicy="no-referrer"><span class="cred">${esc(w.by)} · ${esc(w.lic)}</span></div>`;
   return `<div class="ph ph-empty" data-ph="ing:${id}"><span>${esc((ING[id] || {}).n || "")}</span></div>`;
 }
-// ---------- Pictures: AI photo if made, else web photo, else drawing ----------
+// ---------- Pictures: my photo / AI photo made here, else the app's AI photo (photos/), else web photo, else drawing ----------
+let REPO_PH = new Set(); // recipes with a photo made by Gemini, kept in the app's photos/ folder
 function pic(r) {
   const u = Photos.url(r.id), w = WEB[r.id];
   if (u) return `<div class="ph" data-ph="${r.id}"><img src="${u}" alt="Photo : ${esc(r.n)}" loading="lazy"></div>`;
+  if (REPO_PH.has(r.id) && AIS.photos !== "off") return `<div class="ph" data-ph="${r.id}"><img src="photos/${r.id}.jpg" alt="Photo : ${esc(r.n)}" loading="lazy"></div>`;
   if (w && w.url && !(w.bad || []).includes(w.url) && AIS.photos !== "off") return `<div class="ph" data-ph="${r.id}"><img src="${esc(w.url)}" alt="Photo : ${esc(r.n)}" loading="lazy" referrerpolicy="no-referrer"><span class="cred">${esc(w.by)} · ${esc(w.lic)}</span></div>`;
   if ((w && w.none && AIS.photos !== "off") || r.col) return collage(r);
   return `<div class="ph" data-ph="${r.id}">${Illus.svg(r)}</div>`;
@@ -4628,6 +4630,7 @@ Promise.all([getJSON("recettes.json", window.DATA_RECETTES), getJSON("speciaux.j
     S.menu = S.menu.filter((id) => BYID[id] && !isCol(id)); S.mes = S.mes.filter((id) => BYID[id]); S.col = (S.col || []).filter((id) => BYID[id]);
     start();
     Photos.loadAll().then((n) => { if (n) { render(S.view); if (S.open) openRec(S.open); } });
+    fetch("photos/index.json", { cache: "no-cache" }).then((r) => (r.ok ? r.json() : [])).then((l) => { if (Array.isArray(l) && l.length) { REPO_PH = new Set(l); render(S.view); if (S.open) openRec(S.open); } }).catch(() => {});
     setTimeout(async () => { await syncNow(); weeklyAuto(); }, 800);
   })
   .catch(() => { $("#loading").textContent = "Impossible de charger les recettes. Recharge la page."; });

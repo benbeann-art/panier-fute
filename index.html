@@ -1454,6 +1454,9 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
     }
     return q;
   }
+  // A size read by the AI that makes the price unbelievably low ("Pilons de poulet 2,49 $" read as per kg): it is per pound
+  const ratio = (r, ing, grams) => (ing.p > 0 ? r.prix / grams / ing.p : 1);
+  const perLbNotKg = (r, ing) => ratio(r, ing, 1000) < 0.5 && ratio(r, ing, 453.6) >= 0.5 && ratio(r, ing, 453.6) <= 1.5;
   // Raw flyer items -> app specials {ing, mag, prix, qte, unite, txt}; the ones with an unknown size are returned apart
   function toItems(raw, ING, opts) {
     opts = opts || {};
@@ -1463,6 +1466,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
       const fix = opts.sizes && opts.sizes[r.ing + "|" + r.name];
       if (fix && fix.skip) continue;
       let s = sizeOf(r, ing.u) || (fix && fix.qte ? fix : null);
+      if (s && fix && s === fix && ing.u === "g" && s.unite === "kg" && s.qte === 1 && perLbNotKg(r, ing)) s = { qte: 1, unite: "lb" }; // "2,49 $" read as per kg but it is per lb
       if (!s && opts.guess && ing.u === "u" && PACK[r.ing] && !sizeOf(r, "g")) s = { qte: PACK[r.ing], unite: "u" };
       if (!s) { unknown.push(r); continue; }
       if (ing.u === "u" && (s.unite === "lb" || s.unite === "kg") && EACH_LB[r.ing]) s = { qte: Math.max(1, Math.round(s.qte * (s.unite === "kg" ? 2.2046 : 1) * EACH_LB[r.ing])), unite: "u" };
@@ -3691,6 +3695,21 @@ const today = () => { const d = new Date(); return new Date(d.getTime() - d.getT
 function weekKey() { // Quebec flyers run Thursday -> Wednesday: key = date of this week's Thursday
   const d = new Date(today() + "T12:00"); const back = (d.getDay() + 3) % 7; d.setDate(d.getDate() - back); return d.toISOString().slice(0, 10);
 }
+// Specials saved with "1 kg" when the flyer price was per pound (unbelievably cheap per kg, normal per lb): fix them and their history entry
+function fixPerLb() {
+  for (const spec of [S.spec, SPEC]) {
+    if (!spec || !Array.isArray(spec.items)) continue;
+    for (const sp of spec.items) {
+      const ing = ING[sp.ing];
+      if (!ing || ing.u !== "g" || sp.unite !== "kg" || sp.qte !== 1 || !(ing.p > 0) || !(sp.prix > 0)) continue;
+      const k = sp.prix / 1000 / ing.p, lb = sp.prix / 453.6 / ing.p;
+      if (k >= 0.5 || lb < 0.5 || lb > 1.5) continue;
+      sp.unite = "lb";
+      const h = S.hist && S.hist[sp.ing];
+      if (h) S.hist[sp.ing] = h.filter((e) => !(e[0] === spec.debut && e[1] === sp.mag));
+    }
+  }
+}
 // ---------- price history (last 12 months, all stores) ----------
 const addDays = (d, n) => { const x = new Date(d + "T12:00"); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
 function recordWeek(spec) {
@@ -4624,6 +4643,7 @@ Promise.all([getJSON("recettes.json", window.DATA_RECETTES), getJSON("speciaux.j
     initCatalog();
     if (S.reg.aislesV !== 2) { S.reg.aisles = []; S.reg.aislesV = 2; } // new store walk order (fresh first, frozen last)
     applyRegPrices();
+    fixPerLb();
     L.setHistory(S.hist); recordWeek(SPEC);
     addIA(S.ia || []);
 

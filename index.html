@@ -315,7 +315,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
     return null;
   }
 
-  // Deal score 1-10 (like Glouton): from % off the regular price, unless the special already carries one
+  // Deal score 1-10 from the stores' own flyers only
   // Price history: {ingId: [[weekStart, store, unitPrice], ...]} over the last year, all stores
   let HIST = {};
   const MIN_OBS = 4;
@@ -329,7 +329,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
     return { n: obs.length, weeks: new Set(obs.map((e) => e[0])).size, min, med: prices[Math.floor(prices.length / 2)], share: lower / prices.length, lowest: pu <= min[2] + 1e-9 };
   }
   // Deal score 1-10. With a year of history: compared with every price seen in all stores (10 = lowest of the year).
-  // Without enough history: compared with the estimated regular price. A Glouton score read from a screenshot wins.
+  // Without enough history: compared with the estimated regular price.
   // Regular prices per store (set by the app) and the lowest regular price among the user's stores
   let REGS = null, LOWREG = null;
   function setRegs(perStore, lowest) { REGS = perStore; LOWREG = lowest; }
@@ -364,7 +364,6 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
     return w == null ? b : w;
   }
   function baseCote(sp, ing) {
-    if (sp.cote >= 1 && sp.cote <= 10) return Math.round(sp.cote);
     const pu = unitPrice(sp, ing);
     if (pu == null) return null;
     const ref = (LOWREG && LOWREG(sp.ing)) || ing.p;
@@ -1924,17 +1923,15 @@ function rSpec() {
     <h2 style="margin-top:8px">Historique des prix (12 mois)</h2>
     <div class="card" style="margin-bottom:8px">
       <div class="sum" style="grid-template-columns:repeat(2,minmax(0,1fr))"><div style="background:var(--bg)"><span class="small mute">Semaines</span><b>${S.histWeeks.length} / 52</b></div><div style="background:var(--bg)"><span class="small mute">Prix gardés</span><b>${histCount()}</b></div></div>
-      <p class="small" style="margin:10px 0 6px">Chaque jeudi, un robot gratuit sur GitHub garde les circulaires de la semaine, même si l'app est fermée. Pour l'année passée, l'IA lit les anciens articles de circulaires gardés par le robot, quelques semaines à chaque ouverture de l'app.</p>
-      ${aiOn() ? `<div class="row"><button class="btn sm red" id="histGo" ${histBusy ? "disabled" : ""}>Remonter 10 semaines maintenant</button>${histBusy ? `<button class="btn sm" id="histStop">Arrêter</button>` : ""}</div>
-      <label class="chk"><input type="checkbox" id="histAuto" ${AIS.histAuto !== false ? "checked" : ""}>Compléter tout seul en arrière-plan</label>` : `<p class="small mute">Ajoute une clé d'IA dans Réglages pour remonter l'année passée.</p>`}
-      <p class="small mute" id="histMsg">${missingWeeks().length ? missingWeeks().length + " semaines à aller chercher." : "Historique complet."}</p>
+      <p class="small" style="margin:10px 0 6px">Seulement les vraies circulaires des épiceries (Flipp). Chaque jeudi, un robot gratuit sur GitHub garde celles de la semaine, même si l'app est fermée. L'historique repart de zéro le 23 novembre 2026 et grandit d'une semaine à la fois.</p>
+      <p class="small mute">Tant qu'il y a moins de 4 prix pour un produit, sa note compare avec son prix régulier.</p>
     </div>
     <h2>Ajouter des spéciaux</h2>
     <div class="card">
-      ${aiOn() ? `<p class="small" style="margin-top:0">Prends une capture d'écran de Glouton (la liste « super spéciaux ») ou une photo de circulaire, ou colle le texte : l'app lit les produits et les prix.</p>
+      ${aiOn() ? `<p class="small" style="margin-top:0">Prends une photo d'une circulaire d'épicerie, ou colle son texte : l'app lit les produits et les prix.</p>
       <div class="row">${aiOn() ? `<label class="btn sm red" for="photo">Lire une photo ou capture</label><input type="file" id="photo" accept="image/*" hidden>` : ""}
       <button class="btn sm" id="pasteBtn">Coller du texte</button></div>
-      <div id="pasteBox" hidden><label class="f" for="pasteTxt">Texte de la circulaire ou de Glouton</label><textarea id="pasteTxt" placeholder="Ex. : Poitrines de poulet 3,99 $/lb Maxi"></textarea><button class="btn sm red" id="pasteGo" style="margin-top:8px">Lire le texte</button></div>
+      <div id="pasteBox" hidden><label class="f" for="pasteTxt">Texte de la circulaire</label><textarea id="pasteTxt" placeholder="Ex. : Poitrines de poulet 3,99 $/lb Maxi"></textarea><button class="btn sm red" id="pasteGo" style="margin-top:8px">Lire le texte</button></div>
       <p class="small mute" id="aiMsg"></p>` : ""}
       <details ${aiOn() ? "" : "open"}><summary>Ajouter à la main</summary>
         <form id="addForm">
@@ -2228,7 +2225,7 @@ function recordReceiptPrices(review) {
   // what was not on special that week in this store = its everyday price
   const onSpec = (id) => SPEC && SPEC.debut === d.toISOString().slice(0, 10) && SPEC.items.some((x) => x.ing === id && x.mag === rc.mag);
   learnRegular(items.filter((x) => !onSpec(x.ing)), "recu", rc.date);
-  return items.length ? recordWeek({ debut: d.toISOString().slice(0, 10), items }) : 0;
+  return items.length; // receipts teach regular prices, not the flyer price history
 }
 
 // + / − on an inventory item: changes the amount (by the unit, 100 g, 250 ml…); at 0 the item is finished and removed
@@ -2615,7 +2612,6 @@ Réponds UNIQUEMENT par cet objet JSON :
       S.extra.push({ ing: k, mag: sp.mag, prix: Number(sp.prix), qte: 1, unite: "u", txt: String(sp.txt || n).slice(0, 80), perso: "p" + Date.now() + ns, fin });
       ns++;
     }
-    recordWeek({ debut: wk, items: S.extra.filter((x) => x.ing === k) });
     rankCache = null; save(); rList(); updateBadge();
     toast(`${AI.PROVIDERS[AIS.last].name} a ajouté : ${n}${ns ? ` (${ns} ${ns > 1 ? "spéciaux trouvés" : "spécial trouvé"})` : ""}`);
   } catch (e) {
@@ -3167,13 +3163,12 @@ async function readSpecials(text, img) {
   const msg = $("#aiMsg");
   msg.textContent = "Lecture en cours…";
   const list = Object.entries(ING).map(([k, v]) => `${k} = ${v.n} (${v.u})`).join("\n");
-  const prompt = `Tu lis des spéciaux d'épicerie québécois (circulaire, capture de l'app Glouton ou texte collé).
+  const prompt = `Tu lis des spéciaux d'épicerie québécois (photo de circulaire ou texte collé).
 Pour chaque produit, associe-le à UN identifiant de cette liste (sinon ing = null) :
 ${list}
 Magasins permis : ${L.STORES.join(", ")}.
-Réponds UNIQUEMENT par un tableau JSON : [{"ing":"id ou null","mag":"magasin","prix":3.99,"qte":1,"unite":"lb|kg|g|ml|L|u","txt":"nom court du produit et format","cote":null}]
+Réponds UNIQUEMENT par un tableau JSON : [{"ing":"id ou null","mag":"magasin","prix":3.99,"qte":1,"unite":"lb|kg|g|ml|L|u","txt":"nom court du produit et format"}]
 - prix au lb : unite "lb", qte 1. Prix au kg : "kg". Paquet de 450 g à 5,99 : prix 5.99, qte 450, unite "g". 3 pour 10 $ : prix 10, qte 3, unite "u" (ou en g si le format est connu).
-- Si une cote Glouton (1 à 10) est visible, mets-la dans "cote", sinon null.
 - Si le magasin n'est pas indiqué, devine selon le logo ; sinon "${S.reg.home}".`;
   try {
     const input = text ? prompt + "\n\nTEXTE :\n" + text : prompt + "\n\nLis l'image jointe.";
@@ -3183,7 +3178,7 @@ Réponds UNIQUEMENT par un tableau JSON : [{"ing":"id ou null","mag":"magasin","
     for (const x of arr) {
       if (!x || !(Number(x.prix) > 0) || !L.STORES.includes(x.mag)) continue;
       const sp = { ing: ING[x.ing] ? x.ing : null, mag: x.mag, prix: Number(x.prix), qte: Number(x.qte) || 1, unite: ["lb", "kg", "g", "ml", "L", "u"].includes(x.unite) ? x.unite : "u",
-        txt: String(x.txt || (ING[x.ing] || {}).n || "").slice(0, 80), cote: x.cote >= 1 && x.cote <= 10 ? Number(x.cote) : undefined, perso: "p" + Date.now() + n, fin };
+        txt: String(x.txt || (ING[x.ing] || {}).n || "").slice(0, 80), perso: "p" + Date.now() + n, fin };
       S.extra.push(sp); n++;
     }
     rankCache = null; save(); rSpec();
@@ -3760,6 +3755,8 @@ function suspectLow(id, pu) {
   const ref = Math.max(Number(g.p0) || 0, Number(g.p) || 0);
   return ref > 0 && pu > 0 && pu < ref * 0.45;
 }
+// The week comes from the stores' own flyers (Flipp, saved by the robot or read live), not from an AI web search
+const officialSpec = (spec) => !!(spec && /Flipp/.test(spec.source || ""));
 // ---------- price history (last 12 months, all stores) ----------
 const addDays = (d, n) => { const x = new Date(d + "T12:00"); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
 function recordWeek(spec) {
@@ -3872,9 +3869,7 @@ async function fetchWeek(debut, current, msg) {
     const txt = await repoFile(`data/noovo/${debut}.txt`, false);
     if (txt && aiOn()) return aiWeek(debut, false, txt);
   }
-  if (!aiOn()) throw new Error("circulaires introuvables pour cette semaine");
-  if (!webOK()) throw new Error("circulaires introuvables (recherche web de l'IA en pause : limite atteinte)");
-  return aiWeek(debut, current, null);
+  throw new Error("circulaires des épiceries introuvables pour l'instant (réessaie plus tard)");
 }
 // ---------- Where am I: postal code -> flyers and stores of my area ----------
 const inMtl = () => /^H/.test(S.reg.postal || "H"); // Montreal island and Laval
@@ -4262,7 +4257,7 @@ async function updateFlyers(silent) {
     if (!(got.debut <= t && t <= got.fin)) throw new Error(`ce n'est pas la bonne semaine (${got.debut} au ${got.fin})`);
     const j = got, items = got.items;
     SPEC = got;
-    recordWeek(SPEC); regFromFlyers(SPEC); learnRegular(SPEC.items, "flyer");
+    if (officialSpec(SPEC)) recordWeek(SPEC); regFromFlyers(SPEC); learnRegular(SPEC.items, "flyer");
     S.spec = SPEC; S.majTry = ""; rankCache = null; save();
     if (S.reg.stores.includes("Bonanza") && aiOn()) { msg("Lecture de la circulaire Bonanza…"); await mergeBonanza(false); }
     if (aiOn() && nearCustom().length) { msg("Lecture des circulaires ajoutées par lien…"); await mergeCustom(); }
@@ -4347,7 +4342,6 @@ async function weeklyAuto() {
   if (!aiOn()) return;
   if (S.iaWeek !== weekKey()) await iaGenerate(true);
   if (AIS.regAuto !== false && webOK() && regBatches().some(regDue)) await updateRegPrices(2, true); // regular prices: a few groups at each opening, all within 2 weeks
-  if (AIS.histAuto !== false && missingWeeks().length) await backfillHistory(3, true); // a few past weeks each time, invisibly
 }
 
 // ---------- AI: new recipes for our tastes, perfect scaling ----------
@@ -4520,7 +4514,6 @@ document.addEventListener("click", (e) => {
   if (t.id === "clrF") { S.cat = ""; S.cuis = ""; S.tag = ""; save(); return rRec(); }
   if (t.id === "selGo") { S.rf = "sel"; S.q = ""; S.cat = ""; S.cuis = ""; S.tag = ""; return show("recettes", false); }
   if (t.id === "regGo") { updateRegPrices(20, false); return; }
-  if (t.id === "histGo") { backfillHistory(10, false); return rSpec(); }
   if (t.id === "histStop") { histStop = true; return; }
   if (d.test) {
     const p = d.test, out = $("#test-" + p);
@@ -4667,7 +4660,6 @@ document.addEventListener("submit", (e) => {
   const un = $("#fUn").value;
   S.extra.push({ ing: $("#fIng").value, mag: $("#fMag").value, prix: Number($("#fPrix").value), qte: un === "lb" || un === "kg" ? 1 : Number($("#fQte").value) || 1, unite: un,
     txt: ING[$("#fIng").value].n, perso: "p" + Date.now(), fin: new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10) });
-  recordWeek({ debut: weekKey(), items: [S.extra[S.extra.length - 1]] });
   rankCache = null; save(); rSpec(); toast("Spécial ajouté");
 });
 document.addEventListener("keydown", (e) => {
@@ -4694,7 +4686,8 @@ Promise.all([getJSON("recettes.json", window.DATA_RECETTES), getJSON("speciaux.j
     if (S.reg.aislesV !== 2) { S.reg.aisles = []; S.reg.aislesV = 2; } // new store walk order (fresh first, frozen last)
     applyRegPrices();
     fixPerLb();
-    L.setHistory(S.hist); recordWeek(SPEC);
+    if (S.histV !== 2) { S.hist = {}; S.histWeeks = []; S.histFail = {}; S.histV = 2; save(); } // price history restarted from zero: stores' own flyers only
+    L.setHistory(S.hist); if (officialSpec(SPEC)) recordWeek(SPEC);
     addIA(S.ia || []);
 
     S.menu = S.menu.filter((id) => BYID[id] && !isCol(id)); S.mes = S.mes.filter((id) => BYID[id]); S.col = (S.col || []).filter((id) => BYID[id]);

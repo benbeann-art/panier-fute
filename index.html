@@ -1454,9 +1454,16 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
     }
     return q;
   }
-  // A size read by the AI that makes the price unbelievably low ("Pilons de poulet 2,49 $" read as per kg): it is per pound
-  const ratio = (r, ing, grams) => (ing.p > 0 ? r.prix / grams / ing.p : 1);
-  const perLbNotKg = (r, ing) => ratio(r, ing, 1000) < 0.5 && ratio(r, ing, 453.6) >= 0.5 && ratio(r, ing, 453.6) <= 1.5;
+  // A size read by the AI that makes the price unbelievably low ("Pilons de poulet 2,49 $" read as 1 kg): it is per pound.
+  // Compared with the usual price (the base one and the regional one, whichever is higher)
+  const refP = (ing) => Math.max(Number(ing.p0) || 0, Number(ing.p) || 0);
+  const GR = { kg: 1000, lb: 453.6, g: 1 };
+  function perLbNotKg(prix, s, ing) {
+    const ref = refP(ing), g = (Number(s.qte) || 0) * (GR[s.unite] || 0);
+    if (!(ref > 0) || !(prix > 0) || g < 900 || g > 1100) return false;
+    const k = prix / g / ref, lb = prix / 453.6 / ref;
+    return k < 0.5 && lb >= 0.5 && lb <= 1.5;
+  }
   // Raw flyer items -> app specials {ing, mag, prix, qte, unite, txt}; the ones with an unknown size are returned apart
   function toItems(raw, ING, opts) {
     opts = opts || {};
@@ -1466,7 +1473,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
       const fix = opts.sizes && opts.sizes[r.ing + "|" + r.name];
       if (fix && fix.skip) continue;
       let s = sizeOf(r, ing.u) || (fix && fix.qte ? fix : null);
-      if (s && fix && s === fix && ing.u === "g" && s.unite === "kg" && s.qte === 1 && perLbNotKg(r, ing)) s = { qte: 1, unite: "lb" }; // "2,49 $" read as per kg but it is per lb
+      if (s && fix && s === fix && ing.u === "g" && perLbNotKg(r.prix, s, ing)) s = { qte: 1, unite: "lb" }; // "2,49 $" read as per kg but it is per lb
       if (!s && opts.guess && ing.u === "u" && PACK[r.ing] && !sizeOf(r, "g")) s = { qte: PACK[r.ing], unite: "u" };
       if (!s) { unknown.push(r); continue; }
       if (ing.u === "u" && (s.unite === "lb" || s.unite === "kg") && EACH_LB[r.ing]) s = { qte: Math.max(1, Math.round(s.qte * (s.unite === "kg" ? 2.2046 : 1) * EACH_LB[r.ing])), unite: "u" };
@@ -1498,6 +1505,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
 
   const api = { STORES, REGIONS, distKm, nearestRegion, TERMS: T, norm, matches, search, collect, sizeOf, toItems, pretty, bestPerStore, LB, applyDetail, excluded, addDetails };
   if (typeof module === "object" && module.exports) module.exports = api;
+  api.perLbNotKg = perLbNotKg;
   root.Flipp = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);
 
@@ -3701,10 +3709,8 @@ function fixPerLb() {
     if (!spec || !Array.isArray(spec.items)) continue;
     for (const sp of spec.items) {
       const ing = ING[sp.ing];
-      if (!ing || ing.u !== "g" || sp.unite !== "kg" || sp.qte !== 1 || !(ing.p > 0) || !(sp.prix > 0)) continue;
-      const k = sp.prix / 1000 / ing.p, lb = sp.prix / 453.6 / ing.p;
-      if (k >= 0.5 || lb < 0.5 || lb > 1.5) continue;
-      sp.unite = "lb";
+      if (!ing || ing.u !== "g" || !Flipp.perLbNotKg(sp.prix, sp, ing)) continue;
+      sp.qte = 1; sp.unite = "lb";
       const h = S.hist && S.hist[sp.ing];
       if (h) S.hist[sp.ing] = h.filter((e) => !(e[0] === spec.debut && e[1] === sp.mag));
     }

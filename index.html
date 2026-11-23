@@ -2167,8 +2167,12 @@ function logReceipt(review) {
 }
 function finishShopping() {
   const { list, ch } = listData();
-  const bought = list.filter((it) => S.coches[it.id]);
-  if (!bought.length) return toast("Coche d'abord ce que tu as acheté");
+  let bought = list.filter((it) => S.coches[it.id]);
+  if (!bought.length) {
+    if (!list.length) return toast("Rien à acheter sur la liste");
+    if (!confirm(`Rien n'est coché. As-tu acheté tout ce qui reste sur la liste (${list.length} articles) ?`)) return toast("Coche ce que tu as acheté, puis touche « J'ai fini mon épicerie »");
+    bought = list;
+  }
   let total = 0, regular = 0;
   for (const it of bought) { const a2 = ch.assign[it.id]; total += a2 ? a2.cost : 0; regular += L.packCost(it.id, it.buy, ING[it.id].p, ING).cost; }
   const mags = [...new Set(bought.map((it) => ch.assign[it.id] && ch.assign[it.id].mag).filter(Boolean))];
@@ -2505,6 +2509,8 @@ function autoMenu() {
   toast("Menu fait avec les meilleurs spéciaux");
 }
 function setMenu(m) {
+  const old = new Set(S.menu); S.cuit = S.cuit || {};
+  for (const id of Object.keys(S.cuit)) if (!m.includes(id) || !old.has(id)) delete S.cuit[id]; // added again = to cook again
   S.menu = m;
   for (const id of m) if (!S.mes.includes(id)) S.mes.unshift(id);
   save();
@@ -2634,7 +2640,8 @@ const TAX = 0.14975;
 const taxable = (id) => { const g = ING[id] || {}; return /Collations et boissons|Ménager et hygiène/.test(g.r || "") || /^(vin_|biere)/.test(id); };
 const taxOf = (list, ch) => Math.round(list.reduce((t, it) => t + (taxable(it.id) && ch.assign[it.id] ? ch.assign[it.id].cost * TAX : 0), 0) * 100) / 100;
 // ---------- cooked recipes: what they used leaves the home inventory, and they leave the grocery list ----------
-const isCooked = (id) => { const d = (S.cuit || {})[id]; return !!d && d >= addDays(today(), -6); };
+// a cooked recipe stays cooked as long as it is in the menu (it comes back only if it is added to the menu again)
+const isCooked = (id) => !!(S.cuit || {})[id];
 // amount left, in words people use: 990 ml of oil, not 66 tablespoons
 function invQtyTxt(id, amt) {
   const g = ING[id]; if (!g) return "";
@@ -2796,6 +2803,7 @@ function rList() {
     <div class="sum"><div><span class="small mute">Où aller</span><b>${ch.stores.map(esc).join(" + ")}</b></div>
       <div><span class="small mute">Total de l'épicerie (avec taxes)</span><b>${L.FR(ch.cost + taxOf(list, ch))} $</b>${taxOf(list, ch) > 0 ? `<span class="small mute">dont ${L.FR(taxOf(list, ch))} $ de taxes</span>` : ""}</div>
       <div><span class="small mute">Sauvé grâce aux spéciaux</span><b style="color:var(--green)">${L.FR(Math.max(0, saved), 0)} $</b></div></div>
+    ${list.length ? `<button class="btn" id="tripDone" style="width:100%;margin:4px 0 10px;min-height:48px">✓ J'ai fini mon épicerie</button>` : ""}
     <p class="small mute">${why} Prix réguliers estimés (moyenne Montréal). Le prix est celui du format complet que tu paies au magasin (il te faut 200 ml d'un pot de 500 ml : c'est le prix du 500 ml), taxes comprises sur ce qui est taxable (collations, boissons, alcool, ménager).</p>
     ${checkItems.length ? `<div class="store"><h3 style="background:#b7791f"><span>À vérifier : tu en as à la maison</span><span class="small">${checkItems.length}</span></h3>
       <p class="small" style="margin:6px 2px">Ton inventaire dit que tu en as. Regarde si c'est assez pour la recette.</p>

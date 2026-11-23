@@ -146,6 +146,7 @@ function parseNoovo(text, debut) {
 }
 
 // ---------- B) Maxi and Provigo websites ----------
+const GENERIC = new Set(["pates", "farine"]); // a spaghetti is also "pâtes": that overlap is fine
 const SUBST = /\b(alternative|substitut|a base de plantes|vegetal|vegetalien|vegane?|vegan|sans viande|imitation)\b/;
 const SITES = { Maxi: "https://www.maxi.ca/fr/search?search-bar=", Provigo: "https://www.provigo.ca/fr/search?search-bar=" };
 function tilesOf(html) {
@@ -197,7 +198,7 @@ async function sites(debut) {
         const r = await fetch(base + encodeURIComponent(Flipp.TERMS[id][0]), { headers: { "user-agent": UA, "accept-language": "fr-CA,fr;q=0.9" } });
         if (!r.ok) { if (++fails >= 8) { console.log(`${store}: stopped (HTTP ${r.status})`); break; } continue; }
         // the product must be this ingredient and only this one (no "bœuf et porc hachés" for ground beef), and no plant-based substitute
-        const tiles = tilesOf(await r.text()).filter((t) => !t.isSponsored && Flipp.matches(id, t.title) && !IDS.some((o) => o !== id && Flipp.matches(o, t.title))
+        const tiles = tilesOf(await r.text()).filter((t) => !t.isSponsored && Flipp.matches(id, t.title) && !IDS.some((o) => o !== id && !GENERIC.has(o) && Flipp.matches(o, t.title))
           && (!SUBST.test(Flipp.norm(t.title)) || SUBST.test(Flipp.norm(Flipp.TERMS[id][0]))));
         const regs = [];
         // club / bulk packs only when nothing else is sold

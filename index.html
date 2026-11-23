@@ -1868,7 +1868,7 @@ function rSpec() {
       : x.sp.img && AIS.photos !== "off" ? `<div class="ph fl"><img src="${esc(x.sp.img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.classList.add('ph-empty');this.remove()"></div>` : x.ing ? ingPic(x.sp.ing) : `<div class="ph ph-empty"><span>${esc(x.sp.txt)}</span></div>`}
       <span class="tag ${coteCls(x.sp, x.c)}">${x.c || "–"}<small>/10</small></span>${on ? `<span class="ok">✓ Choisi</span>` : ""}
       <span class="body"><span class="nm">${esc(x.sp.txt || (x.ing && x.ing.n))}</span>
-      <span class="price">${L.fmtSpecial(x.sp)}</span><span class="meta">${S.store ? "" : esc(x.sp.mag) + " · "}${notRealTxt(x.sp) ? notRealTxt(x.sp) : x.h ? (x.h.lowest ? "<b style='color:var(--green)'>Plus bas de l'année</b>" : `${Math.round(x.h.share * 100)} % moins cher déjà vu`) : x.ing && x.n ? `${x.n} recettes` : x.nc ? `${x.nc} collation${x.nc > 1 ? "s" : ""}` : "Pas dans les recettes"}</span></span></button>`; };
+      <span class="price">${L.fmtSpecial(x.sp)}</span><span class="meta">${S.store ? "" : esc(x.sp.mag) + " · "}${notRealTxt(x.sp) ? notRealTxt(x.sp) : x.h ? (x.h.lowest ? "<b style='color:var(--green)'>Plus bas de l'année</b>" : `${Math.round(x.h.share * 100)} % des prix vus en 1 an étaient plus bas`) : x.ing && x.n ? `${x.n} recettes` : x.nc ? `${x.nc} collation${x.nc > 1 ? "s" : ""}` : "Pas dans les recettes"}</span></span></button>`; };
   const selBar = S.sel.length ? `<div class="selbar"><span><b>${S.sel.length}</b> article${S.sel.length > 1 ? "s" : ""} choisi${S.sel.length > 1 ? "s" : ""}</span><button class="btn sm" id="selClear">Effacer</button><button class="btn sm red" id="selGo">Voir les recettes →</button></div>` : "";
   const FLYER = { Maxi: "https://www.circulaire-en-ligne.ca/circulaire-maxi/speciaux-promotions-rabais-semaine", "Super C": "https://www.circulaire-en-ligne.ca/circulaire-super-c",
     IGA: "https://www.iga.net/fr/circulaire", Metro: "https://www.circulaire-en-ligne.ca/circulaire-metro", Provigo: "https://www.circulaire-en-ligne.ca/circulaire-provigo/speciaux-promotions-rabais-semaine",
@@ -3715,6 +3715,20 @@ function fixPerLb() {
       if (h) S.hist[sp.ing] = h.filter((e) => !(e[0] === spec.debut && e[1] === sp.mag));
     }
   }
+  // past weeks read the same wrong way: meat or fish prices under 45 % of the usual price are dropped from the history
+  for (const id in S.hist || {}) {
+    if (!suspectLow(id)) continue;
+    S.hist[id] = S.hist[id].filter((e) => !suspectLow(id, e[2]));
+    if (!S.hist[id].length) delete S.hist[id];
+  }
+}
+// A price per gram for meat or fish so low it is almost surely a per-pound price read as per kg
+function suspectLow(id, pu) {
+  const g = ING[id];
+  if (!g || g.u !== "g" || !/^(Viandes|Poissons)/.test(g.r || "")) return false;
+  if (pu === undefined) return true;
+  const ref = Math.max(Number(g.p0) || 0, Number(g.p) || 0);
+  return ref > 0 && pu > 0 && pu < ref * 0.45;
 }
 // ---------- price history (last 12 months, all stores) ----------
 const addDays = (d, n) => { const x = new Date(d + "T12:00"); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
@@ -3723,7 +3737,7 @@ function recordWeek(spec) {
   S.hist = S.hist || {}; let n = 0;
   for (const sp of spec.items) {
     const ing = ING[sp.ing]; if (!ing) continue;
-    const pu = L.unitPrice(sp, ing); if (!(pu > 0)) continue;
+    const pu = L.unitPrice(sp, ing); if (!(pu > 0) || suspectLow(sp.ing, pu)) continue;
     const list = (S.hist[sp.ing] = S.hist[sp.ing] || []);
     if (list.some((e) => e[0] === spec.debut && e[1] === sp.mag)) continue;
     list.push([spec.debut, sp.mag, Math.round(pu * 1e6) / 1e6]); n++;

@@ -40,6 +40,9 @@ jobs:
           if [ ! -d ../d/data ] && [ -d data ]; then cp -r data ../d/; fi
       - name: Lire les circulaires
         run: node robot/circulaires.mjs --out=../d --backfill=${{ github.event.inputs.backfill || '2' }} ${{ github.event.inputs.force == 'oui' && '--force' || '' }}
+      - name: Prix de 2026 (Noovo Moi, sites Maxi et Provigo) - sans IA
+        continue-on-error: true
+        run: node robot/historique.mjs --out=../d
       - name: Enregistrer (branche data, refaite chaque fois pour rester petite)
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1923,7 +1923,7 @@ function rSpec() {
     <h2 style="margin-top:8px">Historique des prix (12 mois)</h2>
     <div class="card" style="margin-bottom:8px">
       <div class="sum" style="grid-template-columns:repeat(2,minmax(0,1fr))"><div style="background:var(--bg)"><span class="small mute">Semaines</span><b>${S.histWeeks.length} / 52</b></div><div style="background:var(--bg)"><span class="small mute">Prix gardés</span><b>${histCount()}</b></div></div>
-      <p class="small" style="margin:10px 0 6px">Seulement les vraies circulaires des épiceries (Flipp). Chaque jeudi, un robot gratuit sur GitHub garde celles de la semaine, même si l'app est fermée. L'historique repart de zéro le 23 novembre 2026 et grandit d'une semaine à la fois.</p>
+      <p class="small" style="margin:10px 0 6px">Prix de 2026 seulement, jamais inventés : les vraies circulaires des épiceries (Flipp), les spéciaux de la semaine relevés par Noovo Moi (prix et épicerie écrits mot pour mot) et les prix des sites de Maxi et Provigo. Un robot gratuit sur GitHub les ramasse chaque jeudi, même si l'app est fermée.${S.siteRegDate ? ` Prix normaux de Maxi et Provigo du ${frDate(S.siteRegDate)}.` : ""}</p>
       <p class="small mute">Tant qu'il y a moins de 4 prix pour un produit, sa note compare avec son prix régulier.</p>
     </div>
     <h2>Ajouter des spéciaux</h2>
@@ -2872,7 +2872,8 @@ function regAt(id, store) {
   if (String(id).startsWith("u_")) return ING[id] ? ING[id].p : null; // a price I typed myself: the same in every store
   const x = ((S.regStore || {})[id] || {})[store];
   if (x && x.p > 0 && x.date >= addDays(today(), -150)) return x.p;
-  return ING[id] ? ING[id].p * (TIER[store] || 1) : null;
+  if (!ING[id]) return null;
+  return ((S.regPrices || {})[id] || {}).by === "sites" ? ING[id].p : ING[id].p * (TIER[store] || 1);
 }
 function lowReg(id) { // cheapest everyday price among my stores: {p, s}
   let best = null;
@@ -4196,6 +4197,43 @@ async function robotHistory() {
   if (n) { save(); if (S.view === "speciaux") rSpec(); }
   return n;
 }
+// 2026 prices found by the robot without AI (Noovo Moi weekly articles, Maxi and Provigo websites): into the history
+const Y_START = "2026-01-01", Y_END = "2026-12-31";
+async function robotWebHistory() {
+  const idx = await repoFile("data/hist/index.json", true);
+  if (!Array.isArray(idx)) return 0;
+  S.histSrc = S.histSrc || {}; let n = 0;
+  for (const w of idx) {
+    if (w < Y_START || w > Y_END) continue;
+    const f = await repoFile(`data/hist/${w}.json`, true);
+    if (!f || !Array.isArray(f.items) || S.histSrc[w] === f.made) continue;
+    const items = f.items.filter((x) => x && ING[x.ing] && x.prix > 0);
+    recordWeek({ debut: w, items }); S.histSrc[w] = f.made; n++;
+  }
+  if (n) { save(); if (S.view === "speciaux") rSpec(); }
+  return n;
+}
+// Everyday prices read on the Maxi and Provigo websites: those two stores' own prices, and the normal price for the other stores
+async function robotSitePrices() {
+  const r = await repoFile("data/reg/latest.json", true);
+  if (!r || !r.stores || !r.date || r.date === S.siteRegDate) return 0;
+  S.regStore = S.regStore || {}; S.regPrices = S.regPrices || {}; let n = 0;
+  const ids = new Set(Object.values(r.stores).flatMap((x) => Object.keys(x || {})));
+  for (const id of ids) {
+    if (!ING[id]) continue;
+    const got = [];
+    for (const st of ["Maxi", "Provigo"]) {
+      const x = (r.stores[st] || {})[id];
+      if (!x || !(x.pu > 0)) continue;
+      (S.regStore[id] = S.regStore[id] || {})[st] = { p: x.pu, date: r.date, src: "site" };
+      got.push(x.pu);
+    }
+    if (got.length) { S.regPrices[id] = { p: got.reduce((a, b) => a + b, 0) / got.length, date: r.date, by: "sites" }; n++; }
+  }
+  S.siteRegDate = r.date;
+  if (n) { applyRegPrices(); rankCache = null; save(); render(S.view); }
+  return n;
+}
 // Regular prices printed in the flyers ("au lieu de …") become the app's regular prices
 function regFromFlyers(spec) {
   const by = {};
@@ -4337,11 +4375,13 @@ async function weeklyAuto() {
   try { await topUpSnackSpecials(); } catch (e) {}
   try { await ensureCoords(); await loadRegistry(); addNearCustom(); } catch (e) {}
   try { await robotHistory(); } catch (e) {}
+  try { await robotWebHistory(); } catch (e) {}
+  try { await robotSitePrices(); } catch (e) {}
   if (aiOn() && SPEC && nearCustom().length) { try { await mergeCustom(); } catch (e) {} }
   if (aiOn() && SPEC && S.reg.stores.includes("Bonanza") && !(S.bonanza && S.bonanza.v === 2 && S.bonanza.date >= addDays(today(), -6) && SPEC.items.some((x) => x.mag === "Bonanza"))) { try { await mergeBonanza(false); } catch (e) {} }
   if (!aiOn()) return;
   if (S.iaWeek !== weekKey()) await iaGenerate(true);
-  if (AIS.regAuto !== false && webOK() && regBatches().some(regDue)) await updateRegPrices(2, true); // regular prices: a few groups at each opening, all within 2 weeks
+  if (!S.siteRegDate && AIS.regAuto !== false && webOK() && regBatches().some(regDue)) await updateRegPrices(2, true); // only without the Maxi / Provigo website prices
 }
 
 // ---------- AI: new recipes for our tastes, perfect scaling ----------

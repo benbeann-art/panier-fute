@@ -146,6 +146,7 @@ function parseNoovo(text, debut) {
 }
 
 // ---------- B) Maxi and Provigo websites ----------
+const SUBST = /\b(alternative|substitut|a base de plantes|vegetal|vegetalien|vegane?|vegan|sans viande|imitation)\b/;
 const SITES = { Maxi: "https://www.maxi.ca/fr/search?search-bar=", Provigo: "https://www.provigo.ca/fr/search?search-bar=" };
 function tilesOf(html) {
   const m = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
@@ -160,7 +161,7 @@ function tilesOf(html) {
   return out;
 }
 // "550 g, 2,73 $/100g" or "8,58 $/1kg 3,89 $/1lb" or "2 l, 0,31 $/100ml" or "1 ea, 14,00 $/1ch" -> price per g / ml / unit
-function perUnit(sizing, u) {
+function perUnit(sizing, u, price) {
   const s = String(sizing || "").replace(/ /g, " ");
   let m;
   if (u === "g") {
@@ -173,6 +174,8 @@ function perUnit(sizing, u) {
     if ((m = s.match(/(\d+[,.]\d+)\s*\$\s*\/\s*1\s*l\b/i))) return NUM(m[1]) / 1000;
   }
   if (u === "u" && (m = s.match(/(\d+[,.]\d+)\s*\$\s*\/\s*1\s*ch/i))) return NUM(m[1]);
+  // sold by the piece ("1 ea", "6 un") with the price of the package
+  if (u === "u" && price > 0 && (m = s.match(/^\s*(\d+)\s*(ea|un|unit[ée]s?)\b/i))) return price / Number(m[1]);
   return null;
 }
 // the size of the package ("550 g", "1.575 kg", "2 l") for the sale price
@@ -193,10 +196,14 @@ async function sites(debut) {
       try {
         const r = await fetch(base + encodeURIComponent(Flipp.TERMS[id][0]), { headers: { "user-agent": UA, "accept-language": "fr-CA,fr;q=0.9" } });
         if (!r.ok) { if (++fails >= 8) { console.log(`${store}: stopped (HTTP ${r.status})`); break; } continue; }
-        const tiles = tilesOf(await r.text()).filter((t) => !t.isSponsored && Flipp.matches(id, t.title));
+        // the product must be this ingredient and only this one (no "bœuf et porc hachés" for ground beef), and no plant-based substitute
+        const tiles = tilesOf(await r.text()).filter((t) => !t.isSponsored && Flipp.matches(id, t.title) && !IDS.some((o) => o !== id && Flipp.matches(o, t.title))
+          && (!SUBST.test(Flipp.norm(t.title)) || SUBST.test(Flipp.norm(Flipp.TERMS[id][0]))));
         const regs = [];
-        for (const t of tiles) {
-          const pu = perUnit(t.packageSizing, ing.u); if (!(pu > 0)) continue;
+        // club / bulk packs only when nothing else is sold
+        const normal = tiles.filter((t) => !/\bclub\b|\bvrac\b|\bcaisse\b/.test(Flipp.norm(t.title)));
+        for (const t of normal.length ? normal : tiles) {
+          const pu = perUnit(t.packageSizing, ing.u, NUM(t.pricing.price)); if (!(pu > 0)) continue;
           const price = NUM(t.pricing.price), was = t.pricing.wasPrice ? NUM(String(t.pricing.wasPrice).replace(/[^\d,.]/g, "")) : 0;
           const regPu = was > price ? (pu * was) / price : pu;
           if (regPu >= ing.p * 0.2 && regPu <= ing.p * 4) regs.push({ pu: regPu, n: t.title });
@@ -208,9 +215,9 @@ async function sites(debut) {
             if (sp) { const x = { ing: id, mag: store, ...sp, txt: `${t.brand ? t.brand + " " : ""}${t.title}`.slice(0, 90), src: base.split("/fr/")[0] + (t.link || "") }; if (believable(x)) specials.push(x); }
           }
         }
+        // everyday price = the product at the first quarter of the prices (not the odd cheapest one, not the fancy ones)
         regs.sort((a, b) => a.pu - b.pu);
-        const low = regs.slice(0, 3);
-        if (low.length) reg.stores[store][id] = { pu: Math.round(low[Math.floor(low.length / 2)].pu * 1e6) / 1e6, n: low.length, txt: low[Math.floor(low.length / 2)].n.slice(0, 80) };
+        if (regs.length) { const k = regs[Math.floor((regs.length - 1) / 4)]; reg.stores[store][id] = { pu: Math.round(k.pu * 1e6) / 1e6, n: regs.length, txt: k.n.slice(0, 80) }; }
         fails = 0;
       } catch (e) { if (++fails >= 8) { console.log(`${store}: stopped (${e.message})`); break; } }
       await sleep(1200);

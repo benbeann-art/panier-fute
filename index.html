@@ -4214,6 +4214,17 @@ async function robotWebHistory() {
   return n;
 }
 // Everyday prices read on the Maxi and Provigo websites: those two stores' own prices, and the normal price for the other stores
+// One-time cleanup (v3.13.40): wrong products had been read on the sites (plant-based butter, mixed ground meat, prepared foods)
+function siteFix() {
+  if (S.siteFix === 1) return;
+  for (const id in S.regStore || {}) for (const st of ["Maxi", "Provigo"]) if (S.regStore[id][st] && S.regStore[id][st].src === "site") delete S.regStore[id][st];
+  for (const id in S.regPrices || {}) if (S.regPrices[id].by === "sites") delete S.regPrices[id];
+  S.siteRegDate = null;
+  const W = "2026-11-19", BAD = ["bacon", "beurre", "bleuets", "bouillon_boeuf", "bouillon_poulet", "carotte", "cheddar", "courge", "couscous", "dinde_tranchee", "edamame", "epinards", "farine", "fraises", "fromage_creme", "graines_citrouille", "graines_lin", "kale", "lasagne", "legumes_mel", "macaroni", "mozzarella", "patate", "pates", "petits_pois", "pois_mange_tout", "riz_basmati", "saucisses"];
+  for (const id of BAD) if (S.hist && S.hist[id]) S.hist[id] = S.hist[id].filter((e) => !(e[0] === W && (e[1] === "Maxi" || e[1] === "Provigo")));
+  if (S.histSrc) delete S.histSrc[W];
+  S.siteFix = 1; save();
+}
 async function robotSitePrices() {
   const r = await repoFile("data/reg/latest.json", true);
   if (!r || !r.stores || !r.date || r.date === S.siteRegDate) return 0;
@@ -4375,7 +4386,7 @@ async function weeklyAuto() {
   try { await topUpSnackSpecials(); } catch (e) {}
   try { await ensureCoords(); await loadRegistry(); addNearCustom(); } catch (e) {}
   try { await robotHistory(); } catch (e) {}
-  try { await robotWebHistory(); } catch (e) {}
+  try { siteFix(); await robotWebHistory(); } catch (e) {}
   try { await robotSitePrices(); } catch (e) {}
   if (aiOn() && SPEC && nearCustom().length) { try { await mergeCustom(); } catch (e) {} }
   if (aiOn() && SPEC && S.reg.stores.includes("Bonanza") && !(S.bonanza && S.bonanza.v === 2 && S.bonanza.date >= addDays(today(), -6) && SPEC.items.some((x) => x.mag === "Bonanza"))) { try { await mergeBonanza(false); } catch (e) {} }

@@ -144,7 +144,8 @@ body:has(#timers:not([hidden])){padding-bottom:calc(170px + env(safe-area-inset-
 .art .ph img,.art .ph-empty{aspect-ratio:4/3}
 .art .ph.fl{background:#fff}.art .ph.fl img{width:100%;object-fit:contain;padding:6px}
 .ph-empty{display:grid;place-items:center;background:#fff6cc;padding:8px;text-align:center;font-weight:800;font-size:14px;color:#6d5800}
-.art .tag{position:absolute;top:6px;left:6px;box-shadow:0 2px 6px rgba(0,0,0,.25)}
+.art .tags2{position:absolute;top:6px;left:6px}.art .tags2 .tag{box-shadow:0 2px 6px rgba(0,0,0,.25)}
+.tags2{display:inline-flex;gap:4px;flex:none}.tags2 .tag{min-width:48px}.tags2 .tag small{left:0;right:0;text-align:center;bottom:2px}.tags2 .tag{padding-bottom:8px}
 .art .ok{position:absolute;top:8px;right:8px;background:var(--green);color:#fff;font-weight:800;font-size:12px;padding:3px 8px;border-radius:999px}
 .art.on{border-color:var(--red);box-shadow:0 0 0 3px var(--red)}
 .art .body{display:flex;flex-direction:column;gap:2px;padding:8px 10px 10px}
@@ -335,11 +336,11 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
   function setRegs(perStore, lowest) { REGS = perStore; LOWREG = lowest; }
   const regAt = (id, s, ING) => (REGS && REGS(id, s)) || ING[id].p;
   // This week's scores per ingredient, adjusted so a lower price never gets a lower score than a higher one,
-  // and only the lowest price of the week can get 10 (set by setWeek)
-  let WEEKC = null;
+  // (set by setWeek)
+  let WEEKC = null, WMIN = null;
   const wkey = (sp) => [sp.ing, sp.mag, sp.prix, sp.qte || 1, sp.unite || "", sp.txt || "", sp.perso || ""].join("|");
   function setWeek(items, ING, stores) {
-    WEEKC = new Map();
+    WEEKC = new Map(); WMIN = {};
     const by = {};
     for (const sp of items || []) {
       const ing = sp && ING[sp.ing];
@@ -350,12 +351,20 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
     }
     for (const id in by) {
       const l = by[id].sort((a, c) => a.pu - c.pu || c.b - a.b);
-      const min = l[0].pu; let run = 10;
-      for (const x of l) {
-        run = Math.min(run, x.b);
-        WEEKC.set(x.k, x.pu > min * 1.005 ? Math.min(run, 9) : run);
-      }
+      let run = 10;
+      WMIN[id] = l[0].pu;
+      for (const x of l) { run = Math.min(run, x.b); WEEKC.set(x.k, run); } // a lower price never gets a lower score
     }
+  }
+  // Week score 1-10: compared with the cheapest price of this ingredient this week in my stores
+  // (specials and everyday prices). 10 = the cheapest this week; each 5 % more costs 1 point.
+  function weekCote(sp, ing) {
+    const pu = unitPrice(sp, ing);
+    if (pu == null) return null;
+    const ref = (LOWREG && LOWREG(sp.ing)) || ing.p;
+    const min = Math.min(WMIN && WMIN[sp.ing] != null ? WMIN[sp.ing] : Infinity, ref);
+    if (!(min > 0) || pu <= min * 1.005) return 10;
+    return Math.max(1, 10 - Math.round((pu / min - 1) / 0.05));
   }
   function cote(sp, ing) {
     const b = baseCote(sp, ing);
@@ -602,7 +611,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
     return pre + FR(sp.prix) + " $" + u;
   }
 
-  root.Logic = { setRegs, setHistory, setWeek, histInfo, STORES, DAYS, unitPrice, cote, indexSpecials, scoreRecipe, planWeek, scaleRecipe, portions, autoPick, buildList, chooseStores, fmtQty, fmtSpecial, FR, packOf, packCost };
+  root.Logic = { setRegs, setHistory, setWeek, weekCote, histInfo, STORES, DAYS, unitPrice, cote, indexSpecials, scoreRecipe, planWeek, scaleRecipe, portions, autoPick, buildList, chooseStores, fmtQty, fmtSpecial, FR, packOf, packCost };
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
@@ -1879,13 +1888,14 @@ function rSpec() {
     const n = ing ? REC.filter((r) => r.i.some((i) => i[0] === sp.ing)).length : 0;
     const nc = ing ? COL.filter((r) => r.i.some((i) => i[0] === sp.ing)).length : 0;
     const pu = ing ? L.unitPrice(sp, ing) : null;
-    return { sp, ing, c, n, nc, on: S.reg.stores.includes(sp.mag), h: pu ? L.histInfo(sp.ing, pu) : null };
-  }).sort((a, b) => (b.c || 0) - (a.c || 0));
+    return { sp, ing, c, w: ing ? L.weekCote(sp, ing) : null, n, nc, on: S.reg.stores.includes(sp.mag), h: pu ? L.histInfo(sp.ing, pu) : null };
+  }).sort((a, b) => (b.c || 0) + (b.w || 0) - (a.c || 0) - (a.w || 0) || (b.c || 0) - (a.c || 0));
+  const two = (x) => `<span class="tags2"><span class="tag ${coteCls(x.sp, x.c)}" title="Année : ${x.c || "?"} sur 10">${x.c || "–"}<small>an</small></span><span class="tag ${x.w == null ? "c-o" : x.w >= 8 ? "c-g" : x.w >= 5 ? "c-y" : "c-r"}" title="Semaine : ${x.w || "?"} sur 10">${x.w || "–"}<small>sem</small></span></span>`;
   const row = (x) => `<div class="spec" style="${x.on ? "" : "opacity:.5"}">
-      <span class="tag ${coteCls(x.sp, x.c)}" title="Cote ${x.c || "?"} sur 10">${x.c || "–"}<small>/10</small></span>
+      ${two(x)}
       <div><div class="nm">${esc(x.sp.txt || (x.ing && x.ing.n))}</div>
         <div class="meta">${esc(x.sp.mag)}${x.on ? "" : " · magasin non coché"}${x.sp.perso ? " · ajouté par toi" : ""}</div>${notRealTxt(x.sp) ? `<div class="meta">${notRealTxt(x.sp)}</div>` : ""}</div>
-      ${x.h ? `<div class="meta" style="grid-column:2/4">${x.h.lowest && x.c === 10 ? "<b style='color:var(--green)'>Plus bas prix de l'année</b>" : `${Math.round(x.h.share * 100)} % des prix vus en 12 mois étaient plus bas`} · plus bas vu : ${perUnitTxt(x.ing, x.h.min[2])} chez ${esc(x.h.min[1])} (${frDate(x.h.min[0])})</div>` : ""}
+      ${x.h ? `<div class="meta" style="grid-column:2/4">${x.w === 10 ? "<b style='color:var(--green)'>Le moins cher cette semaine</b> · " : ""}${x.h.lowest && x.c === 10 ? "<b style='color:var(--green)'>Plus bas prix de l'année</b>" : `${Math.round(x.h.share * 100)} % des prix vus en 12 mois étaient plus bas`} · plus bas vu : ${perUnitTxt(x.ing, x.h.min[2])} chez ${esc(x.h.min[1])} (${frDate(x.h.min[0])})</div>` : ""}
       <div class="row" style="gap:2px;grid-row:1;grid-column:3"><span class="price">${L.fmtSpecial(x.sp)}</span>${x.sp.perso ? `<button class="x" data-del="${esc(x.sp.perso)}" aria-label="Retirer">×</button>` : ""}</div>
       ${x.n ? `<button class="go" data-ing="${x.sp.ing}">${x.n} recettes avec ça →</button>` : x.nc ? `<button class="go" data-go="collations">${x.nc} collation${x.nc > 1 ? "s" : ""} avec ça →</button>` : `<span class="meta" style="grid-column:2/4">Pas utilisé dans les recettes</span>`}
     </div>`;
@@ -1895,7 +1905,7 @@ function rSpec() {
     return `<button class="art ${on ? "on" : ""}" ${x.ing ? `data-sel="${x.sp.ing}"` : "disabled"} aria-pressed="${on}" style="${x.on ? "" : "opacity:.5"}">
       ${x.sp.box && x.sp.pdf ? ((u) => u ? `<div class="ph fl"><img src="${u}" alt=""></div>` : `<div class="ph fl ph-empty" data-crop="${cropKey(x.sp)}"><span>${esc(x.sp.txt)}</span></div>`)(flyerImg(x.sp))
       : x.sp.img && AIS.photos !== "off" ? `<div class="ph fl"><img src="${esc(x.sp.img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.classList.add('ph-empty');this.remove()"></div>` : x.ing ? ingPic(x.sp.ing) : `<div class="ph ph-empty"><span>${esc(x.sp.txt)}</span></div>`}
-      <span class="tag ${coteCls(x.sp, x.c)}">${x.c || "–"}<small>/10</small></span>${on ? `<span class="ok">✓ Choisi</span>` : ""}
+      ${two(x)}${on ? `<span class="ok">✓ Choisi</span>` : ""}
       <span class="body"><span class="nm">${esc(x.sp.txt || (x.ing && x.ing.n))}</span>
       <span class="price">${L.fmtSpecial(x.sp)}</span><span class="meta">${S.store ? "" : esc(x.sp.mag) + " · "}${notRealTxt(x.sp) ? notRealTxt(x.sp) : x.h ? (x.h.lowest && x.c === 10 ? "<b style='color:var(--green)'>Plus bas de l'année</b>" : `${Math.round(x.h.share * 100)} % des prix vus en 1 an étaient plus bas`) : x.ing && x.n ? `${x.n} recettes` : x.nc ? `${x.nc} collation${x.nc > 1 ? "s" : ""}` : "Pas dans les recettes"}</span></span></button>`; };
   const selBar = S.sel.length ? `<div class="selbar"><span><b>${S.sel.length}</b> article${S.sel.length > 1 ? "s" : ""} choisi${S.sel.length > 1 ? "s" : ""}</span><button class="btn sm" id="selClear">Effacer</button><button class="btn sm red" id="selGo">Voir les recettes →</button></div>` : "";
@@ -1911,7 +1921,7 @@ function rSpec() {
     <h1>Les spéciaux de la semaine</h1>
     <div class="week"><b>${SPEC ? "Du " + frDate(SPEC.debut) + " au " + frDate(SPEC.fin) : "Aucune circulaire chargée"}</b><span class="mute small">${esc(SPEC ? SPEC.source : "")}</span></div>
     ${exp ? `<div class="warn">Ces spéciaux sont terminés. L'app va lire les nouvelles circulaires toute seule (ou touche « Mettre à jour les circulaires »).</div>` : ""}
-    <p class="lead">Cote de 1 à 10 : <b>10 = plus bas prix de l'année</b>, comparé à tous les prix vus dans toutes les épiceries depuis 12 mois (historique : ${S.histWeeks.length} semaine${S.histWeeks.length > 1 ? "s" : ""}). Tant que l'historique est petit, la cote compare au prix régulier estimé.<br>${COTE_LEG}</p>
+    <p class="lead">Deux notes de 1 à 10 :<br><b>an</b> : 10 = plus bas prix de l'année, comparé à tous les prix vus depuis 12 mois (historique : ${S.histWeeks.length} semaine${S.histWeeks.length > 1 ? "s" : ""}).<br><b>sem</b> : 10 = le moins cher cette semaine dans tes épiceries (spéciaux et prix de tous les jours), −1 point par 5 % plus cher.<br>${COTE_LEG}</p>
     <div class="row"><button class="btn red" data-go="menu-auto">Faire mon menu avec les spéciaux</button><button class="btn" id="majNow">Mettre à jour les circulaires</button></div><p class="small mute" id="majMsg"></p>
     <h2>Circulaires de la semaine</h2>
     <div class="seg" role="group" aria-label="Épicerie">${[""].concat(storesHere).map((s) => `<button data-store-f="${esc(s)}" aria-pressed="${S.store === s}">${s || "Toutes"}</button>`).join("")}</div>

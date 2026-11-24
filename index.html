@@ -2118,9 +2118,13 @@ function invIdCatalog() {
   return Object.entries(ING).filter(([, g]) => g.r !== "Garde-manger et épices" || true).map(([k, g]) => `${k} = ${g.n}`).join("\n");
 }
 // Receipt: the AI reads store, date, items, quantities and prices -> inventory + real prices in the history
+let invBusyAt = 0;
 async function readReceipt(files) {
-  if (invBusy || !files.length) return;
-  invBusy = true; invMsg = "L'IA lit ton reçu…"; rHome();
+  if (!files.length) return;
+  if (invBusy && Date.now() - invBusyAt < 150000) return toast("L'IA lit déjà une photo, attends un peu");
+  invBusy = true; invBusyAt = Date.now(); invMsg = "L'IA lit ton reçu… (jusqu'à 1 minute)"; rHome();
+  toast("Photo reçue : l'IA lit ta facture…", 5000);
+  setTimeout(() => { const m = $("#invMsg"); if (m) m.scrollIntoView({ block: "center", behavior: "smooth" }); }, 50);
   const prompt = `Voici la photo d'un reçu d'épicerie du Québec. Lis chaque article acheté (sans en inventer), avec :
 - le nom clair en français (les reçus abrègent : « PTS POULET DESOS » = poitrines de poulet désossées),
 - la quantité achetée (ex. « 1,2 kg », « 2 », « 4 L »), le prix payé total pour cette ligne ("prix"), et son prix SANS le rabais ("regulier" : prix + rabais de cet article ; égal à "prix" s'il n'y a pas de rabais),
@@ -2134,7 +2138,8 @@ Une ligne « Rabais » ou « RABAIS SUR LE PRIX COURANT » sous un article appar
 Dans les articles, ignore les taxes, sacs, consignes et sous-totaux.
 Réponds UNIQUEMENT par cet objet JSON : {"recus":[{"mag":"magasin ou null","date":"AAAA-MM-JJ","total":123.45}],"items":[{"n":"nom","qte":"quantité","prix":12.34,"zone":"frigo|congel|garde","jours":7,"id":"identifiant ou null","recu":0,"regulier":14.50}]}`;
   try {
-    const j = AI.extractJSON(await askAI(prompt, { images: await Promise.all([...files].slice(0, 4).map((f) => shrinkImg(f, 2200))), maxTokens: 6000 }), "object");
+    const ask = askAI(prompt, { images: await Promise.all([...files].slice(0, 4).map((f) => shrinkImg(f, 2200))), maxTokens: 8000 });
+    const j = AI.extractJSON(await Promise.race([ask, new Promise((_, no) => setTimeout(() => no(new Error("l'IA n'a pas répondu après 2 minutes")), 120000))]), "object");
     if (!j || !Array.isArray(j.items)) throw new Error("reçu illisible");
     invReview = j.items.filter((x) => x && x.n).map((x) => ({ n: String(x.n).slice(0, 60), qte: String(x.qte || "").slice(0, 30), zone: ZONES[x.zone] ? x.zone : "frigo",
       id: ING[x.id] ? x.id : null, days: Number(x.jours) > 0 ? Math.round(Number(x.jours)) : null, prix: Number(x.prix) > 0 ? Number(x.prix) : null, reg: Number(x.regulier) > Number(x.prix) + 0.009 ? Math.round(Number(x.regulier) * 100) / 100 : null, keep: true, recu: Number(x.recu) >= 0 ? Math.floor(Number(x.recu)) : 0 }));
@@ -2144,7 +2149,7 @@ Réponds UNIQUEMENT par cet objet JSON : {"recus":[{"mag":"magasin ou null","dat
     invReview.receipts = rcs; invReview.receipt = rcs[0];
     const tot = rcs.reduce((t, r) => t + (r.total || 0), 0);
     invMsg = invReview.length ? `${rcs.length > 1 ? rcs.length + " factures" : "Reçu" + (rcs[0].mag ? " de " + rcs[0].mag : "")} : ${invReview.length} articles, ${L.FR(tot)} $ payés. Vérifie le total de chaque facture, puis ajoute.` : "Rien de lisible. Reprends la photo bien à plat, avec de la lumière.";
-  } catch (e) { invMsg = "La lecture du reçu n'a pas marché : " + (e.message || "erreur"); }
+  } catch (e) { invMsg = "La lecture du reçu n'a pas marché : " + (e.message || "erreur"); toast(invMsg, 7000); }
   invBusy = false; rHome();
 }
 // real price paid -> history (unit price), so the deal scores learn from your own receipts
@@ -2448,10 +2453,10 @@ function rHome() {
       ${aiOn() ? `<label class="btn red" for="invPhoto" style="display:inline-flex;align-items:center">Prendre en photo : ${ZONES[z].toLowerCase()}</label>
         <input type="file" id="invPhoto" accept="image/*" capture="environment" multiple hidden>
         <label class="btn" for="rcPhoto" style="display:inline-flex;align-items:center;margin-left:4px">Scanner un reçu</label>
-        <input type="file" id="rcPhoto" accept="image/*" capture="environment" hidden>
+        <input type="file" id="rcPhoto" accept="image/*" multiple hidden>
         <p class="small mute" style="margin:6px 0 0">Tu peux prendre plusieurs photos (une par tablette). Le reçu ajoute tes achats à l'inventaire et garde les vrais prix payés.</p>`
         : `<p class="small" style="margin:0">Ajoute ta clé Gemini dans Réglages pour que l'IA reconnaisse tes photos. En attendant, ajoute tes articles à la main.</p>`}
-      ${invMsg ? `<p class="small" style="margin:8px 0 0"><b>${esc(invMsg)}</b></p>` : ""}
+      ${invMsg ? `<p class="small" id="invMsg" style="margin:8px 0 0"><b>${esc(invMsg)}</b></p>` : ""}
       <form id="invForm" class="row" style="margin-top:12px;flex-wrap:nowrap"><input type="text" id="invTxt" placeholder="Ajouter à la main : ex. lait, poulet, riz…" aria-label="Article"><button class="btn sm">Ajouter</button></form>
     </div>
     ${expiryBox().replace('<button class="btn sm" data-go="maison" style="margin-left:6px">Recettes pour les utiliser</button>', "")}
@@ -4729,7 +4734,7 @@ document.addEventListener("change", (e) => {
   if (t.dataset.xp !== undefined) { const ex = S.extras[Number(t.dataset.xp)]; if (ex) { ex.p = Math.max(0, Number(t.value) || 0); ensureCustom(ex); rankCache = null; save(); rList(); } return; }
   if (t.id === "awake") { keepAwake(t.checked); toast(t.checked ? "L'écran restera allumé" : "Écran normal"); return; }
   if (t.id === "invPhoto" && t.files && t.files.length) return readFridgePhotos([...t.files].slice(0, 6), S.invTab || "frigo");
-  if (t.id === "rcPhoto" && t.files && t.files.length) return readReceipt([...t.files].slice(0, 3));
+  if (t.id === "rcPhoto" && t.files && t.files.length) { const f = [...t.files].slice(0, 4); t.value = ""; return readReceipt(f); }
   if (t.dataset.invexp !== undefined) { const x = zoneList(S.invTab || "frigo")[Number(t.dataset.invexp)]; if (x) { x.exp = t.value; save(); rHome(); } return; }
   if (t.dataset.invmove !== undefined) { const from = S.invTab || "frigo", to = t.value; if (to !== from) { const it = zoneList(from).splice(Number(t.dataset.invmove), 1)[0]; if (it) { if (it.id) it.exp = addDays(today(), shelfDays(it.id, to)); zoneList(to).push(it); toast(`${it.n} → ${ZONES[to]}`); } save(); rHome(); } return; }
   if (t.dataset.rvt !== undefined && invReview && invReview.receipts) { const r = invReview.receipts[Number(t.dataset.rvt)]; if (r) r.total = Math.max(0, Number(t.value) || 0) || null; return; }

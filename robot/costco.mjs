@@ -131,6 +131,7 @@ async function rendered() {
     for (let k = 0; k < 40; k++) { await pg.mouse.wheel(0, 1500); await pg.waitForTimeout(400); }
     await pg.waitForTimeout(4000);
     const h = await pg.content();
+    if (arg("dump")) fs.writeFileSync(arg("dump"), h);
     console.log(`Costco: page opened in headless Chrome, ${h.length} characters`);
     return h;
   } catch (e) { console.log("Costco browser: " + e.message); return null; } finally { await b.close(); }

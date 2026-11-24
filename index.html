@@ -2731,6 +2731,8 @@ function useRecipe(r) {
     n++;
     if (x.amt == null) { if (!/Garde-manger et épices/.test(ING[x.id].r)) { gone.add(x); need[x.id] = 0; } continue; } // unknown amount: used up, except spices and oil
     const take = Math.min(x.amt, need[x.id]); x.amt = Math.round((x.amt - take) * 100) / 100; need[x.id] -= take;
+    // meat, fish, fruits and vegetables: the whole pack goes in the recipe, so a small rest (up to 400 g) is used up
+    if (x.amt > 0 && take > 0 && /^(Viandes|Charcuterie|Poissons et fruits de mer|Fruits et légumes)$/.test(ING[x.id].r) && (ING[x.id].u === "g" || ING[x.id].u === "ml") && x.amt <= 400) x.amt = 0;
     if (x.amt > 0.0001) x.qte = "reste " + invQtyTxt(x.id, x.amt); else gone.add(x);
   }
   for (const z of ["frigo", "congel", "garde"]) S.inv[z] = zoneList(z).filter((x) => !gone.has(x));

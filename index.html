@@ -921,12 +921,15 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
   const GEM_BACKUP = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-flash-lite-latest", "gemini-flash-latest", "gemini-3-flash-preview", "gemini-3.8-flash"];
   const gemTired = {};
   async function callGemini(cfg, prompt, opt) {
-    const list = [cfg.model || PROVIDERS.gemini.model].concat(cfg.model || opt.web ? [] : GEM_BACKUP);
+    const list = [cfg.model || PROVIDERS.gemini.model].concat(opt.web ? [] : GEM_BACKUP.filter((m) => m !== cfg.model));
     let last;
     for (const m of list) {
       if (gemTired[m] && Date.now() - gemTired[m] < 15 * 60e3) continue;
       try { return await gemOnce(cfg, m, prompt, opt); }
-      catch (e) { last = e; if (e.code !== "limit" && e.code !== "model") throw e; gemTired[m] = Date.now(); }
+      catch (e) { // used up, unknown or overloaded (5xx / too slow): the next model answers
+        last = e; if (e.code !== "limit" && e.code !== "model" && e.code !== "down") throw e;
+        gemTired[m] = e.code === "down" ? Date.now() - 13 * 60e3 : Date.now(); // overloaded: try it again in 2 minutes
+      }
     }
     throw last || new AIError("limit", "Limite atteinte pour cette IA.");
   }

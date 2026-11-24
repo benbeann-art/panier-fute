@@ -43,6 +43,9 @@ jobs:
       - name: Prix de 2026 (Noovo Moi, sites Maxi et Provigo) - sans IA
         continue-on-error: true
         run: node robot/historique.mjs --out=../d
+      - name: Circulaire Costco (costco.ca, rabais en entrepôt)
+        continue-on-error: true
+        run: node robot/costco.mjs --out=../d
       - name: Enregistrer (branche data, refaite chaque fois pour rester petite)
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1932,6 +1932,7 @@ function rSpec() {
     ${exp ? `<div class="warn">Ces spéciaux sont terminés. L'app va lire les nouvelles circulaires toute seule (ou touche « Mettre à jour les circulaires »).</div>` : ""}
     <p class="lead">Deux notes de 1 à 10 :<br><b>sem</b> : 10 = le moins cher de toutes les circulaires de la semaine, seulement dans tes épiceries cochées. −1 point par 5 % plus cher.<br><b>an</b> : 10 = le plus bas prix vu cette année dans tes épiceries cochées. S'il a déjà été moins cher, la note baisse de 1 point par 5 % plus cher (ex. 10 % plus cher = 8). Historique : ${S.histWeeks.length} semaine${S.histWeeks.length > 1 ? "s" : ""}.<br>${COTE_LEG}</p>
     <div class="row"><button class="btn red" data-go="menu-auto">Faire mon menu avec les spéciaux</button><button class="btn" id="majNow">Mettre à jour les circulaires</button></div><p class="small mute" id="majMsg"></p>
+    ${costcoBox()}
     <h2>Circulaires de la semaine</h2>
     <div class="seg" role="group" aria-label="Épicerie">${[""].concat(storesHere).map((s) => `<button data-store-f="${esc(s)}" aria-pressed="${S.store === s}">${s || "Toutes"}</button>`).join("")}</div>
     <p class="small mute" style="margin:8px 0">Touche un article pour le choisir, puis « Voir les recettes ».${S.store && FLYER[S.store] ? ` <a href="${FLYER[S.store]}" target="_blank" rel="noopener">Voir la vraie circulaire ${esc(S.store)} →</a>` : ""}</p>
@@ -4337,6 +4338,22 @@ function siteFix() {
   if (S.histSrc) delete S.histSrc[W];
   S.siteFix = 1; save();
 }
+// Costco circulaire (warehouse savings), read by the robot on costco.ca: product, size, dates and amount saved.
+// Costco never shows its warehouse price online, so there is no price per kg and no score for these.
+let COSTCO = null;
+async function loadCostco() {
+  try { const j = await repoFile("data/costco/latest.json", true); if (j && Array.isArray(j.items)) COSTCO = j; } catch (e) {}
+  if (COSTCO && S.view === "speciaux") render("speciaux");
+}
+function costcoBox() {
+  if (!COSTCO || !S.reg.stores.includes("Costco")) return "";
+  const t = today(), list = COSTCO.items.filter((x) => (!x.au || x.au >= t) && (!x.du || x.du <= t));
+  if (!list.length) return "";
+  return `<details class="card" style="margin:12px 0"><summary><b>Circulaire Costco</b> : ${list.length} rabais d'épicerie en entrepôt</summary>
+    <p class="small mute" style="margin:6px 0">Lu sur costco.ca. Costco ne montre pas ses prix d'entrepôt en ligne : tu vois le rabais, pas le prix final, donc pas de note.</p>
+    ${list.map((x) => `<div class="xrow"><span><b>${esc(x.n)}</b> <span class="small mute">· ${esc(x.size || "")}${x.ou === "entrepôt" ? " · entrepôt seulement" : ""}</span><span class="small" style="display:block;color:var(--mute)">jusqu'au ${frDate(x.au)}</span></span><b style="color:var(--green);white-space:nowrap">${x.prix ? L.FR(x.prix) + " $" : "−" + L.FR(x.rabais) + " $"}</b></div>`).join("")}
+  </details>`;
+}
 async function robotSitePrices() {
   const r = await repoFile("data/reg/latest.json", true);
   if (!r || !r.stores || !r.date || r.date === S.siteRegDate) return 0;
@@ -4860,7 +4877,7 @@ Promise.all([getJSON("recettes.json", window.DATA_RECETTES), getJSON("speciaux.j
     start();
     Photos.loadAll().then((n) => { if (n) { render(S.view); if (S.open) openRec(S.open); } });
     fetch("photos/index.json", { cache: "no-cache" }).then((r) => (r.ok ? r.json() : [])).then((l) => { if (Array.isArray(l) && l.length) { REPO_PH = new Set(l); render(S.view); if (S.open) openRec(S.open); } }).catch(() => {});
-    setTimeout(async () => { await syncNow(); try { receiptFix1122(); siteFix(); updateBadge(); } catch (e) {} weeklyAuto(); }, 800);
+    setTimeout(async () => { loadCostco(); await syncNow(); try { receiptFix1122(); siteFix(); updateBadge(); } catch (e) {} weeklyAuto(); }, 800);
   })
   .catch(() => { $("#loading").textContent = "Impossible de charger les recettes. Recharge la page."; });
 

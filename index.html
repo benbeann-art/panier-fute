@@ -2123,7 +2123,7 @@ async function readReceipt(files) {
   invBusy = true; invMsg = "L'IA lit ton reçu…"; rHome();
   const prompt = `Voici la photo d'un reçu d'épicerie du Québec. Lis chaque article acheté (sans en inventer), avec :
 - le nom clair en français (les reçus abrègent : « PTS POULET DESOS » = poitrines de poulet désossées),
-- la quantité achetée (ex. « 1,2 kg », « 2 », « 4 L »), le prix payé total pour cette ligne,
+- la quantité achetée (ex. « 1,2 kg », « 2 », « 4 L »), le prix payé total pour cette ligne ("prix"), et son prix SANS le rabais ("regulier" : prix + rabais de cet article ; égal à "prix" s'il n'y a pas de rabais),
 - où le ranger à la maison : "frigo", "congel" ou "garde" (garde-manger). Règles : viandes, poissons, charcuteries, lait, fromages, yogourts, œufs, beurre, crème, la plupart des légumes et fruits frais (laitue, brocoli, carottes, champignons, poivrons, petits fruits…), sauces ouvertes → frigo ; tout ce qui est écrit surgelé ou congelé, crème glacée → congel ; pommes de terre, patates douces, oignons, ail, courges, bananes, tomates, conserves, pâtes, riz, farine, sucre, épices, céréales, collations, pain, huiles, bouillons en boîte → garde,
 - combien de jours ça se garde à cet endroit,
 - l'identifiant le plus proche dans cette liste (sinon null) :
@@ -2132,12 +2132,12 @@ Il peut y avoir PLUSIEURS reçus (plusieurs factures, ou une longue facture en p
 Pour chaque article, indique "recu" : le numéro de sa facture (0 pour la première, 1 pour la deuxième…).
 Une ligne « Rabais » ou « RABAIS SUR LE PRIX COURANT » sous un article appartient à cet article : son "prix" est le montant vraiment payé pour cet article, rabais enlevé (selon le magasin, le montant imprimé est avant ou déjà après le rabais). Vérifie : la somme des prix des articles + les taxes doit donner le TOTAL de la facture.
 Dans les articles, ignore les taxes, sacs, consignes et sous-totaux.
-Réponds UNIQUEMENT par cet objet JSON : {"recus":[{"mag":"magasin ou null","date":"AAAA-MM-JJ","total":123.45}],"items":[{"n":"nom","qte":"quantité","prix":12.34,"zone":"frigo|congel|garde","jours":7,"id":"identifiant ou null","recu":0}]}`;
+Réponds UNIQUEMENT par cet objet JSON : {"recus":[{"mag":"magasin ou null","date":"AAAA-MM-JJ","total":123.45}],"items":[{"n":"nom","qte":"quantité","prix":12.34,"zone":"frigo|congel|garde","jours":7,"id":"identifiant ou null","recu":0,"regulier":14.50}]}`;
   try {
     const j = AI.extractJSON(await askAI(prompt, { images: await Promise.all([...files].slice(0, 4).map((f) => shrinkImg(f, 2200))), maxTokens: 6000 }), "object");
     if (!j || !Array.isArray(j.items)) throw new Error("reçu illisible");
     invReview = j.items.filter((x) => x && x.n).map((x) => ({ n: String(x.n).slice(0, 60), qte: String(x.qte || "").slice(0, 30), zone: ZONES[x.zone] ? x.zone : "frigo",
-      id: ING[x.id] ? x.id : null, days: Number(x.jours) > 0 ? Math.round(Number(x.jours)) : null, prix: Number(x.prix) > 0 ? Number(x.prix) : null, keep: true, recu: Number(x.recu) >= 0 ? Math.floor(Number(x.recu)) : 0 }));
+      id: ING[x.id] ? x.id : null, days: Number(x.jours) > 0 ? Math.round(Number(x.jours)) : null, prix: Number(x.prix) > 0 ? Number(x.prix) : null, reg: Number(x.regulier) > Number(x.prix) + 0.009 ? Math.round(Number(x.regulier) * 100) / 100 : null, keep: true, recu: Number(x.recu) >= 0 ? Math.floor(Number(x.recu)) : 0 }));
     const rcs = (Array.isArray(j.recus) && j.recus.length ? j.recus : [j]).map((r) => ({ mag: L.STORES.includes(r && r.mag) ? r.mag : null, date: /^\d{4}-\d\d-\d\d$/.test((r && r.date) || "") ? r.date : today(), total: Number(r && r.total) > 0 ? Number(r.total) : null }));
     for (const x of invReview) if (!rcs[x.recu]) x.recu = 0;
     rcs.forEach((r, i) => { const lines = invReview.filter((x) => x.recu === i).reduce((t, x) => t + (x.prix || 0), 0); if (!r.total || r.total < lines * 0.9) r.total = Math.round(lines * 100) / 100 || null; });
@@ -2239,21 +2239,40 @@ function summaryBox() {
   </div>`;
 }
 
+// Receipt prices: the price without the rebate = this store's everyday price; a rebate = a real special
+// at that store that week (it goes in the price history, like a flyer price)
 function recordReceiptPrices(review) {
-  const rc = review.receipt; if (!rc || !rc.mag) return 0;
-  const items = [];
-  for (const x of review) {
-    if (!x.keep || !x.id || !x.prix) continue;
-    const amt = parseAmt(x.qte, x.id) || (ING[x.id].u === "u" ? 1 : null);
-    if (!amt) continue;
-    const u = ING[x.id].u, spoon = u === "cs" ? 15 : u === "ct" ? 5 : 0;
-    items.push({ ing: x.id, mag: rc.mag, prix: x.prix, qte: spoon ? amt * spoon : amt, unite: u === "g" ? "g" : u === "ml" || spoon ? "ml" : "u", txt: x.n });
-  }
-  const d = new Date(rc.date + "T12:00"); d.setDate(d.getDate() - ((d.getDay() + 3) % 7));
-  // what was not on special that week in this store = its everyday price
-  const onSpec = (id) => SPEC && SPEC.debut === d.toISOString().slice(0, 10) && SPEC.items.some((x) => x.ing === id && x.mag === rc.mag);
-  learnRegular(items.filter((x) => !onSpec(x.ing)), "recu", rc.date);
-  return items.length; // receipts teach regular prices, not the flyer price history
+  const rcs = review.receipts || (review.receipt ? [review.receipt] : []);
+  let n = 0;
+  rcs.forEach((rc, i) => {
+    if (!rc || !rc.mag) return;
+    const items = [];
+    for (const x of review) {
+      if (!x.id || !x.prix || (x.recu || 0) !== i || !ING[x.id]) continue;
+      const amt = parseAmt(x.qte, x.id) || (ING[x.id].u === "u" ? 1 : null);
+      if (!amt) continue;
+      const u = ING[x.id].u, spoon = u === "cs" ? 15 : u === "ct" ? 5 : 0;
+      items.push({ ing: x.id, mag: rc.mag, prix: x.prix, reg: x.reg || null, qte: spoon ? amt * spoon : amt, unite: u === "g" ? "g" : u === "ml" || spoon ? "ml" : "u", txt: x.n });
+    }
+    const d = new Date(rc.date + "T12:00"); d.setDate(d.getDate() - ((d.getDay() + 3) % 7));
+    const wk = d.toISOString().slice(0, 10);
+    // everyday price: the price before the rebate, or the price paid when there was no rebate and no flyer special
+    const onSpec = (id) => SPEC && SPEC.debut === wk && SPEC.items.some((x) => x.ing === id && x.mag === rc.mag);
+    learnRegular(items.filter((x) => x.reg || !onSpec(x.ing)), "recu", rc.date);
+    const sales = items.filter((x) => x.reg);
+    if (sales.length && wk >= Y_START) recordWeek({ debut: wk, items: sales.map((x) => Object.assign({}, x, { reg: undefined })) });
+    n += items.length;
+  });
+  if (n) { applyRegPrices(); rankCache = null; save(); }
+  return n;
+}
+// on the receipt: was the rebate a real deal? compared with the everyday price in my other stores
+function rebateTxt(x) {
+  if (!x.reg) return "";
+  let t = ` · <b style="color:var(--green)">rabais ${L.FR(x.reg - x.prix)} $</b> (régulier ${L.FR(x.reg)} $)`;
+  const ing = x.id && ING[x.id], amt = ing && (parseAmt(x.qte, x.id) || (ing.u === "u" ? 1 : null)), low = ing && lowReg(x.id);
+  if (amt && low && low.p > 0 && x.prix / amt > low.p * 1.02) t += ` <span style="color:#c4500f">· ${esc(low.s)} est moins cher tous les jours</span>`;
+  return t;
 }
 
 // + / − on an inventory item: changes the amount (by the unit, 100 g, 250 ml…); at 0 the item is finished and removed
@@ -2417,11 +2436,11 @@ function rHome() {
   const tabs = Object.entries(ZONES).map(([k, n]) => `<button data-invtab="${k}" aria-pressed="${z === k}">${n} (${zoneList(k).length})</button>`).join("");
   const review = invReview ? `<div class="card" style="border:2px solid var(--red);margin:12px 0">
       <b>Articles trouvés sur la photo</b>
-      ${invReview.map((x, i) => `<div class="xrow"><label class="chk" style="flex:1;min-width:0"><input type="checkbox" data-rvk="${i}" ${x.keep ? "checked" : ""}><span>${esc(x.n)}${x.qte ? ` <span class="small mute">· ${esc(x.qte)}</span>` : ""}${x.prix ? ` <span class="small mute">· ${L.FR(x.prix)} $</span>` : ""}</span></label>
+      ${invReview.map((x, i) => `<div class="xrow"><label class="chk" style="flex:1;min-width:0"><input type="checkbox" data-rvk="${i}" ${x.keep ? "checked" : ""}><span>${esc(x.n)}${x.qte ? ` <span class="small mute">· ${esc(x.qte)}</span>` : ""}${x.prix ? ` <span class="small mute">· ${L.FR(x.prix)} $${rebateTxt(x)}</span>` : ""}</span></label>
         <select data-rvz="${i}" aria-label="Endroit" style="width:auto;min-height:36px">${Object.entries(ZONES).map(([k, n]) => `<option value="${k}" ${x.zone === k ? "selected" : ""}>${n}</option>`).join("")}</select></div>`).join("")}
       ${(invReview.receipts || []).map((r, i) => `<div class="xrow" style="background:var(--bg);border-radius:10px;padding:6px 10px;margin-top:6px"><span><b>Facture ${i + 1}</b>${r.mag ? " · " + esc(r.mag) : ""} · ${frDate(r.date)}</span><label class="small">Total payé <input type="number" class="xprice" data-rvt="${i}" min="0" step="0.01" value="${r.total || ""}" placeholder="0,00" inputmode="decimal"> $</label></div>`).join("")}
       ${invReview.receipts ? `<p class="small mute" style="margin:6px 0 0">Compare avec le montant au bas de chaque facture et corrige-le au besoin.</p>` : ""}
-      <div class="row" style="margin-top:10px"><button class="btn red" id="rvAdd">Ajouter à l'inventaire</button><button class="btn sm" id="rvCancel">Annuler</button></div></div>` : "";
+      <div class="row" style="margin-top:10px"><button class="btn red" id="rvAdd">Ajouter à l'inventaire</button>${invReview.receipts ? `<button class="btn sm" id="rvPrices" title="Facture déjà entrée : apprend seulement les prix">Seulement les prix</button>` : ""}<button class="btn sm" id="rvCancel">Annuler</button></div></div>` : "";
   $("#v-maison").innerHTML = `<h1>À la maison</h1>
     <p class="lead">Prends en photo ton frigo, ton congélateur ou ton garde-manger : l'IA reconnaît tout et le classe. L'app te propose ensuite des recettes avec ce que tu as.</p>
     <div class="seg" role="group" aria-label="Endroit">${tabs}</div>
@@ -4572,6 +4591,7 @@ document.addEventListener("click", (e) => {
   if (t.id === "stAdd") return addStoreByLink();
   if (d.stdel) { const x = (S.myStores || []).find((y) => y.id === d.stdel); S.myStores = (S.myStores || []).filter((y) => y.id !== d.stdel); if (x && !CUSTOM.some((y) => y.name === x.name)) { S.reg.stores = S.reg.stores.filter((s) => s !== x.name); if (SPEC) SPEC.items = SPEC.items.filter((i) => i.mag !== x.name); } save(); return rReg(); }
   if (t.id === "rvCancel") { invReview = null; invMsg = ""; return rHome(); }
+  if (t.id === "rvPrices" && invReview) { const np = recordReceiptPrices(invReview), nr = invReview.filter((x) => x.reg).length; invReview = null; invMsg = ""; toast(`${np} vrais prix appris (${nr} avec rabais). Inventaire et dépenses pas touchés.`, 6000); return rHome(); }
   if (t.id === "rvAdd" && invReview) { const lr = invReview.receipt ? logReceipt(invReview) : null; const np = recordReceiptPrices(invReview); if (lr && lr.est) toast(`Facture : ${L.FR(lr.total)} $ · l'app avait prévu ${L.FR(lr.est)} $. Les vrais prix de ton reçu remplacent les estimations.`, 7000); else if (np) toast(`${np} vrais prix ajoutés à l'historique`); let n = 0; for (const x of invReview) if (x.keep) { addInv(x.zone, Object.assign({}, x, { add: !!invReview.receipt })); if (x.id && S.verif) delete S.verif[x.id]; n++; } if (invReview.receipt) markBought(receiptIds(invReview)); invReview = null; invMsg = `${n} articles ajoutés.`; rankCache = null; save(); toast(`${n} articles ajoutés à l'inventaire`); return rHome(); }
   if (t.id === "invAsk") {
     const stock = ["frigo", "congel", "garde"].flatMap((zz) => zoneList(zz).map((x) => x.n)).slice(0, 60).join(", ");

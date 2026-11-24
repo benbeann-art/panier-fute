@@ -131,7 +131,7 @@
     bouillon_poulet: ["bouillon de poulet", ["bouillon", "poulet"], ["cube", "poudre", "soupe aux nouilles", "nouille", "base", "cubes", "concentre en"]],
     // snacks, coffee, nuts and drinks (not in recipes): compared between stores per 100 g / per litre (Costco too)
     k_chips: ["croustilles", ["croustille|chips|ruffles|lays|doritos|miss vickie|kettle chips|croustilles kettle|pringles|old dutch"], ["tortilla", "bagel", "pita", "pomme", "legume", "trempette", "salsa", "chocolat", "bonbon"]],
-    k_chocolat: ["chocolat", ["chocolat|lindt|lindor|godiva|ferrero|toblerone|cadbury|hershey|kinder"], ["lait au chocolat", "boisson", "cereale", "biscuit", "gateau", "muffin", "pouding", "glace", "lait", "croissant", "chaud", "tartinade", "nutella", "barre tendre", "granola"]],
+    k_chocolat: ["chocolat", ["chocolat|lindt|lindor|godiva|ferrero|toblerone|cadbury|hershey|kinder"], ["lait au chocolat", "boisson", "cereale", "biscuit", "gateau", "muffin", "pouding", "glace", "lait", "croissant", "chaud", "tartinade", "nutella", "barre tendre", "granola", "pepite", "brisure", "cuisson", "fondue", "patisserie"]],
     k_cafe: ["café", ["=cafe|cafe moulu|cafe en grains|cafe entier|cafe torrefie"], ["capsule", "k cup", "kcup", "dosette", "instantane", "creme", "cafetiere", "glace", "tasse", "infuse", "latte", "pod", "biscuit", "gateau", "chocolat", "liqueur", "machine"]],
     k_cafe_inst: ["café instantané", ["instantane"], ["the", "soupe", "nouille", "gruau", "pouding", "riz", "capsule"]],
     k_noix: ["noix", ["noix de cajou|cajou|amandes|pistaches|noix melangees|noix de grenoble|pacanes|noisettes"], ["beurre", "lait", "boisson", "barre", "chocolat", "biscuit", "cereale", "huile", "farine", "yogourt"]],

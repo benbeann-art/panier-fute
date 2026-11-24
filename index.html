@@ -357,13 +357,12 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
       for (const x of l) { run = Math.min(run, x.b); WEEKC.set(x.k, run); } // a lower price never gets a lower score
     }
   }
-  // Week score 1-10: compared with the cheapest price of this ingredient this week in my stores
-  // (specials and everyday prices). 10 = the cheapest this week; each 5 % more costs 1 point.
+  // Week score 1-10: compared with the cheapest flyer price of this ingredient this week in my checked stores.
+  // 10 = the cheapest this week; each 5 % more costs 1 point.
   function weekCote(sp, ing) {
     const pu = unitPrice(sp, ing);
     if (pu == null) return null;
-    const ref = (LOWREG && LOWREG(sp.ing)) || ing.p;
-    const min = Math.min(WMIN && WMIN[sp.ing] != null ? WMIN[sp.ing] : Infinity, ref);
+    const min = WMIN && WMIN[sp.ing] != null ? WMIN[sp.ing] : pu;
     if (!(min > 0) || pu <= min * 1.005) return 10;
     return Math.max(1, Math.min(9, 10 - Math.round((pu / min - 1) / 0.05)));
   }
@@ -1930,7 +1929,7 @@ function rSpec() {
     <h1>Les spéciaux de la semaine</h1>
     <div class="week"><b>${SPEC ? "Du " + frDate(SPEC.debut) + " au " + frDate(SPEC.fin) : "Aucune circulaire chargée"}</b><span class="mute small">${esc(SPEC ? SPEC.source : "")}</span></div>
     ${exp ? `<div class="warn">Ces spéciaux sont terminés. L'app va lire les nouvelles circulaires toute seule (ou touche « Mettre à jour les circulaires »).</div>` : ""}
-    <p class="lead">Deux notes de 1 à 10 :<br><b>sem</b> : 10 = le moins cher de toutes les circulaires de la semaine, seulement dans tes épiceries cochées (et leurs prix de tous les jours). −1 point par 5 % plus cher.<br><b>an</b> : 10 = le plus bas prix vu cette année dans tes épiceries cochées. S'il a déjà été moins cher, la note baisse de 1 point par 5 % plus cher (ex. 10 % plus cher = 8). Historique : ${S.histWeeks.length} semaine${S.histWeeks.length > 1 ? "s" : ""}.<br>${COTE_LEG}</p>
+    <p class="lead">Deux notes de 1 à 10 :<br><b>sem</b> : 10 = le moins cher de toutes les circulaires de la semaine, seulement dans tes épiceries cochées. −1 point par 5 % plus cher.<br><b>an</b> : 10 = le plus bas prix vu cette année dans tes épiceries cochées. S'il a déjà été moins cher, la note baisse de 1 point par 5 % plus cher (ex. 10 % plus cher = 8). Historique : ${S.histWeeks.length} semaine${S.histWeeks.length > 1 ? "s" : ""}.<br>${COTE_LEG}</p>
     <div class="row"><button class="btn red" data-go="menu-auto">Faire mon menu avec les spéciaux</button><button class="btn" id="majNow">Mettre à jour les circulaires</button></div><p class="small mute" id="majMsg"></p>
     <h2>Circulaires de la semaine</h2>
     <div class="seg" role="group" aria-label="Épicerie">${[""].concat(storesHere).map((s) => `<button data-store-f="${esc(s)}" aria-pressed="${S.store === s}">${s || "Toutes"}</button>`).join("")}</div>

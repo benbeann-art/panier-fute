@@ -4382,7 +4382,7 @@ function costcoQty(size) {
 // - Narcity's monthly article (price paid), - "OFFRE CHOC" price, - my Costco receipts' price minus the coupon
 // the same product in Narcity's article and in Costco's coupon list ("Fromage à la crème original - Philadelphia" / "Fromage à la crème Philadelphia")
 function costcoTwin(x) {
-  const words = (s) => norm(s).split(/[^a-z0-9]+/).filter((w) => w.length > 3);
+  const words = (s) => norm(s).split(/[^a-z0-9]+/).filter((w) => w.length > 3).map((w) => w.replace(/s$/, "")); // cannellonis = cannelloni
   const brand = String(x.n).split(" - ").slice(1).join(" "), a = words(x.n);
   return (COSTCO.items || []).find((c) => { const b = words(c.n); return (!brand || words(brand).every((w) => b.includes(w))) && a.filter((w) => b.includes(w)).length >= Math.min(3, a.length); }) || null;
 }
@@ -4890,6 +4890,7 @@ document.addEventListener("change", (e) => {
   if (t.dataset.store) {
     const s = t.dataset.store;
     S.reg.stores = t.checked ? [...new Set(S.reg.stores.concat(s))] : S.reg.stores.filter((x) => x !== s);
+    if (s === "Costco") S.costcoOff = t.checked ? 0 : 1; // unchecked by me: stays unchecked
     S.reg.storesOff = t.checked ? (S.reg.storesOff || []).filter((x) => x !== s) : [...new Set((S.reg.storesOff || []).concat(s))];
     S.reg.stores = L.STORES.filter((x) => S.reg.stores.includes(x));
     rankCache = null; save(); return rReg();
@@ -4993,7 +4994,7 @@ Promise.all([getJSON("recettes.json", window.DATA_RECETTES), getJSON("speciaux.j
     start();
     Photos.loadAll().then((n) => { if (n) { render(S.view); if (S.open) openRec(S.open); } });
     fetch("photos/index.json", { cache: "no-cache" }).then((r) => (r.ok ? r.json() : [])).then((l) => { if (Array.isArray(l) && l.length) { REPO_PH = new Set(l); render(S.view); if (S.open) openRec(S.open); } }).catch(() => {});
-    setTimeout(async () => { loadCostco(); await syncNow(); try { if (!S.costco2) { if (!S.reg.stores.includes("Costco")) S.reg.stores.push("Costco"); S.costco2 = 1; save(); } } catch (e) {} try { receiptFix1122(); siteFix(); updateBadge(); } catch (e) {} weeklyAuto(); }, 800);
+    setTimeout(async () => { loadCostco(); await syncNow(); try { if (!S.costcoOff && !S.reg.stores.includes("Costco")) { S.reg.stores.push("Costco"); save(); render(S.view); } } catch (e) {} try { receiptFix1122(); siteFix(); updateBadge(); } catch (e) {} weeklyAuto(); }, 800);
   })
   .catch(() => { $("#loading").textContent = "Impossible de charger les recettes. Recharge la page."; });
 

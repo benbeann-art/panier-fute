@@ -377,7 +377,12 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
     if (pu == null) return null;
     const ref = (LOWREG && LOWREG(sp.ing)) || ing.p;
     // snacks, coffee, nuts, drinks (k_): no estimated price, only real prices seen this year
-    if (ing.k) { const h0 = histInfo(sp.ing, pu); return h0 ? (h0.lowest ? 10 : Math.max(1, Math.min(9, 10 - Math.round((pu / h0.min[2] - 1) / 0.05)))) : null; }
+    if (ing.k) {
+      // at least 3 different weeks of real prices in my stores before saying "lowest of the year"
+      const weeks = new Set((HIST[sp.ing] || []).filter((e) => e[2] > 0 && (!HSTORES || HSTORES.includes(e[1]))).map((e) => e[0]));
+      const h0 = weeks.size >= 3 ? histInfo(sp.ing, pu) : null;
+      return h0 ? (h0.lowest ? 10 : Math.max(1, Math.min(9, 10 - Math.round((pu / h0.min[2] - 1) / 0.05)))) : null;
+    }
     if (pu >= ref * 0.98) return 1; // not cheaper than the cheapest everyday price of all my stores: not a real special
     const h = histInfo(sp.ing, pu);
     // year: 10 = the lowest price seen this year in my stores; each 5 % above it costs 1 point

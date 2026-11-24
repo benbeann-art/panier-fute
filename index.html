@@ -2146,9 +2146,12 @@ Réponds UNIQUEMENT par cet objet JSON : {"recus":[{"mag":"magasin ou null","dat
     const rcs = (Array.isArray(j.recus) && j.recus.length ? j.recus : [j]).map((r) => ({ mag: L.STORES.includes(r && r.mag) ? r.mag : null, date: /^\d{4}-\d\d-\d\d$/.test((r && r.date) || "") ? r.date : today(), total: Number(r && r.total) > 0 ? Number(r.total) : null }));
     for (const x of invReview) if (!rcs[x.recu]) x.recu = 0;
     rcs.forEach((r, i) => { const lines = invReview.filter((x) => x.recu === i).reduce((t, x) => t + (x.prix || 0), 0); if (!r.total || r.total < lines * 0.9) r.total = Math.round(lines * 100) / 100 || null; });
+    // a receipt already entered (same store, same date, same total): its items are not added a second time
+    rcs.forEach((r, i) => { r.dup = dupReceipt(r); if (r.dup) for (const x of invReview) if (x.recu === i) { x.keep = false; x.dup = true; } });
     invReview.receipts = rcs; invReview.receipt = rcs[0];
     const tot = rcs.reduce((t, r) => t + (r.total || 0), 0);
-    invMsg = invReview.length ? `${rcs.length > 1 ? rcs.length + " factures" : "Reçu" + (rcs[0].mag ? " de " + rcs[0].mag : "")} : ${invReview.length} articles, ${L.FR(tot)} $ payés. Vérifie le total de chaque facture, puis ajoute.` : "Rien de lisible. Reprends la photo bien à plat, avec de la lumière.";
+    const nd = rcs.filter((r) => r.dup).length;
+    invMsg = invReview.length && nd === rcs.length ? `${nd > 1 ? "Ces factures sont déjà entrées" : "Cette facture est déjà entrée"} : rien ne sera ajouté en double. Tu peux seulement apprendre les prix.` : invReview.length ? `${nd ? nd + " facture" + (nd > 1 ? "s" : "") + " déjà entrée" + (nd > 1 ? "s" : "") + " (barrée" + (nd > 1 ? "s" : "") + "). " : ""}${rcs.length > 1 ? rcs.length + " factures" : "Reçu" + (rcs[0].mag ? " de " + rcs[0].mag : "")} : ${invReview.length} articles, ${L.FR(tot)} $ payés. Vérifie le total de chaque facture, puis ajoute.` : "Rien de lisible. Reprends la photo bien à plat, avec de la lumière.";
   } catch (e) { invMsg = "La lecture du reçu n'a pas marché : " + (e.message || "erreur"); toast(invMsg, 7000); }
   invBusy = false; rHome();
 }
@@ -2164,10 +2167,16 @@ function logTrip(t) {
   t.at = t.at || Date.now(); S.depenses.push(t);
   S.depenses = S.depenses.filter((x) => x.date >= addDays(today(), -730));
 }
+// same store, same date and (when both are known) the same total = a receipt already entered
+function dupReceipt(r) {
+  if (!r || !r.mag || !r.date) return false;
+  return (S.depenses || []).some((x) => x.src === "recu" && x.date === r.date && (x.mag === r.mag || (x.mags || []).includes(r.mag)) && (!r.total || !x.total || Math.abs(x.total - r.total) < 1));
+}
 function logReceipt(review) {
   const rcs = review.receipts || (review.receipt ? [review.receipt] : []); if (!rcs.length) return;
   let all = 0, estAll = 0, anyEst = false;
   rcs.forEach((rc, i) => {
+    if (rc.dup || dupReceipt(rc)) return; // already counted
     let total = 0, regular = 0;
     for (const x of review) {
       if (!x.prix || (x.recu || 0) !== i) continue; // every line counts in what was paid, even the ones not put in the inventory
@@ -2441,9 +2450,9 @@ function rHome() {
   const tabs = Object.entries(ZONES).map(([k, n]) => `<button data-invtab="${k}" aria-pressed="${z === k}">${n} (${zoneList(k).length})</button>`).join("");
   const review = invReview ? `<div class="card" style="border:2px solid var(--red);margin:12px 0">
       <b>Articles trouvés sur la photo</b>
-      ${invReview.map((x, i) => `<div class="xrow"><label class="chk" style="flex:1;min-width:0"><input type="checkbox" data-rvk="${i}" ${x.keep ? "checked" : ""}><span>${esc(x.n)}${x.qte ? ` <span class="small mute">· ${esc(x.qte)}</span>` : ""}${x.prix ? ` <span class="small mute">· ${L.FR(x.prix)} $${rebateTxt(x)}</span>` : ""}</span></label>
+      ${invReview.map((x, i) => `<div class="xrow" ${x.dup ? `style="opacity:.55;text-decoration:line-through"` : ""}><label class="chk" style="flex:1;min-width:0"><input type="checkbox" data-rvk="${i}" ${x.keep ? "checked" : ""} ${x.dup ? "disabled" : ""}><span>${esc(x.n)}${x.qte ? ` <span class="small mute">· ${esc(x.qte)}</span>` : ""}${x.prix ? ` <span class="small mute">· ${L.FR(x.prix)} $${rebateTxt(x)}</span>` : ""}</span></label>
         <select data-rvz="${i}" aria-label="Endroit" style="width:auto;min-height:36px">${Object.entries(ZONES).map(([k, n]) => `<option value="${k}" ${x.zone === k ? "selected" : ""}>${n}</option>`).join("")}</select></div>`).join("")}
-      ${(invReview.receipts || []).map((r, i) => `<div class="xrow" style="background:var(--bg);border-radius:10px;padding:6px 10px;margin-top:6px"><span><b>Facture ${i + 1}</b>${r.mag ? " · " + esc(r.mag) : ""} · ${frDate(r.date)}</span><label class="small">Total payé <input type="number" class="xprice" data-rvt="${i}" min="0" step="0.01" value="${r.total || ""}" placeholder="0,00" inputmode="decimal"> $</label></div>`).join("")}
+      ${(invReview.receipts || []).map((r, i) => `<div class="xrow" style="background:var(--bg);border-radius:10px;padding:6px 10px;margin-top:6px"><span><b>Facture ${i + 1}</b>${r.mag ? " · " + esc(r.mag) : ""} · ${frDate(r.date)}${r.dup ? ` · <b style="color:#c4500f">déjà entrée</b>` : ""}</span><label class="small">Total payé <input type="number" class="xprice" data-rvt="${i}" min="0" step="0.01" value="${r.total || ""}" placeholder="0,00" inputmode="decimal"> $</label></div>`).join("")}
       ${invReview.receipts ? `<p class="small mute" style="margin:6px 0 0">Compare avec le montant au bas de chaque facture et corrige-le au besoin.</p>` : ""}
       <div class="row" style="margin-top:10px"><button class="btn red" id="rvAdd">Ajouter à l'inventaire</button>${invReview.receipts ? `<button class="btn sm" id="rvPrices" title="Facture déjà entrée : apprend seulement les prix">Seulement les prix</button>` : ""}<button class="btn sm" id="rvCancel">Annuler</button></div></div>` : "";
   $("#v-maison").innerHTML = `<h1>À la maison</h1>

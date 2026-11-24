@@ -4366,6 +4366,8 @@ function siteFix() {
 var COSTCO = null; // var: read by allSpecials() before this line runs
 async function loadCostco() {
   try { const j = await repoFile("data/costco/latest.json", true); if (j && Array.isArray(j.items)) COSTCO = j; } catch (e) {}
+  // prices read on costco.ca in a real browser ("En entrepôt", "Prix"), by item number
+  try { const pz = await repoFile("data/costco/prices.json", true); if (COSTCO && pz && pz.prices) COSTCO.prices = pz.prices; } catch (e) {}
   // Costco's warehouse price before the coupon = its everyday price
   if (COSTCO) { let n = 0; for (const x of COSTCO.items) { const z = x.ing && x.reg && costcoQty(x.size); if (!z || !ING[x.ing] || ING[x.ing].u !== z.u) continue; S.regStore = S.regStore || {}; (S.regStore[x.ing] = S.regStore[x.ing] || {}).Costco = { p: x.reg / z.q, date: (COSTCO.made || "").slice(0, 10), src: "site" }; n++; } if (n) { rankCache = null; save(); } }
   if (COSTCO && S.view === "speciaux") render("speciaux");
@@ -4444,6 +4446,8 @@ Réponds UNIQUEMENT par ce JSON : {"items":[{"n":"nom","size":"750 g","no":"2051
 // a price read on my screenshots for this coupon (same item number, or same name)
 function costcoShot(x) {
   const P = S.costcoPrix || {}, t = today();
+  const w = COSTCO && COSTCO.prices && x.no && COSTCO.prices[x.no];
+  if (w && w.prix > 0 && (!x.au || x.au >= t)) return { prix: w.prix, reg: w.reg || null, au: x.au };
   const e = (x.no && P[x.no]) || P[norm(x.n)] || Object.values(P).find((p) => p.n && norm(p.n) === norm(x.n));
   return e && (!e.au || e.au >= t) ? e : null;
 }

@@ -321,15 +321,16 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
   let HIST = {};
   const MIN_OBS = 4;
   function setHistory(h) { HIST = h || {}; }
+  let HSTORES = null; // only the stores I shop at (set by setWeek)
   function histInfo(id, pu) {
-    const obs = (HIST[id] || []).filter((e) => e[2] > 0);
+    const obs = (HIST[id] || []).filter((e) => e[2] > 0 && (!HSTORES || HSTORES.includes(e[1])));
     if (obs.length < MIN_OBS) return null;
     const prices = obs.map((e) => e[2]).sort((a, b) => a - b);
     const min = obs.reduce((m, e) => (e[2] < m[2] ? e : m), obs[0]);
     const lower = prices.filter((p) => p < pu - 1e-9).length;
     return { n: obs.length, weeks: new Set(obs.map((e) => e[0])).size, min, med: prices[Math.floor(prices.length / 2)], share: lower / prices.length, lowest: pu <= min[2] + 1e-9 };
   }
-  // Deal score 1-10. With a year of history: compared with every price seen in all stores (10 = lowest of the year).
+  // Deal score 1-10. With a year of history: compared with the lowest price seen this year in my stores (10 = lowest of the year).
   // Without enough history: compared with the estimated regular price.
   // Regular prices per store (set by the app) and the lowest regular price among the user's stores
   let REGS = null, LOWREG = null;
@@ -340,7 +341,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
   let WEEKC = null, WMIN = null;
   const wkey = (sp) => [sp.ing, sp.mag, sp.prix, sp.qte || 1, sp.unite || "", sp.txt || "", sp.perso || ""].join("|");
   function setWeek(items, ING, stores) {
-    WEEKC = new Map(); WMIN = {};
+    WEEKC = new Map(); WMIN = {}; HSTORES = stores && stores.length ? stores.slice() : null;
     const by = {};
     for (const sp of items || []) {
       const ing = sp && ING[sp.ing];
@@ -378,7 +379,8 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
     const ref = (LOWREG && LOWREG(sp.ing)) || ing.p;
     if (pu >= ref * 0.98) return 1; // not cheaper than the cheapest everyday price of all my stores: not a real special
     const h = histInfo(sp.ing, pu);
-    if (h) return h.lowest ? 10 : Math.max(1, Math.min(9, Math.round(10 - 9 * h.share)));
+    // year: 10 = the lowest price seen this year in my stores; each 5 % above it costs 1 point
+    if (h) return h.lowest ? 10 : Math.max(1, Math.min(9, 10 - Math.round((pu / h.min[2] - 1) / 0.05)));
     const pct = 1 - pu / ref;
     return Math.max(1, Math.min(10, Math.round((pct * 100) / 6)));
   }
@@ -1899,7 +1901,7 @@ function rSpec() {
       ${two(x)}
       <div><div class="nm">${esc(x.sp.txt || (x.ing && x.ing.n))}</div>
         <div class="meta">${esc(x.sp.mag)}${x.on ? "" : " · magasin non coché"}${x.sp.perso ? " · ajouté par toi" : ""}</div>${notRealTxt(x.sp) ? `<div class="meta">${notRealTxt(x.sp)}</div>` : ""}</div>
-      ${x.h ? `<div class="meta" style="grid-column:2/4">${x.w === 10 ? "<b style='color:var(--green)'>Le moins cher cette semaine</b> · " : ""}${x.h.lowest && x.c === 10 ? "<b style='color:var(--green)'>Plus bas prix de l'année</b>" : `${Math.round(x.h.share * 100)} % des prix vus en 12 mois étaient plus bas`} · plus bas vu : ${perUnitTxt(x.ing, x.h.min[2])} chez ${esc(x.h.min[1])} (${frDate(x.h.min[0])})</div>` : ""}
+      ${x.h ? `<div class="meta" style="grid-column:2/4">${x.w === 10 ? "<b style='color:var(--green)'>Le moins cher cette semaine</b> · " : ""}${x.h.lowest ? "<b style='color:var(--green)'>Plus bas prix de l'année</b>" : `Déjà été moins cher : ${perUnitTxt(x.ing, x.h.min[2])} chez ${esc(x.h.min[1])} (${frDate(x.h.min[0])})`}</div>` : ""}
       <div class="row" style="gap:2px;grid-row:1;grid-column:3"><span class="price">${L.fmtSpecial(x.sp)}</span>${x.sp.perso ? `<button class="x" data-del="${esc(x.sp.perso)}" aria-label="Retirer">×</button>` : ""}</div>
       ${x.n ? `<button class="go" data-ing="${x.sp.ing}">${x.n} recettes avec ça →</button>` : x.nc ? `<button class="go" data-go="collations">${x.nc} collation${x.nc > 1 ? "s" : ""} avec ça →</button>` : `<span class="meta" style="grid-column:2/4">Pas utilisé dans les recettes</span>`}
     </div>`;
@@ -1911,7 +1913,7 @@ function rSpec() {
       : x.sp.img && AIS.photos !== "off" ? `<div class="ph fl"><img src="${esc(x.sp.img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.classList.add('ph-empty');this.remove()"></div>` : x.ing ? ingPic(x.sp.ing) : `<div class="ph ph-empty"><span>${esc(x.sp.txt)}</span></div>`}
       ${two(x)}${on ? `<span class="ok">✓ Choisi</span>` : ""}
       <span class="body"><span class="nm">${esc(x.sp.txt || (x.ing && x.ing.n))}</span>
-      <span class="price">${L.fmtSpecial(x.sp)}</span><span class="meta">${S.store ? "" : esc(x.sp.mag) + " · "}${notRealTxt(x.sp) ? notRealTxt(x.sp) : x.h ? (x.h.lowest && x.c === 10 ? "<b style='color:var(--green)'>Plus bas de l'année</b>" : `${Math.round(x.h.share * 100)} % des prix vus en 1 an étaient plus bas`) : x.ing && x.n ? `${x.n} recettes` : x.nc ? `${x.nc} collation${x.nc > 1 ? "s" : ""}` : "Pas dans les recettes"}</span></span></button>`; };
+      <span class="price">${L.fmtSpecial(x.sp)}</span><span class="meta">${S.store ? "" : esc(x.sp.mag) + " · "}${notRealTxt(x.sp) ? notRealTxt(x.sp) : x.h ? (x.h.lowest ? "<b style='color:var(--green)'>Plus bas de l'année</b>" : `Déjà été moins cher (${esc(x.h.min[1])})`) : x.ing && x.n ? `${x.n} recettes` : x.nc ? `${x.nc} collation${x.nc > 1 ? "s" : ""}` : "Pas dans les recettes"}</span></span></button>`; };
   const selBar = S.sel.length ? `<div class="selbar"><span><b>${S.sel.length}</b> article${S.sel.length > 1 ? "s" : ""} choisi${S.sel.length > 1 ? "s" : ""}</span><button class="btn sm" id="selClear">Effacer</button><button class="btn sm red" id="selGo">Voir les recettes →</button></div>` : "";
   const FLYER = { Maxi: "https://www.circulaire-en-ligne.ca/circulaire-maxi/speciaux-promotions-rabais-semaine", "Super C": "https://www.circulaire-en-ligne.ca/circulaire-super-c",
     IGA: "https://www.iga.net/fr/circulaire", Metro: "https://www.circulaire-en-ligne.ca/circulaire-metro", Provigo: "https://www.circulaire-en-ligne.ca/circulaire-provigo/speciaux-promotions-rabais-semaine",
@@ -1925,7 +1927,7 @@ function rSpec() {
     <h1>Les spéciaux de la semaine</h1>
     <div class="week"><b>${SPEC ? "Du " + frDate(SPEC.debut) + " au " + frDate(SPEC.fin) : "Aucune circulaire chargée"}</b><span class="mute small">${esc(SPEC ? SPEC.source : "")}</span></div>
     ${exp ? `<div class="warn">Ces spéciaux sont terminés. L'app va lire les nouvelles circulaires toute seule (ou touche « Mettre à jour les circulaires »).</div>` : ""}
-    <p class="lead">Deux notes de 1 à 10 :<br><b>an</b> : 10 = plus bas prix de l'année, comparé à tous les prix vus depuis 12 mois (historique : ${S.histWeeks.length} semaine${S.histWeeks.length > 1 ? "s" : ""}).<br><b>sem</b> : 10 = le moins cher cette semaine dans tes épiceries (spéciaux et prix de tous les jours), −1 point par 5 % plus cher.<br>${COTE_LEG}</p>
+    <p class="lead">Deux notes de 1 à 10 :<br><b>sem</b> : 10 = le moins cher de toutes les circulaires de la semaine, seulement dans tes épiceries cochées (et leurs prix de tous les jours). −1 point par 5 % plus cher.<br><b>an</b> : 10 = le plus bas prix vu cette année dans tes épiceries cochées. S'il a déjà été moins cher, la note baisse de 1 point par 5 % plus cher (ex. 10 % plus cher = 8). Historique : ${S.histWeeks.length} semaine${S.histWeeks.length > 1 ? "s" : ""}.<br>${COTE_LEG}</p>
     <div class="row"><button class="btn red" data-go="menu-auto">Faire mon menu avec les spéciaux</button><button class="btn" id="majNow">Mettre à jour les circulaires</button></div><p class="small mute" id="majMsg"></p>
     <h2>Circulaires de la semaine</h2>
     <div class="seg" role="group" aria-label="Épicerie">${[""].concat(storesHere).map((s) => `<button data-store-f="${esc(s)}" aria-pressed="${S.store === s}">${s || "Toutes"}</button>`).join("")}</div>

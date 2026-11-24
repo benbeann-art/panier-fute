@@ -45,7 +45,9 @@ jobs:
         run: node robot/historique.mjs --out=../d
       - name: Circulaire Costco (costco.ca, rabais et prix en entrepôt)
         continue-on-error: true
-        run: node robot/costco.mjs --out=../d
+        run: |
+          curl -s -L -m 40 -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36" -H "Accept-Language: fr-CA,fr;q=0.9" "https://www.costco.ca/coupons.html?langId=-25" -o /tmp/costco.html || true
+          node robot/costco.mjs --out=../d --page=/tmp/costco.html
       - name: Enregistrer (branche data, refaite chaque fois pour rester petite)
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}

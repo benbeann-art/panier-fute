@@ -140,6 +140,7 @@ async function rendered() {
 async function main() {
   let html;
   if (arg("file")) html = fs.readFileSync(arg("file"), "utf8");
+  else if (arg("page") && fs.existsSync(arg("page")) && parse(fs.readFileSync(arg("page"), "utf8")).length >= 5) html = fs.readFileSync(arg("page"), "utf8"); // downloaded by curl (Costco answers it better)
   else {
     html = await rendered();
     // Costco sometimes answers with a short page (no products): try again a few times

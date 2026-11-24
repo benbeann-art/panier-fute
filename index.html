@@ -2311,8 +2311,24 @@ function invStep(i, dir) {
     if (x.id && ING[x.id]) x.amt = parseAmt(x.qte, x.id);
     left = n;
   }
-  if (!(left > 0)) { list.splice(i, 1); toast(`${x.n} : fini, retiré de l'inventaire`); }
+  if (!(left > 0)) { list.splice(i, 1); toast(`${x.n} : fini, retiré de l'inventaire${restock([x]) ? " et ajouté à la liste d'épicerie" : ""}`); }
   rankCache = null; save(); rHome();
+}
+// Condiments, sauces, oils and spices that run out go back on the grocery list by themselves
+function isCondiment(id) {
+  const g = ING[id]; if (!g) return false;
+  return g.r === "Garde-manger et épices" || g.u === "cs" || g.u === "ct" || /ketchup|mayo|moutarde|vinaigr|sauce|relish|marinade|cornichon|huile|confiture|sirop|miel/.test(norm(g.n));
+}
+function restock(items) {
+  let n = 0;
+  for (const x of items) {
+    const id = x && x.id; if (!id || !isCondiment(id)) continue;
+    if (["frigo", "congel", "garde"].some((z) => zoneList(z).some((y) => y !== x && y.id === id))) continue; // another one still at home
+    if (!S.extras.find((v) => v.k === id)) { S.extras.push({ k: id, q: 1, at: Date.now(), auto: true }); n++; }
+    delete S.coches[id]; if (S.verif) delete S.verif[id]; if (S.achat) delete S.achat[id];
+  }
+  if (n) { rankCache = null; updateBadge(); }
+  return n;
 }
 // Put every inventory item in the right place (fridge, freezer, pantry) — one AI call, no web
 const ZONE_RULES = "viandes, poissons, charcuteries, lait, fromages, yogourts, œufs, beurre, crème, la plupart des légumes et fruits frais (laitue, brocoli, carottes, champignons, poivrons, clémentines, petits fruits…), sauces ouvertes → frigo ; tout ce qui est surgelé ou congelé, crème glacée → congel ; pommes de terre, patates douces, oignons, ail, courges, bananes, tomates, conserves, pâtes, riz, farine, sucre, épices, céréales, collations, pain, huiles, bouillons en boîte, papier et sacs → garde";
@@ -2613,7 +2629,7 @@ function receiptIds(review) {
 }
 function listData() {
   const all = fullList().map((it) => {
-    if (inPantry(it.id) || (S.verif || {})[it.id]) return it;
+    if (it.force || inPantry(it.id) || (S.verif || {})[it.id]) return it;
     const b = boughtFor(it.id);
     if (b) {
       if (!b.need || it.buy <= b.need * 1.001) return Object.assign({}, it, { autoHave: it.buy, bought: b.t });
@@ -2627,9 +2643,10 @@ function listData() {
     return Object.assign({}, it, { buy: unitCount ? Math.ceil(left) : left, partial: h.amt, autoBuy: true });
   });
   const st = (it) => it.autoHave != null ? "have" : it.autoBuy ? "buy" : verifState(it.id);
-  const list = all.filter((it) => !inPantry(it.id) && st(it) === "buy");
-  const pantryItems = all.filter((it) => inPantry(it.id) || (!inPantry(it.id) && st(it) === "have"));
-  const checkItems = all.filter((it) => !inPantry(it.id) && st(it) === "check");
+  const pan = (it) => inPantry(it.id) && !it.force;
+  const list = all.filter((it) => !pan(it) && (it.force || st(it) === "buy"));
+  const pantryItems = all.filter((it) => pan(it) || (!it.force && st(it) === "have"));
+  const checkItems = all.filter((it) => !pan(it) && !it.force && st(it) === "check");
   const ix = ranked() && rankCache.ix;
   const stores = S.reg.stores.length ? S.reg.stores : [S.reg.home];
   const ch = L.chooseStores(list, ING, ix, stores, S.reg.home, Number(S.reg.pen) || 0, Number(S.reg.max) || 2);
@@ -2717,6 +2734,8 @@ function useRecipe(r) {
     if (x.amt > 0.0001) x.qte = "reste " + invQtyTxt(x.id, x.amt); else gone.add(x);
   }
   for (const z of ["frigo", "congel", "garde"]) S.inv[z] = zoneList(z).filter((x) => !gone.has(x));
+  const back = restock([...gone]);
+  if (back) setTimeout(() => toast(`${back} condiment${back > 1 ? "s" : ""} fini${back > 1 ? "s" : ""} : ajouté${back > 1 ? "s" : ""} à la liste d'épicerie`, 5000), 2500);
   (S.cuit = S.cuit || {})[r.id] = today();
   rankCache = null; save();
   return n;
@@ -2730,6 +2749,7 @@ function fullList() {
     if (!ING[id]) continue;
     if (by[id]) { by[id].q += amt; by[id].x = true; }
     else { by[id] = { id, q: amt, rec: [], x: true }; list.push(by[id]); }
+    if (e.auto) by[id].force = true; // ran out: to buy, even if it is in always-have
     by[id].buy = ING[id].u === "u" ? Math.ceil(by[id].q) : by[id].q;
   }
   return list;

@@ -4376,12 +4376,44 @@ function costcoSpecials() {
   for (const x of COSTCO.items || []) {
     if (!ok(x) || !x.ing || out.some((o) => o.ing === x.ing)) continue;
     const z = costcoQty(x.size); if (!z || !unitOk(x.ing, z.u)) continue;
-    const reg = S.regStore && S.regStore[x.ing] && S.regStore[x.ing].Costco;
-    const prix = x.prix || (reg && reg.p > 0 && x.rabais ? Math.round((reg.p * z.q - x.rabais) * 100) / 100 : null);
+    const reg = S.regStore && S.regStore[x.ing] && S.regStore[x.ing].Costco, shot = costcoShot(x);
+    const prix = x.prix || (shot && shot.prix) || (reg && reg.p > 0 && x.rabais ? Math.round((reg.p * z.q - x.rabais) * 100) / 100 : null);
     if (!(prix > 0)) continue;
     out.push({ ing: x.ing, mag: "Costco", prix, qte: z.q, unite: z.u, txt: x.n + " · " + x.size, fin: x.au, img: x.img, costco: x.prix ? "choc" : "recu" });
   }
   return out;
+}
+let costcoBusy = false;
+async function readCostcoShots(files) {
+  if (costcoBusy || !files.length) return;
+  costcoBusy = true; toast("L'IA lit tes captures Costco… (jusqu'à 1 minute)", 6000);
+  try {
+    const prompt = `Ce sont des captures d'écran de la page des rabais de Costco Canada (costco.ca/coupons).
+Pour CHAQUE produit visible, donne : le nom tel qu'écrit, le format (ex. « 750 g », « 2 × 500 g »), le numéro d'article, le prix « En entrepôt » (avant le rabais), le rabais « Économie », le « Prix » final, et la date de fin de validité.
+N'invente rien : si un nombre n'est pas visible, mets null.
+Réponds UNIQUEMENT par ce JSON : {"items":[{"n":"nom","size":"750 g","no":"2051308","reg":5.99,"rabais":1.50,"prix":4.49,"au":"AAAA-MM-JJ"}]}`;
+    const ask = askAI(prompt, { images: await Promise.all([...files].slice(0, 6).map((f) => shrinkImg(f, 2000))), maxTokens: 8000, json: true });
+    const j = AI.extractJSON(await Promise.race([ask, new Promise((_, no) => setTimeout(() => no(new Error("l'IA n'a pas répondu après 6 minutes")), 360000))]), "object");
+    const got = (j && Array.isArray(j.items) ? j.items : []).filter((x) => x && x.n && (Number(x.prix) > 0 || Number(x.reg) > 0));
+    S.costcoPrix = S.costcoPrix || {};
+    let n = 0;
+    for (const x of got) {
+      const prix = Number(x.prix) > 0 ? Number(x.prix) : Number(x.reg) > 0 && Number(x.rabais) > 0 ? Math.round((Number(x.reg) - Number(x.rabais)) * 100) / 100 : null;
+      if (!(prix > 0)) continue;
+      const key = String(x.no || "").replace(/\D/g, "") || norm(x.n);
+      S.costcoPrix[key] = { n: String(x.n).slice(0, 90), size: x.size || null, prix, reg: Number(x.reg) > 0 ? Number(x.reg) : null, au: /^\d{4}-\d\d-\d\d$/.test(x.au || "") ? x.au : null, at: today() };
+      n++;
+    }
+    save(); rankCache = null;
+    toast(n ? `${n} prix Costco ajoutés` : "Aucun prix lisible sur ces captures", 6000);
+  } catch (e) { toast("Lecture des captures : " + (e.message || "erreur"), 7000); }
+  costcoBusy = false; if (S.view === "speciaux") render("speciaux");
+}
+// a price read on my screenshots for this coupon (same item number, or same name)
+function costcoShot(x) {
+  const P = S.costcoPrix || {}, t = today();
+  const e = (x.no && P[x.no]) || P[norm(x.n)] || Object.values(P).find((p) => p.n && norm(p.n) === norm(x.n));
+  return e && (!e.au || e.au >= t) ? e : null;
 }
 function costcoBox() {
   if (!COSTCO || (S.store && S.store !== "Costco")) return "";
@@ -4391,13 +4423,14 @@ function costcoBox() {
   const nar = narAll.filter((x) => !costcoTwin(x)); // the others are shown on their Costco card
   if (!list.length && !nar.length) return "";
   return `<details class="card" style="margin:12px 0" ${S.store === "Costco" ? "open" : ""}><summary><b>Circulaire Costco</b> : ${list.length + nar.length} rabais d'épicerie en entrepôt (touche pour voir)</summary>
-    <p class="small mute" style="margin:6px 0">Rabais lus sur costco.ca (le site ne montre pas le prix final en entrepôt). Quand le vrai prix est connu (article Narcity, « offre choc » ou ton prix Costco appris sur une facture moins le rabais), l'article est aussi dans les spéciaux avec ses 2 notes, au même prix par kg ou par litre que les autres.</p>
+    <div class="row" style="margin:8px 0"><label class="btn sm" style="cursor:pointer">📷 Lire mes captures de la page Costco<input type="file" id="costcoShots" accept="image/*" multiple hidden></label><a class="btn sm" href="https://www.costco.ca/coupons.html?langId=-25" target="_blank" rel="noopener">Ouvrir la page Costco</a></div>
+    <p class="small mute" style="margin:6px 0">Costco montre ses prix aux gens, pas aux robots : ouvre la page Costco, fais des captures d'écran, puis « Lire mes captures ». L'IA y lit le prix en entrepôt, le rabais et le prix final. Quand le vrai prix est connu (article Narcity, « offre choc » ou ton prix Costco appris sur une facture moins le rabais), l'article est aussi dans les spéciaux avec ses 2 notes, au même prix par kg ou par litre que les autres.</p>
     <div class="flyer">${list.map((x) => `<div class="art" style="cursor:default">
       <div class="ph fl">${x.img ? `<img src="${esc(x.img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.classList.add('ph-empty');this.remove()">` : ""}</div>
       <div style="padding:6px 8px"><div class="nm">${esc(x.n)}</div>
       <div class="meta">${esc(x.size || "")}${x.ou === "entrepôt" ? " · entrepôt seulement" : ""}</div>
       <div class="meta">jusqu'au ${frDate(x.au)}</div>
-      <span class="price" style="color:var(--green)">${x.prix ? L.FR(x.prix) + " $" + (x.reg ? " <span class='small mute' style='font-weight:400'>au lieu de " + L.FR(x.reg) + " $</span>" : "") : price.get(x) ? L.FR(price.get(x).prix) + " $ <span class='small mute' style='font-weight:400'>au lieu de " + L.FR(price.get(x).reg) + " $</span>" : "Rabais " + L.FR(x.rabais) + " $"}</span></div></div>`).join("")}</div>
+      <span class="price" style="color:var(--green)">${((pp) => pp ? L.FR(pp.prix) + " $" + (pp.reg ? " <span class='small mute' style='font-weight:400'>au lieu de " + L.FR(pp.reg) + " $</span>" : "") : "")(x.prix ? x : costcoShot(x)) || (price.get(x) ? L.FR(price.get(x).prix) + " $ <span class='small mute' style='font-weight:400'>au lieu de " + L.FR(price.get(x).reg) + " $</span>" : "Rabais " + L.FR(x.rabais) + " $")}</span></div></div>`).join("")}</div>
     ${nar.length ? `<h3 style="margin:14px 0 6px">Prix en entrepôt (article Narcity)</h3><div class="flyer">${nar.map((x) => `<div class="art" style="cursor:default"><div style="padding:6px 8px"><div class="nm">${esc(x.n)}</div>
       <div class="meta">${x.qte ? L.FR(x.qte >= 1000 ? x.qte / 1000 : x.qte, x.qte >= 1000 ? 2 : 0) + (x.qte >= 1000 ? (x.unite === "g" ? " kg" : " L") : " " + x.unite) : ""} · au lieu de ${L.FR(x.reg)} $</div><div class="meta">jusqu'au ${frDate(x.au)}</div>
       <span class="price" style="color:var(--green)">${L.FR(x.prix)} $</span></div></div>`).join("")}</div>` : ""}
@@ -4842,6 +4875,7 @@ document.addEventListener("change", (e) => {
   if (t.dataset.xp !== undefined) { const ex = S.extras[Number(t.dataset.xp)]; if (ex) { ex.p = Math.max(0, Number(t.value) || 0); ensureCustom(ex); rankCache = null; save(); rList(); } return; }
   if (t.id === "awake") { keepAwake(t.checked); toast(t.checked ? "L'écran restera allumé" : "Écran normal"); return; }
   if (t.id === "invPhoto" && t.files && t.files.length) return readFridgePhotos([...t.files].slice(0, 6), S.invTab || "frigo");
+  if (t.id === "costcoShots" && t.files && t.files.length) { const f = [...t.files].slice(0, 6); t.value = ""; return readCostcoShots(f); }
   if (t.id === "rcPhoto" && t.files && t.files.length) { const f = [...t.files].slice(0, 4); t.value = ""; return readReceipt(f); }
   if (t.dataset.invexp !== undefined) { const x = zoneList(S.invTab || "frigo")[Number(t.dataset.invexp)]; if (x) { x.exp = t.value; save(); rHome(); } return; }
   if (t.dataset.invmove !== undefined) { const from = S.invTab || "frigo", to = t.value; if (to !== from) { const it = zoneList(from).splice(Number(t.dataset.invmove), 1)[0]; if (it) { if (it.id) it.exp = addDays(today(), shelfDays(it.id, to)); zoneList(to).push(it); toast(`${it.n} → ${ZONES[to]}`); } save(); rHome(); } return; }

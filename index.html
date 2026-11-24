@@ -347,14 +347,14 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
       const ing = sp && ING[sp.ing];
       if (!ing || (stores && stores.length && !sp.perso && !stores.includes(sp.mag))) continue;
       const pu = unitPrice(sp, ing), b = baseCote(sp, ing);
-      if (pu == null || b == null) continue;
+      if (pu == null) continue;
       (by[sp.ing] = by[sp.ing] || []).push({ k: wkey(sp), pu, b });
     }
     for (const id in by) {
       const l = by[id].sort((a, c) => a.pu - c.pu || c.b - a.b);
       let run = 10;
       WMIN[id] = l[0].pu;
-      for (const x of l) { run = Math.min(run, x.b); WEEKC.set(x.k, run); } // a lower price never gets a lower score
+      for (const x of l) { if (x.b == null) continue; run = Math.min(run, x.b); WEEKC.set(x.k, run); } // a lower price never gets a lower score
     }
   }
   // Week score 1-10: compared with the cheapest flyer price of this ingredient this week in my checked stores.
@@ -376,6 +376,8 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
     const pu = unitPrice(sp, ing);
     if (pu == null) return null;
     const ref = (LOWREG && LOWREG(sp.ing)) || ing.p;
+    // snacks, coffee, nuts, drinks (k_): no estimated price, only real prices seen this year
+    if (ing.k) { const h0 = histInfo(sp.ing, pu); return h0 ? (h0.lowest ? 10 : Math.max(1, Math.min(9, 10 - Math.round((pu / h0.min[2] - 1) / 0.05)))) : null; }
     if (pu >= ref * 0.98) return 1; // not cheaper than the cheapest everyday price of all my stores: not a real special
     const h = histInfo(sp.ing, pu);
     // year: 10 = the lowest price seen this year in my stores; each 5 % above it costs 1 point
@@ -1287,6 +1289,16 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
     sauce_tomate: ["sauce tomate", ["passata|sauce tomate|sauce tomates|coulis de tomate|tomates tamisees"], ["pizza", "pates", "spaghetti", "viande", "boulette", "ketchup", "soupe"]],
     pate_tomate: ["pâte de tomate", ["pate de tomate|pate de tomates|concentre de tomate"], ["sauce", "pizza"]],
     bouillon_poulet: ["bouillon de poulet", ["bouillon", "poulet"], ["cube", "poudre", "soupe aux nouilles", "nouille", "base", "cubes", "concentre en"]],
+    // snacks, coffee, nuts and drinks (not in recipes): compared between stores per 100 g / per litre (Costco too)
+    k_chips: ["croustilles", ["croustille|chips|ruffles|lays|doritos|miss vickie|kettle chips|croustilles kettle|pringles|old dutch"], ["tortilla", "bagel", "pita", "pomme", "legume", "trempette", "salsa", "chocolat", "bonbon"]],
+    k_chocolat: ["chocolat", ["chocolat|lindt|lindor|godiva|ferrero|toblerone|cadbury|hershey|kinder"], ["lait au chocolat", "boisson", "cereale", "biscuit", "gateau", "muffin", "pouding", "glace", "lait", "croissant", "chaud", "tartinade", "nutella", "barre tendre", "granola"]],
+    k_cafe: ["café", ["=cafe|cafe moulu|cafe en grains|cafe entier|cafe torrefie"], ["capsule", "k cup", "kcup", "dosette", "instantane", "creme", "cafetiere", "glace", "tasse", "infuse", "latte", "pod", "biscuit", "gateau", "chocolat", "liqueur", "machine"]],
+    k_cafe_inst: ["café instantané", ["instantane"], ["the", "soupe", "nouille", "gruau", "pouding", "riz", "capsule"]],
+    k_noix: ["noix", ["noix de cajou|cajou|amandes|pistaches|noix melangees|noix de grenoble|pacanes|noisettes"], ["beurre", "lait", "boisson", "barre", "chocolat", "biscuit", "cereale", "huile", "farine", "yogourt"]],
+    k_craquelins: ["craquelins", ["craquelin|triscuit|ritz|=dare|breton|wheat thins|crackers"], ["fromage a la creme", "soupe"]],
+    k_canneberges: ["canneberges séchées", ["canneberge|craisins"], ["jus", "cocktail", "sauce", "boisson", "fraiche", "surgel"]],
+    k_eau_gaz: ["eau pétillante", ["eau petillante|eau gazeifiee|perrier|pellegrino|bubly|montellier|eska petillante"], ["jus", "vin", "biere"]],
+    k_biere: ["bière", ["=biere|bieres"], ["racinette", "gingembre", "pain", "marinade", "chocolat", "bonbon", "sauce", "moutarde"]],
     bouillon_boeuf: ["bouillon de boeuf", ["bouillon", "boeuf"], ["cube", "poudre", "soupe", "nouille", "base", "cubes"]],
     lait_coco: ["lait de coco", ["lait de coco|lait coco|coconut milk"], ["boisson", "yogourt", "glace", "dessert", "creme glacee", "eau de coco", "shampo", "lotion", "savon", "corps", "riz"]],
     chapelure: ["chapelure", ["chapelure|panko"], ["poulet", "poisson", "crevette", "fromage", "pane"]],
@@ -2660,7 +2672,13 @@ function listData() {
 }
 // ---------- items added by hand (milk, butter, toilet paper...) ----------
 const CAT = {};
+// Snacks, coffee, nuts and drinks found in every flyer (Flipp terms k_...): compared per 100 g / per litre.
+// p = a rough everyday price, only used to reject a wrongly read size (never shown, never used for a score).
+const KCATS = { k_chips: ["Croustilles", "g", 0.017], k_chocolat: ["Chocolat", "g", 0.03], k_cafe: ["Café (grains ou moulu)", "g", 0.025], k_cafe_inst: ["Café instantané", "g", 0.06],
+  k_noix: ["Noix (cajou, amandes, pistaches)", "g", 0.028], k_craquelins: ["Craquelins", "g", 0.017], k_canneberges: ["Canneberges séchées", "g", 0.014],
+  k_eau_gaz: ["Eau pétillante", "ml", 0.0028], k_biere: ["Bière", "ml", 0.0075] };
 function initCatalog() {
+  for (const k in KCATS) if (!ING[k]) ING[k] = { n: KCATS[k][0], r: "Collations et boissons", u: KCATS[k][1], p: KCATS[k][2], x: true, k: true };
   for (const c of window.CATALOG || []) {
     CAT[c.id] = c;
     if (!(c.link && ING[c.link])) ING[c.id] = { n: c.n, r: c.r, u: "u", p: c.p, x: true };

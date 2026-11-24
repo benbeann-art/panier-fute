@@ -43,7 +43,12 @@ export function parse(html) {
     const size = iNo > 1 && /\d/.test(t[iNo - 1]) && t[iNo - 1] !== n ? t[iNo - 1] : null;
     // the amount: "ÉCONOMISEZ|3|,|50|$" or "OFFRE CHOC|24|,|99|$"
     const amt = (label) => { const i = t.indexOf(label); if (i < 0) return null; let s = ""; for (let k = i + 1; k < t.length && t[k] !== "$"; k++) s += t[k]; const x = Number(s.replace(",", ".")); return x > 0 ? x : null; };
-    const rabais = amt("ÉCONOMISEZ"), prix = amt("OFFRE CHOC");
+    const rabais = amt("ÉCONOMISEZ");
+    // filled in by the page's script: "En entrepôt 5,99 $ · Économie -1,50 $ · Prix 4,49 $"
+    const j = t.join(" ").replace(/\u00a0/g, " ");
+    const wp = j.match(/En entrep[ôo]t\s+(\d+(?:\s\d{3})*,\d{2})\s*\$/i), fp = j.match(/\bPrix\s+(\d+(?:\s\d{3})*,\d{2})\s*\$/);
+    const reg = wp ? Number(wp[1].replace(/\s/g, "").replace(",", ".")) : null;
+    const prix = amt("OFFRE CHOC") || (fp ? Number(fp[1].replace(/\s/g, "").replace(",", ".")) : null);
     if (!rabais && !prix) continue;
     const ou = t.includes("En entrepôt seulement") ? "entrepôt" : "entrepôt et en ligne";
     const food = !!size && /\d\s*(g|kg|ml|l)\b/i.test(size) && !NOT_FOOD.test(n + " " + size);
@@ -54,7 +59,7 @@ export function parse(html) {
     // the product photo (Costco's image server; a smaller size is enough for the phone)
     const im = p.match(/<img[^>]+src="(https:\/\/[^"]*costco[^"]*)"/i);
     const img = im ? decode(im[1]).replace(/width=\d+/, "width=320").replace(/height=\d+/, "height=320") : null;
-    out.push({ n, size, no, du, au, rabais, prix, ou, img, ing: ings.length === 1 ? ings[0] : null });
+    out.push({ n, size, no, du, au, rabais, prix, reg, ou, img, ing: ings.length === 1 ? ings[0] : null });
   }
   return out;
 }
@@ -115,12 +120,29 @@ async function narcity() {
   return items;
 }
 
+// The warehouse prices ("En entrepôt", "Prix") are written by the page's own script after it loads:
+// open it like a visitor in headless Chrome, scroll to the bottom so every card loads, and take the result.
+async function rendered() {
+  let pw; try { pw = await import("playwright"); } catch (e) { console.log("Costco: no headless browser, prices not read"); return null; }
+  const b = await pw.chromium.launch();
+  try {
+    const pg = await b.newPage({ userAgent: UA, locale: "fr-CA" });
+    await pg.goto(URL_FR, { waitUntil: "domcontentloaded", timeout: 60000 });
+    for (let k = 0; k < 40; k++) { await pg.mouse.wheel(0, 1500); await pg.waitForTimeout(400); }
+    await pg.waitForTimeout(4000);
+    const h = await pg.content();
+    console.log(`Costco: page opened in headless Chrome, ${h.length} characters`);
+    return h;
+  } catch (e) { console.log("Costco browser: " + e.message); return null; } finally { await b.close(); }
+}
+
 async function main() {
   let html;
   if (arg("file")) html = fs.readFileSync(arg("file"), "utf8");
   else {
+    html = await rendered();
     // Costco sometimes answers with a short page (no products): try again a few times
-    for (let k = 0; k < 4; k++) {
+    for (let k = 0; k < 4 && !(html && parse(html).length >= 5); k++) {
       if (k) await new Promise((ok) => setTimeout(ok, 20000));
       try {
         const r = await fetch(URL_FR, { headers: { "User-Agent": UA, "Accept-Language": "fr-CA,fr;q=0.9", Accept: "text/html,application/xhtml+xml" } });
@@ -131,7 +153,7 @@ async function main() {
     }
   }
   let items = parse(html || "");
-  console.log(`Costco: ${items.length} food items in the circulaire (${items.filter((x) => x.ing).length} matched to an ingredient)`);
+  console.log(`Costco: ${items.length} food items in the circulaire (${items.filter((x) => x.ing).length} matched to an ingredient, ${items.filter((x) => x.prix).length} with the warehouse price)`);
   const dir = path.join(OUT, "data", "costco"), file = path.join(dir, "latest.json");
   let old = null; try { old = JSON.parse(fs.readFileSync(file, "utf8")); } catch (e) {}
   if (items.length < 5) { console.log("Costco: too few items, keeping the last circulaire"); items = old ? old.items : []; }

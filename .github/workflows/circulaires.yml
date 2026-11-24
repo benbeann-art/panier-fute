@@ -43,9 +43,11 @@ jobs:
       - name: Prix de 2026 (Noovo Moi, sites Maxi et Provigo) - sans IA
         continue-on-error: true
         run: node robot/historique.mjs --out=../d
-      - name: Circulaire Costco (costco.ca, rabais en entrepôt)
+      - name: Circulaire Costco (costco.ca, rabais et prix en entrepôt)
         continue-on-error: true
-        run: node robot/costco.mjs --out=../d
+        run: |
+          npm i --no-save --no-package-lock playwright@1.49.1 >/dev/null 2>&1 && npx playwright install --with-deps chromium >/dev/null 2>&1 || echo "no headless browser"
+          node robot/costco.mjs --out=../d
       - name: Enregistrer (branche data, refaite chaque fois pour rester petite)
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}

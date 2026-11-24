@@ -365,7 +365,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
     const ref = (LOWREG && LOWREG(sp.ing)) || ing.p;
     const min = Math.min(WMIN && WMIN[sp.ing] != null ? WMIN[sp.ing] : Infinity, ref);
     if (!(min > 0) || pu <= min * 1.005) return 10;
-    return Math.max(1, 10 - Math.round((pu / min - 1) / 0.05));
+    return Math.max(1, Math.min(9, 10 - Math.round((pu / min - 1) / 0.05)));
   }
   function cote(sp, ing) {
     const b = baseCote(sp, ing);
@@ -608,8 +608,11 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
     return String(q);
   }
   function fmtSpecial(sp) {
+    // a 5 lb bag at 1,44 $ is "1,44 $ / 5 lb", not "1,44 $/lb"
+    const q = Number(sp.qte) || 1;
+    if ((sp.unite === "lb" || sp.unite === "kg" || sp.unite === "L") && Math.abs(q - 1) > 1e-9) return FR(sp.prix) + " $ / " + FR(q, q % 1 ? 1 : 0).replace(/,0$/, "") + " " + sp.unite;
     const u = { lb: "/lb", kg: "/kg", g: "", ml: "", L: "/L", u: "" }[sp.unite] || "";
-    const pre = sp.qte > 1 && (sp.unite === "u") ? sp.qte + " pour " : "";
+    const pre = q > 1 && (sp.unite === "u") ? q + " pour " : "";
     return pre + FR(sp.prix) + " $" + u;
   }
 

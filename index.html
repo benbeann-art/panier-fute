@@ -3995,6 +3995,7 @@ async function ensureCoords() {
 }
 function nearStore(s) {
   if (s === "Bonanza") return inMtl();
+  if (s === "Costco") return true; // not on Flipp: always offered (warehouses everywhere in Québec)
   if (allCustom().some((x) => x.name === s)) return nearCustom().some((x) => x.name === s);
   if (!S.near || !S.near.length) return s !== "Marché Tradition"; // not known yet: the usual big chains
   return S.near.includes(s);

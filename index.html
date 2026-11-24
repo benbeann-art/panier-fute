@@ -936,6 +936,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
     parts.push({ text: prompt });
     const body = { contents: [{ role: "user", parts }], generationConfig: { maxOutputTokens: opt.maxTokens || 8000 } };
     if (opt.web) body.tools = [{ google_search: {} }];
+    else if (opt.json) body.generationConfig.responseMimeType = "application/json"; // JSON only: no text around it, faster
     const model = encodeURIComponent(modelName);
     const data = await post(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, { "x-goog-api-key": cfg.key }, body, opt.signal);
     const c = (data.candidates || [])[0];
@@ -2121,8 +2122,9 @@ function invIdCatalog() {
 let invBusyAt = 0;
 async function readReceipt(files) {
   if (!files.length) return;
-  if (invBusy && Date.now() - invBusyAt < 150000) return toast("L'IA lit déjà une photo, attends un peu");
-  invBusy = true; invBusyAt = Date.now(); invMsg = "L'IA lit ton reçu… (jusqu'à 1 minute)"; rHome();
+  if (invBusy && Date.now() - invBusyAt < 380000) return toast("L'IA lit déjà une photo, attends un peu");
+  invBusy = true; invBusyAt = Date.now(); invMsg = "L'IA lit ton reçu… (1 à 4 minutes pour une longue facture)"; rHome();
+  const tick = setInterval(() => { const m = $("#invMsg"); if (!invBusy) return clearInterval(tick); if (m) m.innerHTML = `<b>L'IA lit ton reçu… ${Math.round((Date.now() - invBusyAt) / 1000)} s</b> (1 à 4 minutes pour une longue facture, garde l'app ouverte)`; }, 1000);
   toast("Photo reçue : l'IA lit ta facture…", 5000);
   setTimeout(() => { const m = $("#invMsg"); if (m) m.scrollIntoView({ block: "center", behavior: "smooth" }); }, 50);
   const prompt = `Voici la photo d'un reçu d'épicerie du Québec. Lis chaque article acheté (sans en inventer), avec :
@@ -2138,8 +2140,8 @@ Une ligne « Rabais » ou « RABAIS SUR LE PRIX COURANT » sous un article appar
 Dans les articles, ignore les taxes, sacs, consignes et sous-totaux.
 Réponds UNIQUEMENT par cet objet JSON : {"recus":[{"mag":"magasin ou null","date":"AAAA-MM-JJ","total":123.45}],"items":[{"n":"nom","qte":"quantité","prix":12.34,"zone":"frigo|congel|garde","jours":7,"id":"identifiant ou null","recu":0,"regulier":14.50}]}`;
   try {
-    const ask = askAI(prompt, { images: await Promise.all([...files].slice(0, 4).map((f) => shrinkImg(f, 2200))), maxTokens: 8000 });
-    const j = AI.extractJSON(await Promise.race([ask, new Promise((_, no) => setTimeout(() => no(new Error("l'IA n'a pas répondu après 2 minutes")), 120000))]), "object");
+    const ask = askAI(prompt, { images: await Promise.all([...files].slice(0, 4).map((f) => shrinkImg(f, 2200))), maxTokens: 16000, json: true });
+    const j = AI.extractJSON(await Promise.race([ask, new Promise((_, no) => setTimeout(() => no(new Error("l'IA n'a pas répondu après 6 minutes")), 360000))]), "object");
     if (!j || !Array.isArray(j.items)) throw new Error("reçu illisible");
     invReview = j.items.filter((x) => x && x.n).map((x) => ({ n: String(x.n).slice(0, 60), qte: String(x.qte || "").slice(0, 30), zone: ZONES[x.zone] ? x.zone : "frigo",
       id: ING[x.id] ? x.id : null, days: Number(x.jours) > 0 ? Math.round(Number(x.jours)) : null, prix: Number(x.prix) > 0 ? Number(x.prix) : null, reg: Number(x.regulier) > Number(x.prix) + 0.009 ? Math.round(Number(x.regulier) * 100) / 100 : null, keep: true, recu: Number(x.recu) >= 0 ? Math.floor(Number(x.recu)) : 0 }));

@@ -2812,8 +2812,8 @@ function rList() {
         const price = L.packCost(it.id, it.buy, sp ? Math.min(sp.pu, lp) : lp, ING).cost;
         return `<div class="vrow"><div><b>${esc(ing.n)}</b><span class="q">Il faut : ${L.fmtQty(ing, it.buy)}${h ? ` · tu as : ${esc(h.qte || "une quantité inconnue")} (${{ frigo: "frigo", congel: "congélateur", garde: "garde-manger" }[h.z]})` : ""}${price >= 0.5 ? ` · si tu l'achètes : ≈ ${L.FR(price)} $${sp && sp.pu < lp ? " chez " + esc(sp.mag) : low ? " chez " + esc(low.s) : ""}` : ""}</span></div>
           <div class="row"><button class="btn sm" data-vf="${it.id}" data-v2="have">J'en ai assez</button><button class="btn sm red" data-vf="${it.id}" data-v2="buy">À acheter</button></div></div>`; }).join("")}</div>` : ""}
-    ${todo.length ? byStore : checkItems.length ? "" : `<div class="empty" style="margin-top:14px"><b>Tout est coché.</b> Bonne cuisine !</div>`}
-    ${pantryItems.length ? `<div class="store"><h3 style="background:var(--mute)"><span>Déjà à la maison (achetés, garde-manger et vérifiés)</span><span class="small">${pantryItems.length}</span></h3>${pantryItems.map((it) => `<div class="item done" style="opacity:.7" ${!inPantry(it.id) ? `data-vf="${it.id}" data-v2="check" role="button" tabindex="0" title="Remettre à vérifier"` : ""}><span class="bx">✓</span><span><span class="nm" style="text-decoration:none">${esc(ING[it.id].n)}</span><span class="q">${L.fmtQty(ING[it.id], it.buy)}${it.bought ? " · acheté" : ""}</span></span><span></span></div>`).join("")}</div>` : ""}
+    ${todo.length ? byStore : checkItems.length ? "" : `<div class="empty" style="margin-top:14px"><b>Épicerie faite.</b> Tes achats sont rangés dans <button class="btn sm" data-go="maison">Maison</button> (frigo, garde-manger, congélateur). Bonne cuisine !</div>`}
+    ${pantryItems.length ? `<details class="card" style="margin-top:18px"><summary>Déjà à la maison : ${pantryItems.length} article${pantryItems.length > 1 ? "s" : ""} (achetés, garde-manger, vérifiés)</summary><p class="small mute" style="margin:6px 0">Ce que tu as acheté est rangé dans Maison (frigo, garde-manger ou congélateur).</p>${pantryItems.map((it) => `<div class="item done" style="opacity:.7" ${!inPantry(it.id) ? `data-vf="${it.id}" data-v2="check" role="button" tabindex="0" title="Remettre à vérifier"` : ""}><span class="bx">✓</span><span><span class="nm" style="text-decoration:none">${esc(ING[it.id].n)}</span><span class="q">${L.fmtQty(ING[it.id], it.buy)}${it.bought ? " · acheté" : ""}</span></span><span></span></div>`).join("")}</details>` : ""}
     ${done.length ? `<div class="store"><h3 style="background:var(--green)"><span>✓ Déjà à la maison / dans le panier</span><span class="small">${done.length}</span></h3>${done.map(item).join("")}</div>` : ""}
     <details class="card" id="panBox" ${panOpen ? "open" : ""} style="margin-top:18px"><summary>Mon garde-manger (ce que j'ai toujours)</summary>
       <p class="small mute" style="margin-top:0">Touche ce que tu as toujours à la maison (sel, épices, huile, riz…) : ça ne sera plus dans la liste ni dans le total.</p>
@@ -2827,7 +2827,7 @@ function updateBadge() {
   const sb = $("#sumHost"); if (sb) sb.innerHTML = summaryBox();
   const b = $("#nleft");
   if (!DATA || (!S.menu.length && !S.extras.length && !S.col.length)) { b.hidden = true; return; }
-  const n = fullList().filter((it) => !S.coches[it.id] && !inPantry(it.id) && verifState(it.id) !== "have").length;
+  const d = listData(), n = d.list.filter((it) => !S.coches[it.id]).length + d.checkItems.length;
   b.hidden = !n; b.textContent = n;
 }
 

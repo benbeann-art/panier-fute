@@ -2130,7 +2130,8 @@ async function readReceipt(files) {
 ${invIdCatalog()}
 Il peut y avoir PLUSIEURS reçus (plusieurs factures, ou une longue facture en plusieurs photos). Pour CHAQUE facture différente, lis le nom du magasin (un de : ${L.STORES.join(", ")}, sinon null), la date et le TOTAL PAYÉ (taxes comprises, le montant final écrit au bas de la facture, pas un sous-total). Une même facture en plusieurs photos = une seule facture.
 Pour chaque article, indique "recu" : le numéro de sa facture (0 pour la première, 1 pour la deuxième…).
-Dans les articles, ignore les taxes, sacs, consignes, rabais de carte et sous-totaux.
+Une ligne « Rabais » ou « RABAIS SUR LE PRIX COURANT » sous un article appartient à cet article : son "prix" est le montant vraiment payé pour cet article, rabais enlevé (selon le magasin, le montant imprimé est avant ou déjà après le rabais). Vérifie : la somme des prix des articles + les taxes doit donner le TOTAL de la facture.
+Dans les articles, ignore les taxes, sacs, consignes et sous-totaux.
 Réponds UNIQUEMENT par cet objet JSON : {"recus":[{"mag":"magasin ou null","date":"AAAA-MM-JJ","total":123.45}],"items":[{"n":"nom","qte":"quantité","prix":12.34,"zone":"frigo|congel|garde","jours":7,"id":"identifiant ou null","recu":0}]}`;
   try {
     const j = AI.extractJSON(await askAI(prompt, { images: await Promise.all([...files].slice(0, 4).map((f) => shrinkImg(f, 2200))), maxTokens: 6000 }), "object");

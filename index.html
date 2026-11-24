@@ -3020,14 +3020,14 @@ function learnRegular(items, src, date) {
 function coteCls(sp, c) {
   const ing = ING[sp.ing]; if (!ing || c == null) return "c-o";
   const pu = L.unitPrice(sp, ing), low = lowReg(sp.ing);
-  if (pu != null && low && pu >= low.p * 0.98) return "c-o";
+  if (pu != null && low && (low.real || !ing.k) && pu >= low.p * 0.98) return "c-o";
   return c >= 8 ? "c-g" : c >= 5 ? "c-y" : "c-r";
 }
 // "not a real special": who sells it cheaper every day
 function notRealTxt(sp) {
   const ing = ING[sp.ing]; if (!ing) return "";
   const pu = L.unitPrice(sp, ing), low = lowReg(sp.ing);
-  if (pu == null || !low || pu < low.p * 0.98) return "";
+  if (pu == null || !low || pu < low.p * 0.98 || (ing.k && !low.real)) return ""; // snacks: no estimated everyday price
   return `<b style="color:#c4500f">Pas un vrai spécial</b> : ${low.s === sp.mag ? "c'est son prix habituel" : `${esc(low.s)} ≈ ${perUnitTxt(ing, low.p)} tous les jours${low.real ? "" : " (estimé)"}`}`;
 }
 const COTE_LEG = `<span class="leg"><span class="tag mini c-g">8+</span> bon achat <span class="tag mini c-y">5-7</span> correct <span class="tag mini c-r">1-4</span> plus cher <span class="tag mini c-o">–</span> pas un vrai spécial</span>`;
@@ -4994,7 +4994,9 @@ Promise.all([getJSON("recettes.json", window.DATA_RECETTES), getJSON("speciaux.j
     start();
     Photos.loadAll().then((n) => { if (n) { render(S.view); if (S.open) openRec(S.open); } });
     fetch("photos/index.json", { cache: "no-cache" }).then((r) => (r.ok ? r.json() : [])).then((l) => { if (Array.isArray(l) && l.length) { REPO_PH = new Set(l); render(S.view); if (S.open) openRec(S.open); } }).catch(() => {});
-    setTimeout(async () => { loadCostco(); await syncNow(); try { if (!S.costcoOff && !S.reg.stores.includes("Costco")) { S.reg.stores.push("Costco"); save(); render(S.view); } } catch (e) {} try { receiptFix1122(); siteFix(); updateBadge(); } catch (e) {} weeklyAuto(); }, 800);
+    setTimeout(async () => { loadCostco(); await syncNow(); try { if (!S.costcoOff && !S.reg.stores.includes("Costco")) { S.reg.stores.push("Costco"); save(); render(S.view); } } catch (e) {}
+      // v3.13.70: the flyers now also hold snacks, coffee, nuts and drinks: read this week's flyers again once
+      try { if (S.kTermsV !== 1) { S.kTermsV = 1; save(); updateFlyers(true).then(() => render(S.view)).catch(() => {}); } } catch (e) {} try { receiptFix1122(); siteFix(); updateBadge(); } catch (e) {} weeklyAuto(); }, 800);
   })
   .catch(() => { $("#loading").textContent = "Impossible de charger les recettes. Recharge la page."; });
 

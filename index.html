@@ -289,7 +289,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
 ;</script><script>
 // Pure logic: prices, deal scores, store choice, weekly plan, grocery list. Shared by the page and the Node tests.
 (function (root) {
-  const STORES = ["Maxi", "Super C", "IGA", "Metro", "Provigo", "Walmart", "Adonis", "Bonanza", "Marché Tradition", "Tigre Géant"];
+  const STORES = ["Maxi", "Super C", "IGA", "Metro", "Provigo", "Walmart", "Adonis", "Bonanza", "Marché Tradition", "Tigre Géant", "Costco"];
   const DAYS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
   const LB = 453.6;
 
@@ -1161,7 +1161,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
 (function (root) {
   "use strict";
   const API = "https://backflipp.wishabi.com/flipp/items/search";
-  const STORES = ["Maxi", "Super C", "IGA", "Metro", "Provigo", "Walmart", "Adonis", "Marché Tradition", "Tigre Géant"];
+  const STORES = ["Maxi", "Super C", "IGA", "Metro", "Provigo", "Walmart", "Adonis", "Marché Tradition", "Tigre Géant", "Costco"];
   // Quebec regions whose flyers the GitHub robot keeps every week (the app picks the nearest one)
   const REGIONS = [
     ["mtl", "Montréal", "H2X1Y4", 45.55, -73.65], ["laval", "Laval", "H7N1A1", 45.57, -73.75], ["longueuil", "Longueuil / Rive-Sud", "J4K1A1", 45.53, -73.47],
@@ -1182,7 +1182,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
   ].map(([id, name, postal, lat, lon]) => ({ id, name, postal, lat, lon }));
   const distKm = (a, b) => { const R = 6371, t = Math.PI / 180, dLa = (b.lat - a.lat) * t, dLo = (b.lon - a.lon) * t; const h = Math.sin(dLa / 2) ** 2 + Math.cos(a.lat * t) * Math.cos(b.lat * t) * Math.sin(dLo / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };
   const nearestRegion = (p, maxKm) => { let best = null, d = 1e9; for (const r of REGIONS) { const x = distKm(p, r); if (x < d) { d = x; best = r; } } return best && d <= (maxKm || 35) ? best : null; };
-  const ALIAS = { "les marches tradition": "Marché Tradition", "marches tradition": "Marché Tradition", "marche tradition": "Marché Tradition", "tigre geant": "Tigre Géant", "giant tiger": "Tigre Géant" };
+  const ALIAS = { "les marches tradition": "Marché Tradition", "marches tradition": "Marché Tradition", "marche tradition": "Marché Tradition", "tigre geant": "Tigre Géant", "giant tiger": "Tigre Géant", "costco wholesale": "Costco", "costco": "Costco" };
   const LB = 453.592;
 
   // ingredient id -> [Flipp search, words needed, words refused]
@@ -1674,6 +1674,7 @@ const fresh = () => ({ t: 0, view: "speciaux", menu: [], mes: [], coches: {}, ex
 let S = fresh();
 try { const j = JSON.parse(localStorage.getItem(KEY) || "null"); if (j) S = Object.assign(fresh(), j, { reg: Object.assign(fresh().reg, j.reg || {}) }); } catch (e) {}
 try { const c = JSON.parse(localStorage.getItem("panierfute.registry") || "{}"); for (const x of (c.list || []).concat(S.myStores || [])) if (x && x.name && !L.STORES.includes(x.name)) L.STORES.push(x.name); } catch (e) {}
+if (!S.costcoAdded) { if (!S.reg.stores.includes("Costco")) S.reg.stores.push("Costco"); S.costcoAdded = 1; } // v3.13.57: Costco added
 if (!S.bonanzaAdded) { if (!S.reg.stores.includes("Bonanza")) S.reg.stores.push("Bonanza"); S.bonanzaAdded = 1; } // v3.7: Marché Bonanza Lalumière added
 
 // ---------- save (local + account sync) ----------
@@ -1919,7 +1920,7 @@ function rSpec() {
   const selBar = S.sel.length ? `<div class="selbar"><span><b>${S.sel.length}</b> article${S.sel.length > 1 ? "s" : ""} choisi${S.sel.length > 1 ? "s" : ""}</span><button class="btn sm" id="selClear">Effacer</button><button class="btn sm red" id="selGo">Voir les recettes →</button></div>` : "";
   const FLYER = { Maxi: "https://www.circulaire-en-ligne.ca/circulaire-maxi/speciaux-promotions-rabais-semaine", "Super C": "https://www.circulaire-en-ligne.ca/circulaire-super-c",
     IGA: "https://www.iga.net/fr/circulaire", Metro: "https://www.circulaire-en-ligne.ca/circulaire-metro", Provigo: "https://www.circulaire-en-ligne.ca/circulaire-provigo/speciaux-promotions-rabais-semaine",
-    Walmart: "https://www.circulaire-en-ligne.ca/circulaire-walmart/speciaux-promotions-rabais-semaine", Adonis: "https://www.circulaire-en-ligne.ca/circulaire-adonis", Bonanza: "https://bonanzalalumiere.com/pages/circulaire", "Marché Tradition": "https://www.marchestradition.com/fr/circulaire/" };
+    Walmart: "https://www.circulaire-en-ligne.ca/circulaire-walmart/speciaux-promotions-rabais-semaine", Adonis: "https://www.circulaire-en-ligne.ca/circulaire-adonis", Bonanza: "https://bonanzalalumiere.com/pages/circulaire", Costco: "https://www.costco.ca/fr/coupons.html", "Marché Tradition": "https://www.marchestradition.com/fr/circulaire/" };
   const hot = rows.filter((x) => x.c >= 8), rest = rows.filter((x) => !(x.c >= 8));
   const exp = SPEC && SPEC.fin < now;
   $("#v-speciaux").innerHTML = `
@@ -2965,7 +2966,7 @@ let recLimit = 40;
 // ---------- Regular (everyday) price of each item in each store ----------
 // Learned from the "au lieu de" prices printed in the flyers and from receipts; until then, estimated from the
 // Montreal average with a small factor (discount stores a bit cheaper).
-const TIER = { Maxi: 0.92, "Super C": 0.92, Walmart: 0.92, "Tigre Géant": 0.93, Bonanza: 0.95, Adonis: 0.97, "Marché Tradition": 1.0, Provigo: 1.03, IGA: 1.04, Metro: 1.04 };
+const TIER = { Costco: 0.88, Maxi: 0.92, "Super C": 0.92, Walmart: 0.92, "Tigre Géant": 0.93, Bonanza: 0.95, Adonis: 0.97, "Marché Tradition": 1.0, Provigo: 1.03, IGA: 1.04, Metro: 1.04 };
 function regAt(id, store) {
   if (String(id).startsWith("u_")) return ING[id] ? ING[id].p : null; // a price I typed myself: the same in every store
   const x = ((S.regStore || {})[id] || {})[store];

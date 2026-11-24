@@ -102,7 +102,7 @@ async function noovoFetchMissing() {
   return [...done].sort();
 }
 
-const STORE_RE = /chez\s+(?:les\s+)?(Maxi|Super\s*C|IGA|Metro|Provigo|Walmart|Adonis|March[ée]s?\s+Tradition|Tigre\s+G[ée]ant)\b/gi;
+const STORE_RE = /chez\s+(?:les\s+)?(Maxi|Super\s*C|IGA|Metro|Provigo|Walmart|Adonis|March[ée]s?\s+Tradition|Tigre\s+G[ée]ant|Costco)\b/gi;
 const storeName = (s) => { const n = Flipp.norm(s); return n.startsWith("super") ? "Super C" : n.startsWith("tigre") ? "Tigre Géant" : /tradition/.test(n) ? "Marché Tradition" : Flipp.STORES.find((x) => Flipp.norm(x) === n) || null; };
 
 // One article -> specials. A line with prices and "chez <store>" belongs to the product named on the line above it.

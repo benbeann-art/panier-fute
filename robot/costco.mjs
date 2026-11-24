@@ -63,11 +63,18 @@ async function main() {
   let html;
   if (arg("file")) html = fs.readFileSync(arg("file"), "utf8");
   else {
-    const r = await fetch(URL_FR, { headers: { "User-Agent": UA, "Accept-Language": "fr-CA,fr;q=0.9", Accept: "text/html" } });
-    if (!r.ok) { console.log(`Costco: HTTP ${r.status}, nothing changed`); return; }
-    html = await r.text();
+    // Costco sometimes answers with a short page (no products): try again a few times
+    for (let k = 0; k < 4; k++) {
+      if (k) await new Promise((ok) => setTimeout(ok, 20000));
+      try {
+        const r = await fetch(URL_FR, { headers: { "User-Agent": UA, "Accept-Language": "fr-CA,fr;q=0.9", Accept: "text/html,application/xhtml+xml" } });
+        html = await r.text();
+        console.log(`Costco: try ${k + 1}, HTTP ${r.status}, ${html.length} characters`);
+        if (r.ok && parse(html).length >= 5) break;
+      } catch (e) { console.log("Costco: " + e.message); }
+    }
   }
-  const items = parse(html);
+  const items = parse(html || "");
   console.log(`Costco: ${items.length} food items in the circulaire (${items.filter((x) => x.ing).length} matched to an ingredient)`);
   if (items.length < 5) { console.log("Costco: too few items, the page may have changed - nothing written"); return; }
   const dir = path.join(OUT, "data", "costco");

@@ -4355,13 +4355,21 @@ function costcoQty(size) {
 }
 // Costco deals with a real warehouse price, scored like the other stores (same quantity: price per g / ml):
 // - Narcity's monthly article (price paid), - "OFFRE CHOC" price, - my Costco receipts' price minus the coupon
+// the same product in Narcity's article and in Costco's coupon list ("Fromage à la crème original - Philadelphia" / "Fromage à la crème Philadelphia")
+function costcoTwin(x) {
+  const words = (s) => norm(s).split(/[^a-z0-9]+/).filter((w) => w.length > 3);
+  const brand = String(x.n).split(" - ").slice(1).join(" "), a = words(x.n);
+  return (COSTCO.items || []).find((c) => { const b = words(c.n); return (!brand || words(brand).every((w) => b.includes(w))) && a.filter((w) => b.includes(w)).length >= Math.min(3, a.length); }) || null;
+}
 function costcoSpecials() {
   if (!COSTCO) return [];
-  const t = today(), out = [], ok = (x) => (!x.au || x.au >= t) && (!x.du || x.du <= t);
+  const t = today(), out = [], ok = (x) => x.au && x.au >= t && (!x.du || x.du <= t);
   const unitOk = (id, u) => ING[id] && (ING[id].u === u || (ING[id].u === "cs" || ING[id].u === "ct") && u === "ml");
   for (const x of COSTCO.narcity || []) {
-    if (!ok(x) || !x.ing || !x.qte || !unitOk(x.ing, x.unite)) continue;
-    out.push({ ing: x.ing, mag: "Costco", prix: x.prix, qte: x.qte, unite: x.unite, txt: x.n, fin: x.au, costco: "narcity" });
+    if (!ok(x) || !x.ing) continue;
+    const tw = costcoTwin(x), z = x.qte ? { q: x.qte, u: x.unite } : tw && costcoQty(tw.size); // size from Costco's own page
+    if (!z || !unitOk(x.ing, z.u)) continue;
+    out.push({ ing: x.ing, mag: "Costco", prix: x.prix, qte: z.q, unite: z.u, txt: x.n + (tw && tw.size ? " · " + tw.size : ""), fin: x.au, img: tw && tw.img, costco: "narcity" });
   }
   for (const x of COSTCO.items || []) {
     if (!ok(x) || !x.ing || out.some((o) => o.ing === x.ing)) continue;
@@ -4376,7 +4384,9 @@ function costcoSpecials() {
 function costcoBox() {
   if (!COSTCO || (S.store && S.store !== "Costco")) return "";
   const t = today(), list = COSTCO.items.filter((x) => (!x.au || x.au >= t) && (!x.du || x.du <= t));
-  const nar = (COSTCO.narcity || []).filter((x) => (!x.au || x.au >= t) && (!x.du || x.du <= t));
+  const narAll = (COSTCO.narcity || []).filter((x) => x.au && x.au >= t && (!x.du || x.du <= t));
+  const price = new Map(); for (const x of narAll) { const tw = costcoTwin(x); if (tw) price.set(tw, x); }
+  const nar = narAll.filter((x) => !costcoTwin(x)); // the others are shown on their Costco card
   if (!list.length && !nar.length) return "";
   return `<details class="card" style="margin:12px 0" ${S.store === "Costco" ? "open" : ""}><summary><b>Circulaire Costco</b> : ${list.length + nar.length} rabais d'épicerie en entrepôt (touche pour voir)</summary>
     <p class="small mute" style="margin:6px 0">Rabais lus sur costco.ca (le site ne montre pas le prix final en entrepôt). Quand le vrai prix est connu (article Narcity, « offre choc » ou ton prix Costco appris sur une facture moins le rabais), l'article est aussi dans les spéciaux avec ses 2 notes, au même prix par kg ou par litre que les autres.</p>
@@ -4385,7 +4395,7 @@ function costcoBox() {
       <div style="padding:6px 8px"><div class="nm">${esc(x.n)}</div>
       <div class="meta">${esc(x.size || "")}${x.ou === "entrepôt" ? " · entrepôt seulement" : ""}</div>
       <div class="meta">jusqu'au ${frDate(x.au)}</div>
-      <span class="price" style="color:var(--green)">${x.prix ? L.FR(x.prix) + " $" : "Rabais " + L.FR(x.rabais) + " $"}</span></div></div>`).join("")}</div>
+      <span class="price" style="color:var(--green)">${x.prix ? L.FR(x.prix) + " $" : price.get(x) ? L.FR(price.get(x).prix) + " $ <span class='small mute' style='font-weight:400'>au lieu de " + L.FR(price.get(x).reg) + " $</span>" : "Rabais " + L.FR(x.rabais) + " $"}</span></div></div>`).join("")}</div>
     ${nar.length ? `<h3 style="margin:14px 0 6px">Prix en entrepôt (article Narcity)</h3><div class="flyer">${nar.map((x) => `<div class="art" style="cursor:default"><div style="padding:6px 8px"><div class="nm">${esc(x.n)}</div>
       <div class="meta">${x.qte ? L.FR(x.qte >= 1000 ? x.qte / 1000 : x.qte, x.qte >= 1000 ? 2 : 0) + (x.qte >= 1000 ? (x.unite === "g" ? " kg" : " L") : " " + x.unite) : ""} · au lieu de ${L.FR(x.reg)} $</div><div class="meta">jusqu'au ${frDate(x.au)}</div>
       <span class="price" style="color:var(--green)">${L.FR(x.prix)} $</span></div></div>`).join("")}</div>` : ""}

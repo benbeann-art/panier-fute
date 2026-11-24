@@ -104,7 +104,7 @@ async function narcity() {
       const r = await fetch(u, { headers: { "User-Agent": UA, "Accept-Language": "fr-CA,fr;q=0.9" } });
       if (!r.ok) { console.log(`Narcity: HTTP ${r.status} ${u}`); continue; }
       const h = await r.text();
-      const got = parseNarcity(h, u).filter((x) => !x.au || x.au >= today);
+      const got = parseNarcity(h, u).filter((x) => x.au && x.au >= today); // no end date read = not sure it is current: skipped
       console.log(`Narcity: ${got.length} current deals in ${u}`);
       items.push(...got);
       // newer "costco-rabais-circulaire-..." articles are linked from the older ones

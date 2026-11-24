@@ -2128,17 +2128,21 @@ async function readReceipt(files) {
 - combien de jours ça se garde à cet endroit,
 - l'identifiant le plus proche dans cette liste (sinon null) :
 ${invIdCatalog()}
-Lis aussi le nom du magasin (un de : ${L.STORES.join(", ")}, sinon null), la date du reçu et le TOTAL PAYÉ (taxes comprises, le montant final du reçu).
+Il peut y avoir PLUSIEURS reçus (plusieurs factures, ou une longue facture en plusieurs photos). Pour CHAQUE facture différente, lis le nom du magasin (un de : ${L.STORES.join(", ")}, sinon null), la date et le TOTAL PAYÉ (taxes comprises, le montant final écrit au bas de la facture, pas un sous-total). Une même facture en plusieurs photos = une seule facture.
+Pour chaque article, indique "recu" : le numéro de sa facture (0 pour la première, 1 pour la deuxième…).
 Dans les articles, ignore les taxes, sacs, consignes, rabais de carte et sous-totaux.
-Réponds UNIQUEMENT par cet objet JSON : {"mag":"magasin ou null","date":"AAAA-MM-JJ","total":123.45,"items":[{"n":"nom","qte":"quantité","prix":12.34,"zone":"frigo|congel|garde","jours":7,"id":"identifiant ou null"}]}`;
+Réponds UNIQUEMENT par cet objet JSON : {"recus":[{"mag":"magasin ou null","date":"AAAA-MM-JJ","total":123.45}],"items":[{"n":"nom","qte":"quantité","prix":12.34,"zone":"frigo|congel|garde","jours":7,"id":"identifiant ou null","recu":0}]}`;
   try {
     const j = AI.extractJSON(await askAI(prompt, { images: await Promise.all([...files].slice(0, 4).map((f) => shrinkImg(f, 2200))), maxTokens: 6000 }), "object");
     if (!j || !Array.isArray(j.items)) throw new Error("reçu illisible");
     invReview = j.items.filter((x) => x && x.n).map((x) => ({ n: String(x.n).slice(0, 60), qte: String(x.qte || "").slice(0, 30), zone: ZONES[x.zone] ? x.zone : "frigo",
-      id: ING[x.id] ? x.id : null, days: Number(x.jours) > 0 ? Math.round(Number(x.jours)) : null, prix: Number(x.prix) > 0 ? Number(x.prix) : null, keep: true }));
-    invReview.receipt = { mag: L.STORES.includes(j.mag) ? j.mag : null, date: /^\d{4}-\d\d-\d\d$/.test(j.date || "") ? j.date : today(), total: Number(j.total) > 0 ? Number(j.total) : null };
-    const tot = invReview.reduce((t, x) => t + (x.prix || 0), 0);
-    invMsg = invReview.length ? `Reçu${invReview.receipt.mag ? " de " + invReview.receipt.mag : ""} : ${invReview.length} articles, ${L.FR(tot)} $. Vérifie et ajoute à l'inventaire.` : "Rien de lisible. Reprends la photo bien à plat, avec de la lumière.";
+      id: ING[x.id] ? x.id : null, days: Number(x.jours) > 0 ? Math.round(Number(x.jours)) : null, prix: Number(x.prix) > 0 ? Number(x.prix) : null, keep: true, recu: Number(x.recu) >= 0 ? Math.floor(Number(x.recu)) : 0 }));
+    const rcs = (Array.isArray(j.recus) && j.recus.length ? j.recus : [j]).map((r) => ({ mag: L.STORES.includes(r && r.mag) ? r.mag : null, date: /^\d{4}-\d\d-\d\d$/.test((r && r.date) || "") ? r.date : today(), total: Number(r && r.total) > 0 ? Number(r.total) : null }));
+    for (const x of invReview) if (!rcs[x.recu]) x.recu = 0;
+    rcs.forEach((r, i) => { const lines = invReview.filter((x) => x.recu === i).reduce((t, x) => t + (x.prix || 0), 0); if (!r.total || r.total < lines * 0.9) r.total = Math.round(lines * 100) / 100 || null; });
+    invReview.receipts = rcs; invReview.receipt = rcs[0];
+    const tot = rcs.reduce((t, r) => t + (r.total || 0), 0);
+    invMsg = invReview.length ? `${rcs.length > 1 ? rcs.length + " factures" : "Reçu" + (rcs[0].mag ? " de " + rcs[0].mag : "")} : ${invReview.length} articles, ${L.FR(tot)} $ payés. Vérifie le total de chaque facture, puis ajoute.` : "Rien de lisible. Reprends la photo bien à plat, avec de la lumière.";
   } catch (e) { invMsg = "La lecture du reçu n'a pas marché : " + (e.message || "erreur"); }
   invBusy = false; rHome();
 }
@@ -2147,23 +2151,32 @@ Réponds UNIQUEMENT par cet objet JSON : {"mag":"magasin ou null","date":"AAAA-M
 function logTrip(t) {
   S.depenses = S.depenses || [];
   // a receipt replaces the estimate already logged for the same day and store
-  if (t.src === "recu") S.depenses = S.depenses.filter((x) => !(x.src === "liste" && x.date === t.date && (!t.mag || (x.mags || []).includes(t.mag))));
+  const near = (x) => Math.abs(new Date(x.date) - new Date(t.date)) <= 2 * 864e5;
+  if (t.src === "recu") S.depenses = S.depenses.filter((x) => !(x.src === "liste" && near(x) && (!t.mag || !(x.mags || []).length || (x.mags || []).includes(t.mag))));
+  // a receipt is already there for that trip: the list estimate is not counted a second time
+  if (t.src === "liste" && S.depenses.some((x) => x.src === "recu" && near(x) && (t.mags || []).some((m) => x.mag === m || (x.mags || []).includes(m)))) return;
   t.at = t.at || Date.now(); S.depenses.push(t);
   S.depenses = S.depenses.filter((x) => x.date >= addDays(today(), -730));
 }
 function logReceipt(review) {
-  const rc = review.receipt; if (!rc) return;
-  let total = 0, regular = 0;
-  for (const x of review) {
-    if (!x.keep || !x.prix) continue;
-    total += x.prix;
-    const amt = x.id ? parseAmt(x.qte, x.id) || (ING[x.id].u === "u" ? 1 : null) : null;
-    regular += amt && ING[x.id] ? Math.max(x.prix, ING[x.id].p * amt) : x.prix;
-  }
-  const est = (S.depenses || []).find((x) => x.src === "liste" && x.date === (rc.date || today()) && (!rc.mag || (x.mags || []).includes(rc.mag)));
-  if (rc.total && rc.total >= total * 0.9) { regular += rc.total - total; total = rc.total; } // the amount really paid, taxes included
-  if (total > 0) logTrip({ date: rc.date || today(), mags: rc.mag ? [rc.mag] : [], mag: rc.mag, total: Math.round(total * 100) / 100, saved: Math.round(Math.max(0, regular - total) * 100) / 100, src: "recu" });
-  return { total, est: est ? est.total : null };
+  const rcs = review.receipts || (review.receipt ? [review.receipt] : []); if (!rcs.length) return;
+  let all = 0, estAll = 0, anyEst = false;
+  rcs.forEach((rc, i) => {
+    let total = 0, regular = 0;
+    for (const x of review) {
+      if (!x.prix || (x.recu || 0) !== i) continue; // every line counts in what was paid, even the ones not put in the inventory
+      total += x.prix;
+      const amt = x.id ? parseAmt(x.qte, x.id) || (ING[x.id].u === "u" ? 1 : null) : null;
+      regular += amt && ING[x.id] ? Math.max(x.prix, ING[x.id].p * amt) : x.prix;
+    }
+    const near = (x) => x.src === "liste" && Math.abs(new Date(x.date) - new Date(rc.date || today())) <= 2 * 864e5 && (!rc.mag || !(x.mags || []).length || (x.mags || []).includes(rc.mag));
+    const est = (S.depenses || []).find(near);
+    if (est) { estAll += est.total; anyEst = true; }
+    if (rc.total > 0) { regular += Math.max(0, rc.total - total); total = rc.total; } // the amount really paid, taxes included
+    if (total > 0) logTrip({ date: rc.date || today(), mags: rc.mag ? [rc.mag] : [], mag: rc.mag, total: Math.round(total * 100) / 100, saved: Math.round(Math.max(0, regular - total) * 100) / 100, src: "recu" });
+    all += total;
+  });
+  return { total: all, est: anyEst ? estAll : null };
 }
 function finishShopping() {
   const { list, ch } = listData();
@@ -2220,8 +2233,8 @@ function summaryBox() {
       <span class="mbar" style="height:${(x.spent / maxM) * 100}%"><span class="msave" style="height:${x.spent ? (x.saved / x.spent) * 100 : 0}%"></span></span>
       <span class="small">${new Date(x.k + "-15T12:00").toLocaleDateString("fr-CA", { month: "short" })}</span></div>`).join("")}</div>
     <p class="small mute" style="margin:8px 0 0"><span class="lg dep"></span> dépensé · <span class="lg sav"></span> part sauvée grâce aux spéciaux</p>
-    ${these.length ? `<details style="margin-top:10px"><summary>Détail des épiceries</summary>${these.slice().sort((p, q) => q.date.localeCompare(p.date)).map((x) => `<div class="xrow"><span>${frDate(x.date)} · ${esc((x.mags || []).join(" + ") || "Épicerie")} <span class="small mute">· ${x.src === "recu" ? "reçu" : "liste (estimé)"}</span></span><b>${L.FR(x.total)} $</b><button class="x" data-depdel="${dep.indexOf(x)}" aria-label="Retirer">×</button></div>`).join("")}</details>` : ""}
-    <p class="small mute">Chaque épicerie compte quand tu appuies sur « J'ai fini mon épicerie » ou quand tu scannes ton reçu (le reçu remplace l'estimation de la même journée).</p>
+    ${these.length ? `<details style="margin-top:10px"><summary>Détail des épiceries</summary>${these.slice().sort((p, q) => q.date.localeCompare(p.date)).map((x) => `<div class="xrow"><span>${frDate(x.date)} · ${esc((x.mags || []).join(" + ") || "Épicerie")} <span class="small mute">· ${x.src === "recu" ? "reçu" : "liste (estimé)"}</span></span><label><input type="number" class="xprice" data-dept="${dep.indexOf(x)}" min="0" step="0.01" value="${x.total}" inputmode="decimal" aria-label="Montant payé"> $</label><button class="x" data-depdel="${dep.indexOf(x)}" aria-label="Retirer">×</button></div>`).join("")}</details>` : ""}
+    <p class="small mute">Chaque épicerie compte quand tu appuies sur « J'ai fini mon épicerie » ou quand tu scannes ton reçu (le reçu remplace l'estimation du même magasin, à 2 jours près). Tu peux corriger un montant dans « Détail des épiceries ».</p>
   </div>`;
 }
 
@@ -2405,6 +2418,8 @@ function rHome() {
       <b>Articles trouvés sur la photo</b>
       ${invReview.map((x, i) => `<div class="xrow"><label class="chk" style="flex:1;min-width:0"><input type="checkbox" data-rvk="${i}" ${x.keep ? "checked" : ""}><span>${esc(x.n)}${x.qte ? ` <span class="small mute">· ${esc(x.qte)}</span>` : ""}${x.prix ? ` <span class="small mute">· ${L.FR(x.prix)} $</span>` : ""}</span></label>
         <select data-rvz="${i}" aria-label="Endroit" style="width:auto;min-height:36px">${Object.entries(ZONES).map(([k, n]) => `<option value="${k}" ${x.zone === k ? "selected" : ""}>${n}</option>`).join("")}</select></div>`).join("")}
+      ${(invReview.receipts || []).map((r, i) => `<div class="xrow" style="background:var(--bg);border-radius:10px;padding:6px 10px;margin-top:6px"><span><b>Facture ${i + 1}</b>${r.mag ? " · " + esc(r.mag) : ""} · ${frDate(r.date)}</span><label class="small">Total payé <input type="number" class="xprice" data-rvt="${i}" min="0" step="0.01" value="${r.total || ""}" placeholder="0,00" inputmode="decimal"> $</label></div>`).join("")}
+      ${invReview.receipts ? `<p class="small mute" style="margin:6px 0 0">Compare avec le montant au bas de chaque facture et corrige-le au besoin.</p>` : ""}
       <div class="row" style="margin-top:10px"><button class="btn red" id="rvAdd">Ajouter à l'inventaire</button><button class="btn sm" id="rvCancel">Annuler</button></div></div>` : "";
   $("#v-maison").innerHTML = `<h1>À la maison</h1>
     <p class="lead">Prends en photo ton frigo, ton congélateur ou ton garde-manger : l'IA reconnaît tout et le classe. L'app te propose ensuite des recettes avec ce que tu as.</p>
@@ -4684,6 +4699,8 @@ document.addEventListener("change", (e) => {
   if (t.id === "rcPhoto" && t.files && t.files.length) return readReceipt([...t.files].slice(0, 3));
   if (t.dataset.invexp !== undefined) { const x = zoneList(S.invTab || "frigo")[Number(t.dataset.invexp)]; if (x) { x.exp = t.value; save(); rHome(); } return; }
   if (t.dataset.invmove !== undefined) { const from = S.invTab || "frigo", to = t.value; if (to !== from) { const it = zoneList(from).splice(Number(t.dataset.invmove), 1)[0]; if (it) { if (it.id) it.exp = addDays(today(), shelfDays(it.id, to)); zoneList(to).push(it); toast(`${it.n} → ${ZONES[to]}`); } save(); rHome(); } return; }
+  if (t.dataset.rvt !== undefined && invReview && invReview.receipts) { const r = invReview.receipts[Number(t.dataset.rvt)]; if (r) r.total = Math.max(0, Number(t.value) || 0) || null; return; }
+  if (t.dataset.dept !== undefined) { const x = (S.depenses || [])[Number(t.dataset.dept)]; if (x) { const v = Math.max(0, Number(t.value) || 0); if (v > 0) { x.saved = Math.max(0, Math.round(((x.saved || 0) + x.total - v) * 100) / 100); x.total = v; x.src = "recu"; save(); updateBadge(); } } return; }
   if (t.dataset.rvk !== undefined && invReview) { invReview[Number(t.dataset.rvk)].keep = t.checked; return; }
   if (t.dataset.rvz !== undefined && invReview) { invReview[Number(t.dataset.rvz)].zone = t.value; return; }
   if (t.id === "spicesHome") { S.spicesHome = t.checked; rankCache = null; save(); return rHome(); }

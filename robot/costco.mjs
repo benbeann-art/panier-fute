@@ -51,7 +51,10 @@ export function parse(html) {
     // the ingredient must be what the product is ("Fromage à la crème Philadelphia"), not a part of it ("Cannelloni aux épinards")
     const nn = Flipp.norm(n);
     const ings = IDS.filter((id) => Flipp.matches(id, n) && (Flipp.TERMS[id] || []).some((w) => nn.startsWith(Flipp.norm(String(w)))));
-    out.push({ n, size, no, du, au, rabais, prix, ou, ing: ings.length === 1 ? ings[0] : null });
+    // the product photo (Costco's image server; a smaller size is enough for the phone)
+    const im = p.match(/<img[^>]+src="(https:\/\/[^"]*costco[^"]*)"/i);
+    const img = im ? decode(im[1]).replace(/width=\d+/, "width=320").replace(/height=\d+/, "height=320") : null;
+    out.push({ n, size, no, du, au, rabais, prix, ou, img, ing: ings.length === 1 ? ings[0] : null });
   }
   return out;
 }

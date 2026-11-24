@@ -4351,7 +4351,12 @@ function costcoBox() {
   if (!list.length) return "";
   return `<details class="card" style="margin:12px 0" ${S.store === "Costco" ? "open" : ""}><summary><b>Circulaire Costco</b> : ${list.length} rabais d'épicerie en entrepôt (touche pour voir)</summary>
     <p class="small mute" style="margin:6px 0">Lu sur costco.ca. Costco ne montre pas ses prix d'entrepôt en ligne : tu vois le rabais, pas le prix final, donc pas de note.</p>
-    ${list.map((x) => `<div class="xrow"><span><b>${esc(x.n)}</b> <span class="small mute">· ${esc(x.size || "")}${x.ou === "entrepôt" ? " · entrepôt seulement" : ""}</span><span class="small" style="display:block;color:var(--mute)">jusqu'au ${frDate(x.au)}</span></span><b style="color:var(--green);white-space:nowrap">${x.prix ? L.FR(x.prix) + " $" : "−" + L.FR(x.rabais) + " $"}</b></div>`).join("")}
+    <div class="flyer">${list.map((x) => `<div class="art" style="cursor:default">
+      <div class="ph fl">${x.img ? `<img src="${esc(x.img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.classList.add('ph-empty');this.remove()">` : ""}</div>
+      <div style="padding:6px 8px"><div class="nm">${esc(x.n)}</div>
+      <div class="meta">${esc(x.size || "")}${x.ou === "entrepôt" ? " · entrepôt seulement" : ""}</div>
+      <div class="meta">jusqu'au ${frDate(x.au)}</div>
+      <span class="price" style="color:var(--green)">${x.prix ? L.FR(x.prix) + " $" : "Rabais " + L.FR(x.rabais) + " $"}</span></div></div>`).join("")}</div>
   </details>`;
 }
 async function robotSitePrices() {

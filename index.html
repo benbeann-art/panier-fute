@@ -1780,7 +1780,7 @@ function allSpecials() {
   const base = (SPEC ? SPEC.items : []).filter((x) => !Flipp.excluded(x.ing, x.txt));
   const now = new Date().toISOString().slice(0, 10);
   const mine = S.extra.filter((x) => !x.fin || x.fin >= now);
-  return base.concat(mine);
+  return base.concat(mine, costcoSpecials());
 }
 function idx() { const all = allSpecials(); L.setWeek(all, ING, S.reg.stores); return L.indexSpecials(all, ING, S.reg.stores); }
 let rankCache = null;
@@ -4340,23 +4340,55 @@ function siteFix() {
 }
 // Costco circulaire (warehouse savings), read by the robot on costco.ca: product, size, dates and amount saved.
 // Costco never shows its warehouse price online, so there is no price per kg and no score for these.
-let COSTCO = null;
+var COSTCO = null; // var: read by allSpecials() before this line runs
 async function loadCostco() {
   try { const j = await repoFile("data/costco/latest.json", true); if (j && Array.isArray(j.items)) COSTCO = j; } catch (e) {}
   if (COSTCO && S.view === "speciaux") render("speciaux");
 }
+// "2 × 500 g" -> 1000 g ; "1,36 kg" -> 1360 g ; "6 × 470 ml" -> 2820 ml
+function costcoQty(size) {
+  const m = String(size || "").replace(/,/g, ".").match(/(?:(\d+)\s*[×x]\s*)?(\d+(?:\.\d+)?)\s*(kg|g|ml|l)\b/i);
+  if (!m) return null;
+  let q = Number(m[2]) * (m[1] ? Number(m[1]) : 1), u = m[3].toLowerCase();
+  if (u === "kg") { q *= 1000; u = "g"; } if (u === "l") { q *= 1000; u = "ml"; }
+  return { q, u };
+}
+// Costco deals with a real warehouse price, scored like the other stores (same quantity: price per g / ml):
+// - Narcity's monthly article (price paid), - "OFFRE CHOC" price, - my Costco receipts' price minus the coupon
+function costcoSpecials() {
+  if (!COSTCO) return [];
+  const t = today(), out = [], ok = (x) => (!x.au || x.au >= t) && (!x.du || x.du <= t);
+  const unitOk = (id, u) => ING[id] && (ING[id].u === u || (ING[id].u === "cs" || ING[id].u === "ct") && u === "ml");
+  for (const x of COSTCO.narcity || []) {
+    if (!ok(x) || !x.ing || !x.qte || !unitOk(x.ing, x.unite)) continue;
+    out.push({ ing: x.ing, mag: "Costco", prix: x.prix, qte: x.qte, unite: x.unite, txt: x.n, fin: x.au, costco: "narcity" });
+  }
+  for (const x of COSTCO.items || []) {
+    if (!ok(x) || !x.ing || out.some((o) => o.ing === x.ing)) continue;
+    const z = costcoQty(x.size); if (!z || !unitOk(x.ing, z.u)) continue;
+    const reg = S.regStore && S.regStore[x.ing] && S.regStore[x.ing].Costco;
+    const prix = x.prix || (reg && reg.p > 0 && x.rabais ? Math.round((reg.p * z.q - x.rabais) * 100) / 100 : null);
+    if (!(prix > 0)) continue;
+    out.push({ ing: x.ing, mag: "Costco", prix, qte: z.q, unite: z.u, txt: x.n + " · " + x.size, fin: x.au, img: x.img, costco: x.prix ? "choc" : "recu" });
+  }
+  return out;
+}
 function costcoBox() {
   if (!COSTCO || (S.store && S.store !== "Costco")) return "";
   const t = today(), list = COSTCO.items.filter((x) => (!x.au || x.au >= t) && (!x.du || x.du <= t));
-  if (!list.length) return "";
-  return `<details class="card" style="margin:12px 0" ${S.store === "Costco" ? "open" : ""}><summary><b>Circulaire Costco</b> : ${list.length} rabais d'épicerie en entrepôt (touche pour voir)</summary>
-    <p class="small mute" style="margin:6px 0">Lu sur costco.ca. Costco ne montre pas ses prix d'entrepôt en ligne : tu vois le rabais, pas le prix final, donc pas de note.</p>
+  const nar = (COSTCO.narcity || []).filter((x) => (!x.au || x.au >= t) && (!x.du || x.du <= t));
+  if (!list.length && !nar.length) return "";
+  return `<details class="card" style="margin:12px 0" ${S.store === "Costco" ? "open" : ""}><summary><b>Circulaire Costco</b> : ${list.length + nar.length} rabais d'épicerie en entrepôt (touche pour voir)</summary>
+    <p class="small mute" style="margin:6px 0">Rabais lus sur costco.ca (le site ne montre pas le prix final en entrepôt). Quand le vrai prix est connu (article Narcity, « offre choc » ou ton prix Costco appris sur une facture moins le rabais), l'article est aussi dans les spéciaux avec ses 2 notes, au même prix par kg ou par litre que les autres.</p>
     <div class="flyer">${list.map((x) => `<div class="art" style="cursor:default">
       <div class="ph fl">${x.img ? `<img src="${esc(x.img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.classList.add('ph-empty');this.remove()">` : ""}</div>
       <div style="padding:6px 8px"><div class="nm">${esc(x.n)}</div>
       <div class="meta">${esc(x.size || "")}${x.ou === "entrepôt" ? " · entrepôt seulement" : ""}</div>
       <div class="meta">jusqu'au ${frDate(x.au)}</div>
       <span class="price" style="color:var(--green)">${x.prix ? L.FR(x.prix) + " $" : "Rabais " + L.FR(x.rabais) + " $"}</span></div></div>`).join("")}</div>
+    ${nar.length ? `<h3 style="margin:14px 0 6px">Prix en entrepôt (article Narcity)</h3><div class="flyer">${nar.map((x) => `<div class="art" style="cursor:default"><div style="padding:6px 8px"><div class="nm">${esc(x.n)}</div>
+      <div class="meta">${x.qte ? L.FR(x.qte >= 1000 ? x.qte / 1000 : x.qte, x.qte >= 1000 ? 2 : 0) + (x.qte >= 1000 ? (x.unite === "g" ? " kg" : " L") : " " + x.unite) : ""} · au lieu de ${L.FR(x.reg)} $</div><div class="meta">jusqu'au ${frDate(x.au)}</div>
+      <span class="price" style="color:var(--green)">${L.FR(x.prix)} $</span></div></div>`).join("")}</div>` : ""}
   </details>`;
 }
 async function robotSitePrices() {

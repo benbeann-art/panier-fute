@@ -4249,6 +4249,18 @@ async function robotWebHistory() {
 }
 // Everyday prices read on the Maxi and Provigo websites: those two stores' own prices, and the normal price for the other stores
 // One-time cleanup (v3.13.40): wrong products had been read on the sites (plant-based butter, mixed ground meat, prepared foods)
+// One-time fix (v3.13.46): the two receipts of 2026-11-22 had been counted too low. Real amounts: Super C 167,20 $ and IGA 98,74 $.
+function receiptFix1122() {
+  if (S.fixRecu1122 === 1) return;
+  S.depenses = S.depenses || [];
+  const near = (x) => x.date >= "2026-11-21" && x.date <= "2026-11-24";
+  const keepSaved = (mag) => { const o = S.depenses.find((x) => near(x) && x.src === "recu" && (x.mag === mag || (x.mags || []).includes(mag))); return o ? o.saved || 0 : 0; };
+  const sc = keepSaved("Super C"), iga = keepSaved("IGA");
+  S.depenses = S.depenses.filter((x) => !near(x)); // the low receipt amounts and the list estimates of those days
+  S.depenses.push({ date: "2026-11-22", mags: ["Super C"], mag: "Super C", total: 167.2, saved: Math.max(sc, 47.94), src: "recu", at: Date.now() });
+  S.depenses.push({ date: "2026-11-22", mags: ["IGA"], mag: "IGA", total: 98.74, saved: Math.max(iga, 17.21), src: "recu", at: Date.now() });
+  S.fixRecu1122 = 1; save();
+}
 function siteFix() {
   if (S.siteFix === 1) return;
   for (const id in S.regStore || {}) for (const st of ["Maxi", "Provigo"]) if (S.regStore[id][st] && S.regStore[id][st].src === "site") delete S.regStore[id][st];
@@ -4420,7 +4432,7 @@ async function weeklyAuto() {
   try { await topUpSnackSpecials(); } catch (e) {}
   try { await ensureCoords(); await loadRegistry(); addNearCustom(); } catch (e) {}
   try { await robotHistory(); } catch (e) {}
-  try { siteFix(); await robotWebHistory(); } catch (e) {}
+  try { siteFix(); receiptFix1122(); await robotWebHistory(); } catch (e) {}
   try { await robotSitePrices(); } catch (e) {}
   if (aiOn() && SPEC && nearCustom().length) { try { await mergeCustom(); } catch (e) {} }
   if (aiOn() && SPEC && S.reg.stores.includes("Bonanza") && !(S.bonanza && S.bonanza.v === 2 && S.bonanza.date >= addDays(today(), -6) && SPEC.items.some((x) => x.mag === "Bonanza"))) { try { await mergeBonanza(false); } catch (e) {} }
@@ -4781,7 +4793,7 @@ Promise.all([getJSON("recettes.json", window.DATA_RECETTES), getJSON("speciaux.j
     start();
     Photos.loadAll().then((n) => { if (n) { render(S.view); if (S.open) openRec(S.open); } });
     fetch("photos/index.json", { cache: "no-cache" }).then((r) => (r.ok ? r.json() : [])).then((l) => { if (Array.isArray(l) && l.length) { REPO_PH = new Set(l); render(S.view); if (S.open) openRec(S.open); } }).catch(() => {});
-    setTimeout(async () => { await syncNow(); weeklyAuto(); }, 800);
+    setTimeout(async () => { await syncNow(); try { receiptFix1122(); siteFix(); updateBadge(); } catch (e) {} weeklyAuto(); }, 800);
   })
   .catch(() => { $("#loading").textContent = "Impossible de charger les recettes. Recharge la page."; });
 

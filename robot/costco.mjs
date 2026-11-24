@@ -55,7 +55,7 @@ export function parse(html) {
     if (!food) continue;
     // the ingredient must be what the product is ("Fromage à la crème Philadelphia"), not a part of it ("Cannelloni aux épinards")
     const nn = Flipp.norm(n);
-    const ings = IDS.filter((id) => Flipp.matches(id, n) && (Flipp.TERMS[id] || []).some((w) => nn.startsWith(Flipp.norm(String(w)))));
+    const ings = IDS.filter((id) => Flipp.matches(id, n) && (Flipp.TERMS[id] || []).some((w) => { const a = nn.split(/\s+/)[0], b = Flipp.norm(String(w)).split(/\s+/)[0]; return a.startsWith(b) || b.startsWith(a); }));
     // the product photo (Costco's image server; a smaller size is enough for the phone)
     const im = p.match(/<img[^>]+src="(https:\/\/[^"]*costco[^"]*)"/i);
     const img = im ? decode(im[1]).replace(/width=\d+/, "width=320").replace(/height=\d+/, "height=320") : null;
@@ -95,7 +95,7 @@ export function parseNarcity(html, url) {
       // check with the price per 100 g when given (it is rounded: 15 % is fine)
       if (per && unite === per[1].toLowerCase()) { const est = num(p[1]) / num(per[2]) * 100; if (!qte || Math.abs(qte / est - 1) > 0.15) { qte = Math.round(est); } }
       const nn = Flipp.norm(n);
-      const ings = IDS.filter((id) => Flipp.matches(id, n) && (Flipp.TERMS[id] || []).some((w) => nn.startsWith(Flipp.norm(String(w)))));
+      const ings = IDS.filter((id) => Flipp.matches(id, n) && (Flipp.TERMS[id] || []).some((w) => { const a = nn.split(/\s+/)[0], b = Flipp.norm(String(w)).split(/\s+/)[0]; return a.startsWith(b) || b.startsWith(a); }));
       out.push({ n, prix: num(p[1]), reg: num(p[2]), du, au, qte, unite, per100: per ? { u: per[1].toLowerCase(), p: num(per[2]) } : null, ing: ings.length === 1 ? ings[0] : null, src: url });
     }
   }

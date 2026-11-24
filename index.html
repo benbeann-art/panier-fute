@@ -4371,7 +4371,7 @@ function costcoSpecials() {
     if (!ok(x) || !x.ing) continue;
     const tw = costcoTwin(x), z = x.qte ? { q: x.qte, u: x.unite } : tw && costcoQty(tw.size); // size from Costco's own page
     if (!z || !unitOk(x.ing, z.u)) continue;
-    out.push({ ing: x.ing, mag: "Costco", prix: x.prix, qte: z.q, unite: z.u, txt: x.n + (tw && tw.size ? " · " + tw.size : ""), fin: x.au, img: tw && tw.img, costco: "narcity" });
+    out.push({ ing: x.ing, mag: "Costco", prix: x.prix, qte: z.q, unite: z.u, txt: x.n + (tw && tw.size ? " · " + tw.size : ""), fin: x.au, img: tw && tw.img, costco: "narcity", no: tw && tw.no });
   }
   for (const x of COSTCO.items || []) {
     if (!ok(x) || !x.ing || out.some((o) => o.ing === x.ing)) continue;
@@ -4379,9 +4379,18 @@ function costcoSpecials() {
     const reg = S.regStore && S.regStore[x.ing] && S.regStore[x.ing].Costco, shot = costcoShot(x);
     const prix = x.prix || (shot && shot.prix) || (reg && reg.p > 0 && x.rabais ? Math.round((reg.p * z.q - x.rabais) * 100) / 100 : null);
     if (!(prix > 0)) continue;
-    out.push({ ing: x.ing, mag: "Costco", prix, qte: z.q, unite: z.u, txt: x.n + " · " + x.size, fin: x.au, img: x.img, costco: x.prix ? "choc" : "recu" });
+    out.push({ ing: x.ing, mag: "Costco", prix, qte: z.q, unite: z.u, txt: x.n + " · " + x.size, fin: x.au, img: x.img, costco: x.prix ? "choc" : "recu", no: x.no });
   }
   return out;
+}
+// the 2 notes for a Costco coupon, when its price is known and the same product (same ingredient) is in the other flyers
+function costcoTags(x) {
+  const sp = (window.__csc || []).find((o) => o.no && o.no === x.no);
+  if (!sp) return "";
+  const ing = ING[sp.ing]; if (!ing) return "";
+  const c = L.cote(sp, ing), w = L.weekCote(sp, ing);
+  const cls = (v) => v == null ? "c-o" : v >= 8 ? "c-g" : v >= 5 ? "c-y" : "c-r";
+  return `<span class="tags2"><span class="tag ${cls(c)}">${c || "–"}<small>an</small></span><span class="tag ${cls(w)}">${w || "–"}<small>sem</small></span></span>`;
 }
 let costcoBusy = false;
 async function readCostcoShots(files) {
@@ -4425,11 +4434,12 @@ function costcoBox() {
   return `<details class="card" style="margin:12px 0" ${S.store === "Costco" ? "open" : ""}><summary><b>Circulaire Costco</b> : ${list.length + nar.length} rabais d'épicerie en entrepôt (touche pour voir)</summary>
     <div class="row" style="margin:8px 0"><label class="btn sm" style="cursor:pointer">📷 Lire mes captures de la page Costco<input type="file" id="costcoShots" accept="image/*" multiple hidden></label><a class="btn sm" href="https://www.costco.ca/coupons.html?langId=-25" target="_blank" rel="noopener">Ouvrir la page Costco</a></div>
     <p class="small mute" style="margin:6px 0">Costco montre ses prix aux gens, pas aux robots : ouvre la page Costco, fais des captures d'écran, puis « Lire mes captures ». L'IA y lit le prix en entrepôt, le rabais et le prix final. Quand le vrai prix est connu (article Narcity, « offre choc » ou ton prix Costco appris sur une facture moins le rabais), l'article est aussi dans les spéciaux avec ses 2 notes, au même prix par kg ou par litre que les autres.</p>
-    <div class="flyer">${list.map((x) => `<div class="art" style="cursor:default">
+    ${(() => { const sc = costcoSpecials(); window.__csc = sc; return ""; })()}
+    <div class="flyer">${list.map((x) => `<div class="art" style="cursor:default">${costcoTags(x)}
       <div class="ph fl">${x.img ? `<img src="${esc(x.img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.classList.add('ph-empty');this.remove()">` : ""}</div>
       <div style="padding:6px 8px"><div class="nm">${esc(x.n)}</div>
       <div class="meta">${esc(x.size || "")}${x.ou === "entrepôt" ? " · entrepôt seulement" : ""}</div>
-      <div class="meta">jusqu'au ${frDate(x.au)}</div>
+      <div class="meta">jusqu'au ${frDate(x.au)}</div>${costcoTags(x) ? "" : `<div class="meta" style="color:#c4500f">${x.prix || costcoShot(x) || price.get(x) ? "Pas de note : rien de pareil dans les autres circulaires" : "Pas de note : prix final pas connu"}</div>`}
       <span class="price" style="color:var(--green)">${((pp) => pp ? L.FR(pp.prix) + " $" + (pp.reg ? " <span class='small mute' style='font-weight:400'>au lieu de " + L.FR(pp.reg) + " $</span>" : "") : "")(x.prix ? x : costcoShot(x)) || (price.get(x) ? L.FR(price.get(x).prix) + " $ <span class='small mute' style='font-weight:400'>au lieu de " + L.FR(price.get(x).reg) + " $</span>" : "Rabais " + L.FR(x.rabais) + " $")}</span></div></div>`).join("")}</div>
     ${nar.length ? `<h3 style="margin:14px 0 6px">Prix en entrepôt (article Narcity)</h3><div class="flyer">${nar.map((x) => `<div class="art" style="cursor:default"><div style="padding:6px 8px"><div class="nm">${esc(x.n)}</div>
       <div class="meta">${x.qte ? L.FR(x.qte >= 1000 ? x.qte / 1000 : x.qte, x.qte >= 1000 ? 2 : 0) + (x.qte >= 1000 ? (x.unite === "g" ? " kg" : " L") : " " + x.unite) : ""} · au lieu de ${L.FR(x.reg)} $</div><div class="meta">jusqu'au ${frDate(x.au)}</div>

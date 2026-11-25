@@ -363,7 +363,8 @@
       if (fix && fix.skip) continue;
       const perU = ing.u === "u" && String(ing.n || "").match(/\((\d+(?:[.,]\d+)?)\s*(g|ml)\)/i);
       let s = sizeOf(r, ing.u) || (perU ? sizeOf(r, perU[2].toLowerCase() === "ml" ? "ml" : "g") : null) || (fix && fix.qte ? fix : null);
-      if (!s && opts.guess && ing.u === "u" && PACK[r.ing] && !sizeOf(r, "g")) s = { qte: PACK[r.ing], unite: "u" };
+      let guessed = !!(s && fix && s === fix && fix.guess);
+      if (!s && opts.guess && ing.u === "u" && PACK[r.ing] && !sizeOf(r, "g")) { s = { qte: PACK[r.ing], unite: "u" }; guessed = true; }
       if (!s) { unknown.push(r); continue; }
       const shown = ing.u === "u" && ["lb", "kg", "g", "ml", "L"].includes(s.unite) ? String(Math.round(s.qte * 100) / 100).replace(".", ",") + " " + s.unite : ""; // "5 lb" bag, shown as such
       if (ing.u === "u" && (s.unite === "lb" || s.unite === "kg") && EACH_LB[r.ing]) s = { qte: Math.max(1, Math.round(s.qte * (s.unite === "kg" ? 2.2046 : 1) * EACH_LB[r.ing])), unite: "u" };
@@ -379,7 +380,7 @@
       if (ing.u === "g" && !["lb", "kg", "g"].includes(s.unite)) { unknown.push(r); continue; }
       if (ing.u === "ml" && !["L", "ml"].includes(s.unite)) { unknown.push(r); continue; }
       if (["cs", "ct"].includes(ing.u)) { unknown.push(r); continue; }
-      items.push({ ing: r.ing, mag: r.mag, prix: r.prix, qte: s.qte, unite: s.unite, txt: pretty(r.name).slice(0, 90), img: r.img || "", reg: r.orig > r.prix ? r.orig : 0, story: r.story || "", pack: shown && s.unite === "u" ? shown : "" });
+      items.push({ ing: r.ing, mag: r.mag, prix: r.prix, qte: s.qte, unite: s.unite, txt: pretty(r.name).slice(0, 90), img: r.img || "", reg: r.orig > r.prix ? r.orig : 0, story: r.story || "", pack: shown && s.unite === "u" ? shown : "", ...(guessed ? { guess: true } : {}) });
     }
     return { items, unknown };
   }

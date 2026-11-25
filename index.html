@@ -348,7 +348,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
       const ing = sp && ING[sp.ing];
       if (!ing || (stores && stores.length && !sp.perso && !stores.includes(sp.mag))) continue;
       const pu = unitPrice(sp, ing), b = baseCote(sp, ing);
-      if (pu == null) continue;
+      if (pu == null || sp.guess) continue;
       (by[sp.ing] = by[sp.ing] || []).push({ k: wkey(sp), pu, b });
     }
     for (const id in by) {
@@ -362,7 +362,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
   // 10 = the cheapest this week; each 5 % more costs 1 point.
   function weekCote(sp, ing) {
     const pu = unitPrice(sp, ing);
-    if (pu == null) return null;
+    if (pu == null || sp.guess) return null; // size not written in the flyer: no note rather than a guess
     const min = WMIN && WMIN[sp.ing] != null ? WMIN[sp.ing] : pu;
     if (!(min > 0) || pu <= min * 1.005) return 10;
     return Math.max(1, Math.min(9, 10 - Math.round((pu / min - 1) / 0.05)));
@@ -375,7 +375,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
   }
   function baseCote(sp, ing) {
     const pu = unitPrice(sp, ing);
-    if (pu == null) return null;
+    if (pu == null || sp.guess) return null; // size not written in the flyer: no note rather than a guess
     const realRef = LOWREG && LOWREG(sp.ing), ref = realRef || ing.p;
     // snacks, coffee, nuts, drinks (k_): no estimated price, only real prices seen this year
     if (ing.k) {
@@ -1542,7 +1542,8 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
       const perU = ing.u === "u" && String(ing.n || "").match(/\((\d+(?:[.,]\d+)?)\s*(g|ml)\)/i);
       let s = sizeOf(r, ing.u) || (perU ? sizeOf(r, perU[2].toLowerCase() === "ml" ? "ml" : "g") : null) || (fix && fix.qte ? fix : null);
       if (s && fix && s === fix && ing.u === "g" && perLbNotKg(r.prix, s, ing)) s = { qte: 1, unite: "lb" }; // "2,49 $" read as per kg but it is per lb
-      if (!s && opts.guess && ing.u === "u" && PACK[r.ing] && !sizeOf(r, "g")) s = { qte: PACK[r.ing], unite: "u" };
+      let guessed = !!(s && fix && s === fix && fix.guess);
+      if (!s && opts.guess && ing.u === "u" && PACK[r.ing] && !sizeOf(r, "g")) { s = { qte: PACK[r.ing], unite: "u" }; guessed = true; }
       if (!s) { unknown.push(r); continue; }
       const shown = ing.u === "u" && ["lb", "kg", "g", "ml", "L"].includes(s.unite) ? String(Math.round(s.qte * 100) / 100).replace(".", ",") + " " + s.unite : ""; // "5 lb" bag, shown as such
       if (ing.u === "u" && (s.unite === "lb" || s.unite === "kg") && EACH_LB[r.ing]) s = { qte: Math.max(1, Math.round(s.qte * (s.unite === "kg" ? 2.2046 : 1) * EACH_LB[r.ing])), unite: "u" };
@@ -1558,7 +1559,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
       if (ing.u === "g" && !["lb", "kg", "g"].includes(s.unite)) { unknown.push(r); continue; }
       if (ing.u === "ml" && !["L", "ml"].includes(s.unite)) { unknown.push(r); continue; }
       if (["cs", "ct"].includes(ing.u)) { unknown.push(r); continue; }
-      items.push({ ing: r.ing, mag: r.mag, prix: r.prix, qte: s.qte, unite: s.unite, txt: pretty(r.name).slice(0, 90), img: r.img || "", reg: r.orig > r.prix ? r.orig : 0, story: r.story || "", pack: shown && s.unite === "u" ? shown : "" });
+      items.push({ ing: r.ing, mag: r.mag, prix: r.prix, qte: s.qte, unite: s.unite, txt: pretty(r.name).slice(0, 90), img: r.img || "", reg: r.orig > r.prix ? r.orig : 0, story: r.story || "", pack: shown && s.unite === "u" ? shown : "", ...(guessed ? { guess: true } : {}) });
     }
     return { items, unknown };
   }
@@ -3046,6 +3047,7 @@ function coteCls(sp, c) { return noteCls(c); }
 // "not a real special": who sells it cheaper every day
 function notRealTxt(sp) {
   const ing = ING[sp.ing]; if (!ing) return "";
+  if (sp.guess) return `<span class="mute">Format pas écrit dans la circulaire : pas de note</span>`;
   const pu = L.unitPrice(sp, ing), ref = normalRef(sp.ing);
   if (pu == null || !ref || !ref.real || pu < ref.p * 0.98) return ""; // only against real everyday prices
   const low = ref, red = pu > ref.p * 1.1;
@@ -3909,7 +3911,7 @@ function recordWeek(spec) {
   if (!spec || !spec.debut || !Array.isArray(spec.items)) return 0;
   S.hist = S.hist || {}; let n = 0;
   for (const sp of spec.items) {
-    const ing = ING[sp.ing]; if (!ing) continue;
+    const ing = ING[sp.ing]; if (!ing || sp.guess) continue; // guessed size: not a real price
     const pu = L.unitPrice(sp, ing); if (!(pu > 0) || suspectLow(sp.ing, pu)) continue;
     const list = (S.hist[sp.ing] = S.hist[sp.ing] || []);
     if (list.some((e) => e[0] === spec.debut && e[1] === sp.mag)) continue;
@@ -3982,15 +3984,15 @@ Pour chacun, dis ce que le prix achète : "qte" et "unite" (lb, kg, g, ml, L ou 
 - ingrédient en [unités] : "u" = le nombre d'unités de cet ingrédient (ex. 12 œufs, 6 bagels, 20 tranches de pain, 1 brocoli) ;
 - ingrédient en [grammes] : un poids (g, kg ou lb) ; en [millilitres] : un volume (ml ou L).
 - Ingrédient en [unités] vendu en sac, en paquet ou au poids : convertis en nombre d'unités (ex. sac de 3 lb d'oignons ≈ 10 ; sac de 2 lb de citrons ≈ 8 ; « 5 un. » = 5 ; « 2/5 $ » = 2). Un prix au lb pour un légume à l'unité : donne "qte":1,"unite":"lb" seulement si l'ingrédient est en [grammes], sinon convertis (1 lb d'oignons ≈ 3 oignons).
-- Si le format n'est pas écrit, donne le format le plus courant de ce produit au Québec (ex. lait sans format = 2 L, beurre = 454 g, poivrons en sac = 3).
+- Si le format n'est pas écrit, donne le format le plus courant de ce produit au Québec (ex. lait sans format = 2 L, beurre = 454 g, poivrons en sac = 3) et ajoute "devine":true.
 - Si l'article n'est pas vraiment l'ingrédient visé (autre produit, plat cuisiné, saveur…), mets "qte": null.
 ${lines}
-Réponds UNIQUEMENT par un tableau JSON : [{"n":0,"qte":2,"unite":"L"}]`;
+Réponds UNIQUEMENT par un tableau JSON : [{"n":0,"qte":2,"unite":"L"},{"n":1,"qte":454,"unite":"g","devine":true}]`;
       try {
         const arr = AI.extractJSON(await askAI(prompt, { maxTokens: 6000, quiet: true }), "array") || [];
         for (const x of arr) {
           const r = x && part[x.n]; if (!r) continue;
-          if (Number(x.qte) > 0 && ["lb", "kg", "g", "ml", "L", "u"].includes(x.unite)) sizes[r.ing + "|" + r.name] = { qte: Number(x.qte), unite: x.unite };
+          if (Number(x.qte) > 0 && ["lb", "kg", "g", "ml", "L", "u"].includes(x.unite)) sizes[r.ing + "|" + r.name] = { qte: Number(x.qte), unite: x.unite, ...(x.devine ? { guess: true } : {}) };
           else if (x.qte === null) sizes[r.ing + "|" + r.name] = { skip: true };
         }
       } catch (e) { break; }
@@ -4830,7 +4832,10 @@ document.addEventListener("click", (e) => {
   if (d.rf) { S.rf = d.rf; recLimit = 40; save(); return rRec(); }
   if (d.ing) { S.rf = "spec"; S.q = ING[d.ing].n.split(" (")[0]; S.cat = ""; S.cuis = ""; S.tag = ""; return show("recettes", false); }
   if (d.del) { S.extra = S.extra.filter((x) => x.perso !== d.del); rankCache = null; save(); return rSpec(); }
-  if (d.go === "menu-auto") { autoMenu(); return show("menu", false); }
+  if (d.go === "menu-auto") {
+    if (S.menu.length && !confirm("Ajouter automatiquement des recettes pour remplir ton menu ?\nLeurs ingrédients s'ajouteront à ta liste d'épicerie.")) return;
+    autoMenu(); return show("menu", false);
+  }
   if (d.go === "menu-clear") { S.menu = []; S.cuit = {}; save(); return rMenu(); }
   if (d.go) return show(d.go, false);
   if (t.id === "closeSheet") return closeRec();
@@ -5078,7 +5083,7 @@ Promise.all([getJSON("recettes.json", window.DATA_RECETTES), getJSON("speciaux.j
     fetch("photos/index.json", { cache: "no-cache" }).then((r) => (r.ok ? r.json() : [])).then((l) => { if (Array.isArray(l) && l.length) { REPO_PH = new Set(l); render(S.view); if (S.open) openRec(S.open); } }).catch(() => {});
     setTimeout(async () => { loadCostco(); await syncNow(); try { if (!S.costcoOff && !S.reg.stores.includes("Costco")) { S.reg.stores.push("Costco"); save(); render(S.view); } } catch (e) {}
       // v3.13.70: the flyers now also hold snacks, coffee, nuts and drinks: read this week's flyers again once
-      try { if (S.kTermsV !== 3) { S.kTermsV = 3; save(); updateFlyers(true).then(() => render(S.view)).catch(() => {}); } } catch (e) {} try { receiptFix1122(); siteFix(); updateBadge(); } catch (e) {} weeklyAuto(); }, 800);
+      try { if (S.kTermsV !== 4) { S.kTermsV = 4; for (const k of Object.keys(SIZES)) if (!SIZES[k].skip) delete SIZES[k]; saveSizes(); save(); updateFlyers(true).then(() => render(S.view)).catch(() => {}); } } catch (e) {} try { receiptFix1122(); siteFix(); updateBadge(); } catch (e) {} weeklyAuto(); }, 800);
   })
   .catch(() => { $("#loading").textContent = "Impossible de charger les recettes. Recharge la page."; });
 

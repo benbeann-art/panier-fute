@@ -2989,7 +2989,8 @@ function searchScore(r, words) {
   // broths, sauces and spices don't count ("bouillon de bœuf" doesn't make a beef recipe)
   const ings = wordsOf(r.i.map((i) => ING[i[0]]).filter((g) => g && g.r !== "Garde-manger et épices" && !/^(bouillon|sauce)/i.test(g.n)).map((g) => g.n).join(" "));
   const has = (set, w) => set.has(w) || [...set].some((x) => x.length > 4 && w.length > 4 && (x.startsWith(w) || w.startsWith(x)));
-  const inName = (w) => w.length >= 5 && [...name].some((x) => x.includes(w)); // "burger" also finds cheeseburgers, hamburger
+  const joined = norm(r.n).replace(/[^a-z0-9]/g, ""); // "hotdog" finds "hot-dogs", "burger" finds cheeseburgers / hamburger
+  const inName = (w) => w.length >= 5 && joined.includes(w);
   let s = 0;
   for (const w of words) {
     if (has(name, w)) s += 10;

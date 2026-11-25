@@ -1914,7 +1914,7 @@ function rSpec() {
     const n = ing ? REC.filter((r) => r.i.some((i) => i[0] === sp.ing)).length : 0;
     const nc = ing ? COL.filter((r) => r.i.some((i) => i[0] === sp.ing)).length : 0;
     const pu = ing ? L.unitPrice(sp, ing) : null;
-    return { sp, ing, c, w: ing ? L.weekCote(sp, ing) : null, n, nc, on: S.reg.stores.includes(sp.mag), h: pu ? L.histInfo(sp.ing, pu) : null };
+    return { sp, ing, c, w: ing ? (sp.mag === "Costco" ? costcoWeek(sp) : L.weekCote(sp, ing)) : null, n, nc, on: S.reg.stores.includes(sp.mag), h: pu ? L.histInfo(sp.ing, pu) : null };
   }).sort((a, b) => (b.c || 0) + (b.w || 0) - (a.c || 0) - (a.w || 0) || (b.c || 0) - (a.c || 0));
   const two = (x) => `<span class="tags2"><span class="tag ${coteCls(x.sp, x.c)}" title="Année : ${x.c || "?"} sur 10">${x.c || "–"}<small>an</small></span><span class="tag ${x.w == null ? "c-o" : x.w >= 8 ? "c-g" : x.w >= 5 ? "c-y" : "c-r"}" title="Semaine : ${x.w || "?"} sur 10">${x.w || "–"}<small>sem</small></span></span>`;
   const row = (x) => `<div class="spec" style="${x.on ? "" : "opacity:.5"}">
@@ -4413,26 +4413,39 @@ function costcoTags(x) {
   const sp = (window.__csc || []).find((o) => o.no && o.no === x.no);
   if (!sp) return "";
   const ing = ING[sp.ing]; if (!ing) return "";
-  const c = L.cote(sp, ing), w = L.weekCote(sp, ing);
+  const c = L.cote(sp, ing), w = costcoWeek(sp);
   const cls = (v) => v == null ? "c-o" : v >= 8 ? "c-g" : v >= 5 ? "c-y" : "c-r";
   return `<span class="tags2"><span class="tag ${cls(c)}">${c || "–"}<small>an</small></span><span class="tag ${cls(w)}">${w || "–"}<small>sem</small></span></span>`;
 }
+// Costco only: compare per gram / ml with the SAME product elsewhere when another store has it (Ruffles with Ruffles),
+// else with any similar product (any brand of chips, coffee...). 10 = Costco costs less or the same.
+const COSTCO_GENERIC = new Set("assortiment saveur saveurs sachet format paquet emballage canette canettes bouteille bouteilles boite boites entier entiers entiere entieres biologique biologiques nature original originale classique varie variees assorties assortis creations chocolatees chocolats chocolat croustilles chips cafe instantane riche moyenne torrefaction grains moulu noix crues craquelins canneberges seches biere bieres epurees maison fromage creme eau petillante pour avec sans".split(" "));
+function costcoCompare(sp) {
+  const ing = ING[sp.ing]; if (!ing) return null;
+  const mine = L.unitPrice(sp, ing); if (!(mine > 0)) return null;
+  const words = (t) => norm(t).split(/[^a-z0-9]+/).filter((w) => w.length > 3 && !COSTCO_GENERIC.has(w));
+  const brand = new Set(words(String(sp.txt || "").split(" · ")[0]));
+  const others = allSpecials().filter((o) => o.mag !== "Costco" && o.ing === sp.ing && S.reg.stores.includes(o.mag))
+    .map((o) => ({ o, pu: L.unitPrice(o, ing) })).filter((x) => x.pu > 0);
+  if (!others.length) return null;
+  const same = others.filter((x) => words(x.o.txt || "").some((w) => brand.has(w)));
+  const pool = same.length ? same : others, best = pool.reduce((a, b) => (b.pu < a.pu ? b : a));
+  const note = mine <= best.pu * 1.005 ? 10 : Math.max(1, Math.min(9, 10 - Math.round((mine / best.pu - 1) / 0.05)));
+  return { mine, best, same: !!same.length, note };
+}
+function costcoWeek(sp) { const c = costcoCompare(sp); return c ? c.note : null; }
 // Costco's quantity at the cheapest price per gram / ml of the other stores this week (any brand):
 // "1 kg ailleurs : 19,80 $ (Metro)" next to Costco's own price
 function costcoVs(x) {
   const sp = (window.__csc || []).find((o) => o.no && o.no === x.no); if (!sp) return "";
   const ing = ING[sp.ing]; if (!ing) return "";
   const mine = L.unitPrice(sp, ing); if (!(mine > 0)) return "";
-  let best = null;
-  for (const o of allSpecials()) {
-    if (o.mag === "Costco" || o.ing !== sp.ing || !S.reg.stores.includes(o.mag)) continue;
-    const pu = L.unitPrice(o, ing); if (pu > 0 && (!best || pu < best.pu)) best = { pu, mag: o.mag };
-  }
-  if (!best) return "";
+  const cmp = costcoCompare(sp); if (!cmp) return "";
+  const best = { pu: cmp.best.pu, mag: cmp.best.o.mag, txt: String(cmp.best.o.txt || "").slice(0, 50) };
   const q = L.unitPrice({ prix: 1, qte: sp.qte, unite: sp.unite }, ing) ? 1 / L.unitPrice({ prix: 1, qte: sp.qte, unite: sp.unite }, ing) : null; // Costco's quantity in g / ml
   if (!q) return "";
   const other = best.pu * q, diff = other - sp.prix;
-  return `<div class="meta" style="color:${diff >= 0 ? "var(--green)" : "#c4500f"}">Même quantité au moins cher ailleurs : <b>${L.FR(other)} $</b> (${esc(best.mag)}) · ${diff >= 0 ? "Costco sauve " + L.FR(diff) + " $" : "Costco coûte " + L.FR(-diff) + " $ de plus"}</div>`;
+  return `<div class="meta" style="color:${diff >= 0 ? "var(--green)" : "#c4500f"}">Même quantité ${cmp.same ? "<b>même marque</b>" : "marque semblable"} : <b>${L.FR(other)} $</b> chez ${esc(best.mag)} (${esc(best.txt)}) · ${diff >= 0 ? "Costco sauve " + L.FR(diff) + " $" : "Costco coûte " + L.FR(-diff) + " $ de plus"}</div>`;
 }
 let costcoBusy = false;
 async function readCostcoShots(files) {

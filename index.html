@@ -4419,7 +4419,7 @@ function costcoTags(x) {
 }
 // Costco only: compare per gram / ml with the SAME product elsewhere when another store has it (Ruffles with Ruffles),
 // else with any similar product (any brand of chips, coffee...). 10 = Costco costs less or the same.
-const COSTCO_GENERIC = new Set("assortiment saveur saveurs sachet format paquet emballage canette canettes bouteille bouteilles boite boites entier entiers entiere entieres biologique biologiques nature original originale classique varie variees assorties assortis creations chocolatees chocolats chocolat croustilles chips cafe instantane riche moyenne torrefaction grains moulu noix crues craquelins canneberges seches biere bieres epurees maison fromage creme eau petillante pour avec sans".split(" "));
+const COSTCO_GENERIC = new Set("assortiment saveur saveurs sachet format paquet emballage canette canettes bouteille bouteilles boite boites entier entiers entiere entieres biologique biologiques nature original originale classique varie variees assorties assortis creations chocolatees chocolats chocolat croustilles chips cafe instantane riche moyenne torrefaction grains moulu noix crues craquelins canneberges seches biere bieres epurees maison fromage creme eau petillante pour avec sans cajou crues grillees salees nature gazeifiee gazeifie naturelle source boisson boissons moulu biologique produit barres barre galettes riches torrefie original".split(" "));
 function costcoCompare(sp) {
   const ing = ING[sp.ing]; if (!ing) return null;
   const mine = L.unitPrice(sp, ing); if (!(mine > 0)) return null;

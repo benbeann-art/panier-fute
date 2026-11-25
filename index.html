@@ -1223,6 +1223,10 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
     truite: ["truite", ["truite"], ["fume", "farci", "conserve"]],
     tilapia: ["tilapia", ["tilapia"], ["pane", "farci"]],
     sole: ["filets de sole", ["=sole"], ["pane", "farci", "fume", "frit"]],
+    riz_arborio: ["riz arborio", ["arborio|risotto"], ["pret", "plat", "sachet", "champignon", "fromage", "repas", "bol"]],
+    lard_sale: ["lard salé", ["=lard", "=sale"], ["feve", "beans", "haricot", "fume"]],
+    pois_jaunes: ["pois jaunes cassés", ["pois", "jaune"], ["soupe", "conserve", "habitant", "potage"]],
+    semoule_mais: ["semoule de maïs", ["semoule|polenta", "mais|polenta"], ["pret", "tube", "cuite"]],
     crevettes: ["crevettes", ["crevette"], ["anneau", "cocktail", "pane", "pates", "surimi", "batonnet", "poisson", "goberge", "salade", "bouchee", "moghrabieh", "tempura", "sauce", "croustil", "chips", "dumpling", "rouleau", "won", "bol", "popcorn", "couronne", "coco", "papillon", "brochette"]],
     thon: ["thon en conserve", ["thon"], ["steak", "frais", "sushi", "longe", "tataki", "salade", "chat", "nourriture"]],
     oeufs: ["oeufs", ["oeuf"], ["chocolat", "paques", "nouille", "pate", "blanc d oeufs|blancs d oeufs", "liquide", "cuit", "kinder", "sandwich", "muffin"]],
@@ -1284,7 +1288,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
     bagel: ["bagels", ["bagel"], ["chips", "croustil", "pizza", "assaison", "epice", "crustil", "bouchees", "fromage a la creme"]],
     pain_sousmarin: ["pains sous-marin", ["sous marin|sous marins|hot dog|hot dogs|hamburger"], ["saucisse", "wiener", "boeuf", "galette", "surgel", "congel", "sauce", "relish", "moutarde", "bbq", "cuit", "garni", "pizza"]],
     pate_pizza: ["pâte à pizza", ["pate a pizza|pizza dough|croute a pizza|croutes a pizza"], ["sauce", "fromage"]],
-    riz: ["riz", ["=riz"], ["basmati", "express", "minute", "instantane", "nouille", "galette", "gateau", "craquelin", "lait", "vinaigre", "farine", "boisson", "crispies", "papier", "pouding", "vermicelle", "cereale", "sauce", "poulet", "plat", "repas", "bebe", "chips", "croustil", "chou fleur", "choux fleurs", "brocoli", "sushi", "spaghetti", "pates", "bol", "son", "sirop", "biscuit", "barre", "galettes", "risotto", "accompagnement", "melange", "ble", "quinoa", "mais", "assaison"]],
+    riz: ["riz", ["=riz"], ["basmati", "express", "minute", "instantane", "nouille", "galette", "gateau", "craquelin", "lait", "vinaigre", "farine", "boisson", "crispies", "papier", "pouding", "vermicelle", "cereale", "sauce", "poulet", "plat", "repas", "bebe", "chips", "croustil", "chou fleur", "choux fleurs", "brocoli", "sushi", "spaghetti", "pates", "bol", "son", "sirop", "biscuit", "barre", "galettes", "risotto", "accompagnement", "melange", "ble", "quinoa", "mais", "assaison", "arborio", "risotto"]],
     riz_basmati: ["riz basmati", ["riz", "basmati"], ["pret", "plat", "bol", "sachet micro", "accompagnement"]],
     pates: ["pâtes alimentaires", ["penne|rotini|fusilli|rigatoni|farfalle|pates alimentaires|pates seches|tortiglioni|cavatappi|bucatini|orzo|linguine|fettuccine|catelli|barilla|primo|italpasta|de cecco|pates"], ["sauce", "a pizza", "fraiches", "pret", "plat", "repas", "kit", "diner", "macaroni et fromage", "salade", "lasagne", "pate a", "pate de", "pate feuillet", "pate brisee", "pate de foie", "farcies", "farci", "ravioli", "tortellini", "gnocchi", "surgel", "congel", "chips", "soupe"]],
     spaghetti: ["spaghetti", ["spaghetti|spaghettini"], ["sauce", "courge", "boulette", "repas", "conserve", "plat", "surgel", "congel"]],
@@ -4777,7 +4781,7 @@ async function weeklyAuto() {
   if (SPEC && !Object.keys(S.regStore || {}).length && learnRegular(SPEC.items, "flyer")) { save(); render(S.view); } // first time: learn this week's "au lieu de" prices
   if (AIS.autoMaj === false) return;
   const t = today();
-  const recentTry = S.majTry && Date.now() - new Date(S.majTry).getTime() < 6 * 36e5;
+  const recentTry = S.majTry && Date.now() - new Date(S.majTry).getTime() < 36e5; // retry after 1 h (Thursday: the robot file arrives around 12 h 30)
   if ((!SPEC || SPEC.fin < t || SPEC.debut < weekKey() || !/Flipp/.test(SPEC.source || "") || !(S.near && S.near.length)) && !recentTry) await updateFlyers(true);
   try { await topUpSnackSpecials(); } catch (e) {}
   try { await ensureCoords(); await loadRegistry(); addNearCustom(); } catch (e) {}

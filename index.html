@@ -1914,9 +1914,9 @@ function rSpec() {
     const n = ing ? REC.filter((r) => r.i.some((i) => i[0] === sp.ing)).length : 0;
     const nc = ing ? COL.filter((r) => r.i.some((i) => i[0] === sp.ing)).length : 0;
     const pu = ing ? L.unitPrice(sp, ing) : null;
-    return { sp, ing, c, w: ing ? (sp.mag === "Costco" ? costcoWeek(sp) : L.weekCote(sp, ing)) : null, n, nc, on: S.reg.stores.includes(sp.mag), h: pu ? L.histInfo(sp.ing, pu) : null };
+    return { sp, ing, c, w: ing ? (sp.mag === "Costco" ? costcoWeek(sp) : L.weekCote(sp, ing)) : null, costco: sp.mag === "Costco", n, nc, on: S.reg.stores.includes(sp.mag), h: pu ? L.histInfo(sp.ing, pu) : null };
   }).sort((a, b) => (b.c || 0) + (b.w || 0) - (a.c || 0) - (a.w || 0) || (b.c || 0) - (a.c || 0));
-  const two = (x) => `<span class="tags2"><span class="tag ${coteCls(x.sp, x.c)}" title="Année : ${x.c || "?"} sur 10">${x.c || "–"}<small>an</small></span><span class="tag ${x.w == null ? "c-o" : x.w >= 8 ? "c-g" : x.w >= 5 ? "c-y" : "c-r"}" title="Semaine : ${x.w || "?"} sur 10">${x.w || "–"}<small>sem</small></span></span>`;
+  const two = (x) => x.costco ? `<span class="tags2"><span class="tag ${x.w == null ? "c-o" : x.w >= 8 ? "c-g" : x.w >= 5 ? "c-y" : "c-r"}" title="Costco comparé au même produit ailleurs, au gramme">${x.w || "–"}<small>/10</small></span></span>` : `<span class="tags2"><span class="tag ${coteCls(x.sp, x.c)}" title="Année : ${x.c || "?"} sur 10">${x.c || "–"}<small>an</small></span><span class="tag ${x.w == null ? "c-o" : x.w >= 8 ? "c-g" : x.w >= 5 ? "c-y" : "c-r"}" title="Semaine : ${x.w || "?"} sur 10">${x.w || "–"}<small>sem</small></span></span>`;
   const row = (x) => `<div class="spec" style="${x.on ? "" : "opacity:.5"}">
       ${two(x)}
       <div><div class="nm">${esc(x.sp.txt || (x.ing && x.ing.n))}</div>
@@ -4415,9 +4415,9 @@ function costcoTags(x) {
   const sp = (window.__csc || []).find((o) => o.no && o.no === x.no);
   if (!sp) return "";
   const ing = ING[sp.ing]; if (!ing) return "";
-  const c = L.cote(sp, ing), w = costcoWeek(sp);
-  const cls = (v) => v == null ? "c-o" : v >= 8 ? "c-g" : v >= 5 ? "c-y" : "c-r";
-  return `<span class="tags2"><span class="tag ${cls(c)}">${c || "–"}<small>an</small></span><span class="tag ${cls(w)}">${w || "–"}<small>sem</small></span></span>`;
+  const w = costcoWeek(sp); if (w == null) return "";
+  const cls = (v) => v >= 8 ? "c-g" : v >= 5 ? "c-y" : "c-r";
+  return `<span class="tags2"><span class="tag ${cls(w)}" title="Costco comparé au même produit ailleurs, au gramme">${w}<small>/10</small></span></span>`;
 }
 // Costco only: compare per gram / ml with the SAME product elsewhere when another store has it (Ruffles with Ruffles),
 // else with any similar product (any brand of chips, coffee...). 10 = Costco costs less or the same.
@@ -4435,12 +4435,15 @@ function costcoCompare(sp) {
   const note = mine <= best.pu * 1.005 ? 10 : Math.max(1, Math.min(9, 10 - Math.round((mine / best.pu - 1) / 0.05)));
   return { mine, best, same: !!same.length, note };
 }
+// Note /10: Costco vs the same product elsewhere, per gram / ml (its regular price, or this week's special if lower).
+// 1 = not cheaper; +1 per 5 % saved; 10 = 45 % cheaper or more.
 function costcoWeek(sp) {
   const c = costcoCompare(sp), r = costcoRegular(sp);
-  const refs = [c && c.same ? c.best.pu : null, r ? r.pu : null, c && !c.same && !r ? c.best.pu : null].filter((v) => v > 0);
+  const refs = [c && c.same ? c.best.pu : null, r ? r.pu : null, r && r.sale ? r.sale : null, c && !c.same && !r ? c.best.pu : null].filter((v) => v > 0);
   if (!refs.length) return null;
   const mine = (c && c.mine) || (r && r.mine), min = Math.min(...refs);
-  return mine <= min * 1.005 ? 10 : Math.max(1, Math.min(9, 10 - Math.round((mine / min - 1) / 0.05)));
+  const saved = 1 - mine / min; // 0.30 = Costco is 30 % cheaper
+  return Math.max(1, Math.min(10, 1 + Math.round((saved * 100) / 5)));
 }
 // regular price of the same product in a grocery store, per g / ml, and Costco's own per g / ml
 function costcoRegular(sp) {
@@ -4514,7 +4517,7 @@ function costcoBox() {
       <div class="ph fl">${x.img ? `<img src="${esc(x.img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.classList.add('ph-empty');this.remove()">` : ""}</div>
       <div style="padding:6px 8px"><div class="nm">${esc(x.n)}</div>
       <div class="meta">${esc(x.size || "")}${x.ou === "entrepôt" ? " · entrepôt seulement" : ""}</div>
-      <div class="meta">jusqu'au ${frDate(x.au)}</div>${costcoVs(x)}${costcoTags(x) ? "" : `<div class="meta" style="color:#c4500f">${x.prix || costcoShot(x) || price.get(x) ? "Pas de note : rien de pareil dans les autres circulaires" : "Pas de note : prix final pas connu"}</div>`}
+      <div class="meta">jusqu'au ${frDate(x.au)}</div>
       <span class="price" style="color:var(--green)">${((pp) => pp ? L.FR(pp.prix) + " $" + (pp.reg ? " <span class='small mute' style='font-weight:400'>au lieu de " + L.FR(pp.reg) + " $</span>" : "") : "")(x.prix ? x : costcoShot(x)) || (price.get(x) ? L.FR(price.get(x).prix) + " $ <span class='small mute' style='font-weight:400'>au lieu de " + L.FR(price.get(x).reg) + " $</span>" : "Rabais " + L.FR(x.rabais) + " $")}</span></div></div>`).join("")}</div>
     ${nar.length ? `<h3 style="margin:14px 0 6px">Prix en entrepôt (article Narcity)</h3><div class="flyer">${nar.map((x) => `<div class="art" style="cursor:default"><div style="padding:6px 8px"><div class="nm">${esc(x.n)}</div>
       <div class="meta">${x.qte ? L.FR(x.qte >= 1000 ? x.qte / 1000 : x.qte, x.qte >= 1000 ? 2 : 0) + (x.qte >= 1000 ? (x.unite === "g" ? " kg" : " L") : " " + x.unite) : ""} · au lieu de ${L.FR(x.reg)} $</div><div class="meta">jusqu'au ${frDate(x.au)}</div>

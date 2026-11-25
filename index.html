@@ -4368,6 +4368,8 @@ async function loadCostco() {
   try { const j = await repoFile("data/costco/latest.json", true); if (j && Array.isArray(j.items)) COSTCO = j; } catch (e) {}
   // prices read on costco.ca in a real browser ("En entrepôt", "Prix"), by item number
   try { const pz = await repoFile("data/costco/prices.json", true); if (COSTCO && pz && pz.prices) COSTCO.prices = pz.prices; } catch (e) {}
+  // the same product's REGULAR price in a grocery store (maxi.ca), to know if the Costco deal is worth it
+  try { const rz = await repoFile("data/costco/regular.json", true); if (COSTCO && rz && rz.items) COSTCO.regular = rz.items; } catch (e) {}
   // Costco's warehouse price before the coupon = its everyday price
   if (COSTCO) { let n = 0; for (const x of COSTCO.items) { const z = x.ing && x.reg && costcoQty(x.size); if (!z || !ING[x.ing] || ING[x.ing].u !== z.u) continue; S.regStore = S.regStore || {}; (S.regStore[x.ing] = S.regStore[x.ing] || {}).Costco = { p: x.reg / z.q, date: (COSTCO.made || "").slice(0, 10), src: "site" }; n++; } if (n) { rankCache = null; save(); } }
   if (COSTCO && S.view === "speciaux") render("speciaux");
@@ -4433,19 +4435,35 @@ function costcoCompare(sp) {
   const note = mine <= best.pu * 1.005 ? 10 : Math.max(1, Math.min(9, 10 - Math.round((mine / best.pu - 1) / 0.05)));
   return { mine, best, same: !!same.length, note };
 }
-function costcoWeek(sp) { const c = costcoCompare(sp); return c ? c.note : null; }
+function costcoWeek(sp) {
+  const c = costcoCompare(sp), r = costcoRegular(sp);
+  const refs = [c && c.same ? c.best.pu : null, r ? r.pu : null, c && !c.same && !r ? c.best.pu : null].filter((v) => v > 0);
+  if (!refs.length) return null;
+  const mine = (c && c.mine) || (r && r.mine), min = Math.min(...refs);
+  return mine <= min * 1.005 ? 10 : Math.max(1, Math.min(9, 10 - Math.round((mine / min - 1) / 0.05)));
+}
+// regular price of the same product in a grocery store, per g / ml, and Costco's own per g / ml
+function costcoRegular(sp) {
+  const g = COSTCO && COSTCO.regular && sp.no && COSTCO.regular[sp.no], ing = ING[sp.ing];
+  if (!g || !ing || !(g.reg > 0) || g.unite !== sp.unite) return null;
+  const mine = L.unitPrice(sp, ing); if (!(mine > 0)) return null;
+  return { pu: g.reg / g.qte, sale: g.sale > 0 ? g.sale / g.qte : null, mine, g };
+}
 // Costco's quantity at the cheapest price per gram / ml of the other stores this week (any brand):
 // "1 kg ailleurs : 19,80 $ (Metro)" next to Costco's own price
 function costcoVs(x) {
   const sp = (window.__csc || []).find((o) => o.no && o.no === x.no); if (!sp) return "";
   const ing = ING[sp.ing]; if (!ing) return "";
   const mine = L.unitPrice(sp, ing); if (!(mine > 0)) return "";
-  const cmp = costcoCompare(sp); if (!cmp) return "";
+  const rg = costcoRegular(sp), qty = sp.qte;
+  const verdict = rg ? (() => { const same = rg.pu * qty, sv = same - sp.prix;
+    return `<div class="meta" style="color:${sv > 0 ? "var(--green)" : "#c4500f"}"><b>${sv > 0 ? "✓ Vaut la peine" : "✗ Pas mieux"}</b> : au prix régulier de ${esc(rg.g.mag)} (${esc(rg.g.txt)}), la même quantité coûte <b>${L.FR(same)} $</b>${rg.sale ? ` (${L.FR(rg.sale * qty)} $ en spécial cette semaine)` : ""} · ${sv > 0 ? "Costco sauve " + L.FR(sv) + " $" : "Costco coûte " + L.FR(-sv) + " $ de plus"}</div>`; })() : "";
+  const cmp = costcoCompare(sp); if (!cmp) return verdict;
   const best = { pu: cmp.best.pu, mag: cmp.best.o.mag, txt: String(cmp.best.o.txt || "").slice(0, 50) };
   const q = L.unitPrice({ prix: 1, qte: sp.qte, unite: sp.unite }, ing) ? 1 / L.unitPrice({ prix: 1, qte: sp.qte, unite: sp.unite }, ing) : null; // Costco's quantity in g / ml
   if (!q) return "";
   const other = best.pu * q, diff = other - sp.prix;
-  return `<div class="meta" style="color:${diff >= 0 ? "var(--green)" : "#c4500f"}">Même quantité ${cmp.same ? "<b>même marque</b>" : "marque semblable"} : <b>${L.FR(other)} $</b> chez ${esc(best.mag)} (${esc(best.txt)}) · ${diff >= 0 ? "Costco sauve " + L.FR(diff) + " $" : "Costco coûte " + L.FR(-diff) + " $ de plus"}</div>`;
+  return verdict + `<div class="meta" style="color:${diff >= 0 ? "var(--green)" : "#c4500f"}">Spéciaux de la semaine, même quantité ${cmp.same ? "<b>même marque</b>" : "marque semblable"} : <b>${L.FR(other)} $</b> chez ${esc(best.mag)} (${esc(best.txt)}) · ${diff >= 0 ? "Costco sauve " + L.FR(diff) + " $" : "Costco coûte " + L.FR(-diff) + " $ de plus"}</div>`;
 }
 let costcoBusy = false;
 async function readCostcoShots(files) {

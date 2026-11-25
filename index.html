@@ -4439,7 +4439,8 @@ function costcoCompare(sp) {
 // 1 = not cheaper; +1 per 5 % saved; 10 = 45 % cheaper or more.
 function costcoWeek(sp) {
   const c = costcoCompare(sp), r = costcoRegular(sp);
-  const refs = [c && c.same ? c.best.pu : null, r ? r.pu : null, r && r.sale ? r.sale : null, c && !c.same && !r ? c.best.pu : null].filter((v) => v > 0);
+  // the same product's own prices first (regular and this week's special); else the same brand; else a similar product
+  const refs = (r ? [r.pu, r.sale] : c ? [c.best.pu] : []).filter((v) => v > 0);
   if (!refs.length) return null;
   const mine = (c && c.mine) || (r && r.mine), min = Math.min(...refs);
   const saved = 1 - mine / min; // 0.30 = Costco is 30 % cheaper

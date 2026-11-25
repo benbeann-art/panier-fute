@@ -4417,6 +4417,23 @@ function costcoTags(x) {
   const cls = (v) => v == null ? "c-o" : v >= 8 ? "c-g" : v >= 5 ? "c-y" : "c-r";
   return `<span class="tags2"><span class="tag ${cls(c)}">${c || "–"}<small>an</small></span><span class="tag ${cls(w)}">${w || "–"}<small>sem</small></span></span>`;
 }
+// Costco's quantity at the cheapest price per gram / ml of the other stores this week (any brand):
+// "1 kg ailleurs : 19,80 $ (Metro)" next to Costco's own price
+function costcoVs(x) {
+  const sp = (window.__csc || []).find((o) => o.no && o.no === x.no); if (!sp) return "";
+  const ing = ING[sp.ing]; if (!ing) return "";
+  const mine = L.unitPrice(sp, ing); if (!(mine > 0)) return "";
+  let best = null;
+  for (const o of allSpecials()) {
+    if (o.mag === "Costco" || o.ing !== sp.ing || !S.reg.stores.includes(o.mag)) continue;
+    const pu = L.unitPrice(o, ing); if (pu > 0 && (!best || pu < best.pu)) best = { pu, mag: o.mag };
+  }
+  if (!best) return "";
+  const q = L.unitPrice({ prix: 1, qte: sp.qte, unite: sp.unite }, ing) ? 1 / L.unitPrice({ prix: 1, qte: sp.qte, unite: sp.unite }, ing) : null; // Costco's quantity in g / ml
+  if (!q) return "";
+  const other = best.pu * q, diff = other - sp.prix;
+  return `<div class="meta" style="color:${diff >= 0 ? "var(--green)" : "#c4500f"}">Même quantité au moins cher ailleurs : <b>${L.FR(other)} $</b> (${esc(best.mag)}) · ${diff >= 0 ? "Costco sauve " + L.FR(diff) + " $" : "Costco coûte " + L.FR(-diff) + " $ de plus"}</div>`;
+}
 let costcoBusy = false;
 async function readCostcoShots(files) {
   if (costcoBusy || !files.length) return;
@@ -4466,7 +4483,7 @@ function costcoBox() {
       <div class="ph fl">${x.img ? `<img src="${esc(x.img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.classList.add('ph-empty');this.remove()">` : ""}</div>
       <div style="padding:6px 8px"><div class="nm">${esc(x.n)}</div>
       <div class="meta">${esc(x.size || "")}${x.ou === "entrepôt" ? " · entrepôt seulement" : ""}</div>
-      <div class="meta">jusqu'au ${frDate(x.au)}</div>${costcoTags(x) ? "" : `<div class="meta" style="color:#c4500f">${x.prix || costcoShot(x) || price.get(x) ? "Pas de note : rien de pareil dans les autres circulaires" : "Pas de note : prix final pas connu"}</div>`}
+      <div class="meta">jusqu'au ${frDate(x.au)}</div>${costcoVs(x)}${costcoTags(x) ? "" : `<div class="meta" style="color:#c4500f">${x.prix || costcoShot(x) || price.get(x) ? "Pas de note : rien de pareil dans les autres circulaires" : "Pas de note : prix final pas connu"}</div>`}
       <span class="price" style="color:var(--green)">${((pp) => pp ? L.FR(pp.prix) + " $" + (pp.reg ? " <span class='small mute' style='font-weight:400'>au lieu de " + L.FR(pp.reg) + " $</span>" : "") : "")(x.prix ? x : costcoShot(x)) || (price.get(x) ? L.FR(price.get(x).prix) + " $ <span class='small mute' style='font-weight:400'>au lieu de " + L.FR(price.get(x).reg) + " $</span>" : "Rabais " + L.FR(x.rabais) + " $")}</span></div></div>`).join("")}</div>
     ${nar.length ? `<h3 style="margin:14px 0 6px">Prix en entrepôt (article Narcity)</h3><div class="flyer">${nar.map((x) => `<div class="art" style="cursor:default"><div style="padding:6px 8px"><div class="nm">${esc(x.n)}</div>
       <div class="meta">${x.qte ? L.FR(x.qte >= 1000 ? x.qte / 1000 : x.qte, x.qte >= 1000 ? 2 : 0) + (x.qte >= 1000 ? (x.unite === "g" ? " kg" : " L") : " " + x.unite) : ""} · au lieu de ${L.FR(x.reg)} $</div><div class="meta">jusqu'au ${frDate(x.au)}</div>

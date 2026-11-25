@@ -3166,23 +3166,37 @@ function minceTop() {
     ${myNumbersBox()}
   </div>`;
 }
+let profOpen = false;
+const PROF_KEYS = ["nomProfil", "prof", "poids", "poidsU", "kcalJour"];
+function ensureProfiles() { if (!Array.isArray(S.profils) || !S.profils.length) { S.profils = [{}]; S.profIdx = 0; } if (!S.nomProfil) S.nomProfil = "Moi"; }
+function keepProfile() { ensureProfiles(); const o = {}; for (const k of PROF_KEYS) if (S[k] !== undefined) o[k] = JSON.parse(JSON.stringify(S[k])); S.profils[S.profIdx || 0] = o; }
+function loadProfile(i) { keepProfile(); const o = S.profils[i] || {}; for (const k of PROF_KEYS) { if (o[k] !== undefined) S[k] = JSON.parse(JSON.stringify(o[k])); else delete S[k]; } S.profIdx = i; ensureProfiles(); save(); rMince(); }
+function profilesBar() {
+  ensureProfiles(); const cur = S.profIdx || 0;
+  const names = S.profils.map((o, i) => (i === cur ? S.nomProfil : o.nomProfil) || "Profil " + (i + 1));
+  return `<div class="row" style="align-items:center;gap:6px;margin-bottom:6px"><label class="small" for="profSel">Profil</label>
+    <select id="profSel" style="max-width:160px">${names.map((n, i) => `<option value="${i}" ${i === cur ? "selected" : ""}>${esc(n)}</option>`).join("")}</select>
+    <button class="btn sm" data-profnew="1">+ Nouveau profil</button>${S.profils.length > 1 ? `<button class="btn sm" data-profdel="1">Supprimer ce profil</button>` : ""}</div>`;
+}
 function myNumbersBox() {
   const pr = S.prof || {}, n = myNumbers(), fmt = (v) => L.FR(v, 1).replace(/,0$/, "");
   const ft = pr.cm ? Math.floor(pr.cm / 30.48) : "", inch = pr.cm ? Math.round((pr.cm / 2.54) % 12) : "";
-  return `<b>Mes chiffres</b>
+  return `${profilesBar()}<b>Mes chiffres${S.nomProfil && S.nomProfil !== "Moi" ? ` (${esc(S.nomProfil)})` : ""}</b>
     ${n ? `<p class="small" style="margin:6px 0 0">Pour garder ton poids : <b>≈ ${L.FR(n.maint, 0)} calories par jour</b>. Objectif conseillé : <b>${L.FR(n.advice, 0)}</b>.<br>
       Avec ${Number(S.kcalJour) ? "ton objectif de" : "l'objectif conseillé,"} ${L.FR(n.goal, 0)} : perte d'environ <b>${fmt(n.lbWeek)} lb par semaine</b>${n.goal < n.floor ? ` <b style="color:var(--red)">(trop bas : ne descends pas sous ${L.FR(n.floor, 0)} sans suivi médical)</b>` : ""}.<br>
       Protéines à viser : <b>≈ ${n.prot} g par jour</b>. Dîner ou souper : <b>≈ ${L.FR(n.meal, 0)} calories</b> chacun (le reste pour le déjeuner et les collations).</p>
       <p class="small mute" style="margin:4px 0 0">Les recettes sont triées « Pour toi » : le plus de protéines et la plus grosse assiette pour le moins de calories, et la portion qui te convient. Estimations (formule Mifflin-St Jeor) : ta courbe de poids montrera le vrai rythme.</p>`
     : `<p class="small mute" style="margin:6px 0 0">${lastKg() ? "" : "Ajoute ton poids ci-dessus, puis "}remplis ton profil : l'app calcule tes calories et te propose les recettes qui te conviennent le mieux.</p>`}
-    <details style="margin-top:8px" ${n ? "" : "open"}><summary class="small">Mon profil</summary>
+    <details style="margin-top:8px" ${n && !profOpen ? "" : "open"}><summary class="btn sm" style="display:inline-block">Modifier le profil (nom, âge, grandeur, activité)</summary>
     <form id="profForm" class="grid2" style="margin-top:8px">
+      <label class="small">Nom du profil<input id="pNom" maxlength="20" value="${esc(S.nomProfil || "Moi")}"></label>
       <label class="small">Sexe<select id="pSexe"><option value="H" ${pr.sexe !== "F" ? "selected" : ""}>Homme</option><option value="F" ${pr.sexe === "F" ? "selected" : ""}>Femme</option></select></label>
       <label class="small">Âge<input type="number" id="pAge" inputmode="numeric" min="15" max="99" value="${pr.age || ""}"></label>
       <label class="small">Grandeur (pieds et pouces)<span class="row" style="flex-wrap:nowrap;gap:4px"><input type="number" id="pFt" inputmode="numeric" min="4" max="7" value="${ft}" style="max-width:70px"> pi <input type="number" id="pIn" inputmode="numeric" min="0" max="11" value="${inch}" style="max-width:70px"> po</span></label>
       <label class="small">Semaine (travail)<select id="pSem">${ACT_SEM.map(([v, t]) => `<option value="${v}" ${Number(pr.sem) === v ? "selected" : ""}>${t}</option>`).join("")}</select></label>
       <label class="small">Fin de semaine<select id="pWe">${ACT_WE.map(([v, t]) => `<option value="${v}" ${Number(pr.we) === v ? "selected" : ""}>${t}</option>`).join("")}</select></label>
-      <button class="btn sm red" style="align-self:end">Calculer</button></form></details>`;
+      <button class="btn sm red" style="align-self:end">Enregistrer et calculer</button></form></details>
+    <p class="small mute" style="margin:6px 0 0">Chaque profil a son poids, son objectif et ses chiffres. Le menu et la liste d'épicerie restent ceux de la maison.</p>`;
 }
 function poidsChart(W, u) {
   if (W.length < 2) return "";
@@ -5007,6 +5021,8 @@ document.addEventListener("click", (e) => {
   if (d.msort) { S.msort = d.msort; minLimit = 40; save(); return rMince(); }
   if (d.mcat !== undefined) { S.mcat = d.mcat; minLimit = 40; save(); return rMince(); }
   if (d.mmore) { minLimit += 40; return rMince(); }
+  if (d.profnew) { keepProfile(); S.profils.push({ nomProfil: "Profil " + (S.profils.length + 1) }); profOpen = true; return loadProfile(S.profils.length - 1); }
+  if (d.profdel) { ensureProfiles(); if (S.profils.length < 2 || !confirm(`Supprimer le profil « ${S.nomProfil} » (son poids et ses chiffres) ?`)) return; const i = S.profIdx || 0; S.profils.splice(i, 1); S.profIdx = 0; const o = S.profils[0] || {}; for (const k of PROF_KEYS) { if (o[k] !== undefined) S[k] = JSON.parse(JSON.stringify(o[k])); else delete S[k]; } save(); return rMince(); }
   if (d.poidsu) { const nu = (S.poidsU || "lb") === "lb" ? "kg" : "lb", f = nu === "kg" ? 0.45359237 : 1 / 0.45359237; S.poids = (S.poids || []).map((x) => ({ d: x.d, v: Math.round(x.v * f * 10) / 10 })); S.poidsU = nu; save(); return rMince(); }
   if (d.poidsdel) { const W = (S.poids || []).slice().sort((a, b) => a.d.localeCompare(b.d)); W.pop(); S.poids = W; save(); return rMince(); }
   if (d.ing) { S.rf = "spec"; S.q = ING[d.ing].n.split(" (")[0]; S.cat = ""; S.cuis = ""; S.tag = ""; return show("recettes", false); }
@@ -5156,6 +5172,7 @@ document.addEventListener("click", (e) => {
   }
 });
 document.addEventListener("change", (e) => {
+  if (e.target.id === "profSel") { profOpen = false; return loadProfile(Number(e.target.value) || 0); }
   const t = e.target;
   if (t.dataset.store) {
     const s = t.dataset.store;
@@ -5226,7 +5243,8 @@ document.addEventListener("submit", (e) => {
   if (e.target.id === "profForm") { e.preventDefault();
     const ft = Number($("#pFt").value) || 0, inch = Number($("#pIn").value) || 0, age = Number($("#pAge").value) || 0;
     if (!(ft >= 4 && ft <= 7) || !(age >= 15 && age <= 99)) return toast("Écris ton âge et ta grandeur (ex. 5 pi 10 po)");
-    S.prof = { sexe: $("#pSexe").value, age, cm: Math.round((ft * 12 + inch) * 2.54), sem: Number($("#pSem").value), we: Number($("#pWe").value) }; S.msort = "toi"; save();
+    S.prof = { sexe: $("#pSexe").value, age, cm: Math.round((ft * 12 + inch) * 2.54), sem: Number($("#pSem").value), we: Number($("#pWe").value) }; S.msort = "toi";
+    S.nomProfil = ($("#pNom").value || "").trim().slice(0, 20) || S.nomProfil || "Moi"; profOpen = false; keepProfile(); save();
     const n = myNumbers(); toast(n ? `Maintien ≈ ${L.FR(n.maint, 0)} calories par jour` : "Profil enregistré : ajoute ton poids"); return rMince(); }
   if (e.target.id === "kcalForm") { e.preventDefault(); const v = Math.round(Number($("#kcalJour").value) || 0); S.kcalJour = v >= 800 && v <= 5000 ? v : 0; save(); toast(S.kcalJour ? `Objectif : ${S.kcalJour} calories par jour` : "Objectif enlevé"); return rMince(); }
   if (e.target.id === "poidsForm") { e.preventDefault(); const v = Number(String($("#poidsVal").value).replace(",", ".")); if (!(v > 20 && v < 1000)) return toast("Écris ton poids, par exemple 210");
@@ -5274,7 +5292,7 @@ Promise.all([getJSON("recettes.json", window.DATA_RECETTES), getJSON("speciaux.j
     fetch("photos/index.json", { cache: "no-cache" }).then((r) => (r.ok ? r.json() : [])).then((l) => { if (Array.isArray(l) && l.length) { REPO_PH = new Set(l); render(S.view); if (S.open) openRec(S.open); } }).catch(() => {});
     setTimeout(async () => { loadCostco(); await syncNow(); try { if (!S.costcoOff && !S.reg.stores.includes("Costco")) { S.reg.stores.push("Costco"); save(); render(S.view); } } catch (e) {}
       // v3.13.70: the flyers now also hold snacks, coffee, nuts and drinks: read this week's flyers again once
-      try { if (!S.prof && !S.profV) { S.profV = 1; S.prof = { sexe: "H", age: 47, cm: 178, sem: 1.4, we: 1.2 }; save(); } } catch (e) {} try { if (S.banCrevV !== 2) { S.banCrevV = 2; S.reg.ban = (S.reg.ban || []).filter((x) => x !== "crevettes"); save(); } } catch (e) {} try { if (S.kTermsV !== 4) { S.kTermsV = 4; for (const k of Object.keys(SIZES)) if (!SIZES[k].skip) delete SIZES[k]; saveSizes(); save(); updateFlyers(true).then(() => render(S.view)).catch(() => {}); } } catch (e) {} try { receiptFix1122(); siteFix(); updateBadge(); } catch (e) {} weeklyAuto(); }, 800);
+      try { if (!S.prof && !S.profV && (S.poids || []).some((x) => x.v === 243)) { S.profV = 1; S.prof = { sexe: "H", age: 47, cm: 178, sem: 1.4, we: 1.2 }; save(); } } catch (e) {} try { if (S.banCrevV !== 2) { S.banCrevV = 2; S.reg.ban = (S.reg.ban || []).filter((x) => x !== "crevettes"); save(); } } catch (e) {} try { if (S.kTermsV !== 4) { S.kTermsV = 4; for (const k of Object.keys(SIZES)) if (!SIZES[k].skip) delete SIZES[k]; saveSizes(); save(); updateFlyers(true).then(() => render(S.view)).catch(() => {}); } } catch (e) {} try { receiptFix1122(); siteFix(); updateBadge(); } catch (e) {} weeklyAuto(); }, 800);
   })
   .catch(() => { $("#loading").textContent = "Impossible de charger les recettes. Recharge la page."; });
 

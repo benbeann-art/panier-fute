@@ -42,12 +42,12 @@ async function flyers(reg) {
   const debut = weekKey(), file = `${dir}${debut}.json`;
   const old = read(file);
   if (old && !force && JSON.parse(old).raw.length >= 80) { console.log(`${reg.name}: already done`); return; }
-  // read slowly: one search at a time, 0,6 s apart; the item pages too (same flyer item in many regions = read once)
-  const raw = await Flipp.collect(reg.postal, debut, { pause: 600, maxDetails: 400 });
+  // searches like a person: one at a time, 4 to 10 s apart; then the item pages are downloaded quickly
+  const raw = await Flipp.collect(reg.postal, debut, { pause: 4000, pauseMax: 10000, maxDetails: 400 });
   console.log(`${reg.name}: ${raw.length} flyer items for the week of ${debut}`);
   if (raw.length < 20) return;
   // snacks, coffee, drinks without a size in their name: the item's own page has it (compared per 100 g / per litre)
-  try { await Flipp.addDetails(raw.filter((r) => String(r.ing).startsWith("k_")), { maxDetails: 200, pause: 600 }); } catch (e) {}
+  try { await Flipp.addDetails(raw.filter((r) => String(r.ing).startsWith("k_")), { maxDetails: 200 }); } catch (e) {}
   write(file, JSON.stringify({ debut, fin: addDays(debut, 6), made: new Date().toISOString(), region: reg.name, raw }));
   const idx = JSON.parse(read(`${dir}index.json`) || "[]").filter((w) => w !== debut).concat(debut).sort();
   write(`${dir}index.json`, JSON.stringify(idx));
@@ -139,7 +139,7 @@ async function noovo(n) {
   write("data/noovo/index.json", JSON.stringify([...new Set(done)].sort()));
 }
 
-const only = arg("regions", "");
+const only = arg("regions", "mtl"); // personal use: only my region (Montreal), read at a human pace
 // Montreal first (the app's own region), then the others; stop starting new regions after 4 h 30 so the job saves what it read
 const START = Date.now(), BUDGET = 270 * 60e3;
 const todo = Flipp.REGIONS.filter((r) => !only || only.split(",").includes(r.id)).sort((a, b) => (b.id === "mtl") - (a.id === "mtl"));
@@ -151,6 +151,6 @@ await customStores();
 if (backfill) await noovo(backfill);
 // complete = every region has this week's flyers: the next tries of the week do nothing (no second visit to the sites)
 const ok = (r) => { try { return JSON.parse(read(`data/flyers/${r.id}/${weekKey()}.json`)).raw.length >= 20; } catch { return false; } };
-const complete = Flipp.REGIONS.every(ok);
-write("data/regions.json", JSON.stringify({ made: new Date().toISOString(), week: weekKey(), complete, mtl: ok({ id: "mtl" }), owner: OWNER, regions: Flipp.REGIONS.map((r) => r.id) }));
-console.log(`week ${weekKey()}: ${Flipp.REGIONS.filter(ok).length}/${Flipp.REGIONS.length} regions${complete ? " (complete)" : ""}`);
+const complete = todo.every(ok);
+write("data/regions.json", JSON.stringify({ made: new Date().toISOString(), week: weekKey(), complete, mtl: ok({ id: "mtl" }), owner: OWNER, regions: todo.map((r) => r.id) }));
+console.log(`week ${weekKey()}: ${todo.filter(ok).length}/${todo.length} regions${complete ? " (complete)" : ""}`);

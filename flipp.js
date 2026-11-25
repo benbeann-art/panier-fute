@@ -247,9 +247,10 @@
           post: it.post_price_text || "", orig: Number(it.original_price) || 0, story: String(it.sale_story || "").slice(0, 60),
           img: it.clean_image_url || "", du: day(it.valid_from), au: day(it.valid_to) });
       }
-      if (opts.pause) await new Promise((res) => setTimeout(res, opts.pause));
+      // searches at a human pace: a random wait between pause and pauseMax
+      if (opts.pause) await new Promise((res) => setTimeout(res, opts.pause + Math.random() * Math.max(0, (opts.pauseMax || opts.pause) - opts.pause)));
     }
-    if (opts.details !== false) await addDetails(out, opts);
+    if (opts.details !== false) await addDetails(out, Object.assign({}, opts, { pause: opts.detailPause }));
     return out;
   }
 

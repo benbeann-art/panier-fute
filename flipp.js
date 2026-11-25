@@ -116,7 +116,11 @@
     croissant: ["croissants", ["croissant"], ["surgel", "pate", "sandwich", "jambon", "pizza", "cereale"]],
     ciabatta: ["ciabatta", ["ciabatta"], ["pizza", "sandwich", "ail", "boeuf", "poulet", "jambon", "dinde"]],
     bagel: ["bagels", ["bagel"], ["chips", "croustil", "pizza", "assaison", "epice", "crustil", "bouchees", "fromage a la creme"]],
-    pain_sousmarin: ["pains sous-marin", ["sous marin|sous marins|hot dog|hot dogs|hamburger"], ["saucisse", "wiener", "boeuf", "galette", "surgel", "congel", "sauce", "relish", "moutarde", "bbq", "cuit", "garni", "pizza"]],
+    pain_hotdog: ["pains à hot-dog", ["pain", "hot dog"], ["saucisse", "wiener", "surgel", "congel", "garni", "kit"]],
+    pain_burger: ["pains à hamburger", ["pain", "hamburger|burger"], ["galette", "boeuf", "poulet", "porc", "surgel", "congel", "garni", "kit", "sauce", "vegetal"]],
+    wieners: ["saucisses à hot-dog", ["wiener|hot dog"], ["pain", "pains", "relish", "moutarde", "sauce", "vegetal", "vegan", "pogo", "enrob", "pate", "chips", "croustil", "kit"]],
+    kd: ["kraft dinner", ["kraft dinner|diner kraft|macaroni et fromage|macaroni au fromage|mac and cheese|mac et fromage"], ["surgel", "congel", "bol", "coupe", "tasse", "micro", "pret", "repas", "salade", "sauce", "gratine", "maison"]],
+    pain_sousmarin: ["pains sous-marin", ["sous marin|sous marins"], ["saucisse", "wiener", "boeuf", "galette", "surgel", "congel", "sauce", "relish", "moutarde", "bbq", "cuit", "garni", "pizza"]],
     pate_pizza: ["pâte à pizza", ["pate a pizza|pizza dough|croute a pizza|croutes a pizza"], ["sauce", "fromage"]],
     riz: ["riz", ["=riz"], ["basmati", "express", "minute", "instantane", "nouille", "galette", "gateau", "craquelin", "lait", "vinaigre", "farine", "boisson", "crispies", "papier", "pouding", "vermicelle", "cereale", "sauce", "poulet", "plat", "repas", "bebe", "chips", "croustil", "chou fleur", "choux fleurs", "brocoli", "sushi", "spaghetti", "pates", "bol", "son", "sirop", "biscuit", "barre", "galettes", "risotto", "accompagnement", "melange", "ble", "quinoa", "mais", "assaison", "arborio", "risotto"]],
     riz_basmati: ["riz basmati", ["riz", "basmati"], ["pret", "plat", "bol", "sachet micro", "accompagnement"]],
@@ -318,7 +322,7 @@
 
   // Price -> what it buys, without AI. Returns {qte, unite} or null when the size is unknown.
   // usual count in one package, for "unit" ingredients sold in packs (used only when the AI can't tell)
-  const PACK = { clementine: 12, poire: 6, orange: 8, oeufs: 12, pain_tranche: 20, kaiser: 6, bagel: 6, tortilla: 10, pita: 6, croissant: 6, ciabatta: 4, pain_sousmarin: 6, fromage_tranche: 16, ail: 10 };
+  const PACK = { clementine: 12, poire: 6, orange: 8, oeufs: 12, pain_tranche: 20, kaiser: 6, bagel: 6, tortilla: 10, pita: 6, croissant: 6, ciabatta: 4, pain_sousmarin: 6, pain_hotdog: 8, pain_burger: 8, fromage_tranche: 16, ail: 10 };
   const NUM = (s) => Number(String(s).replace(",", "."));
   // about how many per pound, for fruits and vegetables counted by the unit
   // the most one fruit or vegetable costs, even on special

@@ -1471,6 +1471,10 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
     const todo = out.filter((x) => !x.det && (noSizeTxt(x.post) || String(x.ing || "").startsWith("k_")) && !/\d\s*(lb|kg|g|ml|l|un\.?)\b/i.test(x.name) && x.fid).slice(0, opts.maxDetails || 320);
     let i = 0;
     const worker = async () => { while (i < todo.length) { const x = todo[i++]; const d = await detailOf(x.fid, opts.fetch); if (d.trim()) { applyDetail(x, d); x.det = 1; } } };
+    if (opts.pause) { // slow and polite: one page at a time (a page already read is not asked again)
+      for (const x of todo) { const seen = DETAIL.has(x.fid), d = await detailOf(x.fid, opts.fetch); if (d.trim()) { applyDetail(x, d); x.det = 1; } if (!seen) await new Promise((res) => setTimeout(res, opts.pause)); }
+      return;
+    }
     await Promise.all([worker(), worker(), worker(), worker(), worker(), worker()]);
   }
 
@@ -1959,6 +1963,7 @@ function rSpec() {
   const exp = SPEC && SPEC.fin < now;
   $("#v-speciaux").innerHTML = `
   <div class="split"><div>
+    ${(() => { const f = flyerState(); return f.ok ? "" : `<div class="warn"${f.lvl === "err" ? ' style="background:#fde3e1;border-color:#d4241b;color:#8a1510"' : ""}>${f.lvl === "err" ? "⚠️ " : ""}${f.txt}.${SPEC && SPEC.debut ? ` Tu vois encore les spéciaux du ${frDate(SPEC.debut)} au ${frDate(SPEC.fin)}.` : ""}</div>`; })()}
     ${[3, 4].includes(new Date().getDay()) && S.bannerWk !== weekKey() + new Date().getDay() ? `<div class="warn">${new Date().getDay() === 3 ? "Les nouvelles circulaires arrivent demain : c'est le bon moment pour vider le frigo." : "Les nouvelles circulaires sont là : fais ton menu de la semaine !"} <button class="btn sm" id="bannerOk" style="margin-left:6px">OK</button></div>` : ""}
     ${S.reg.postalSet ? "" : `<div class="warn">Pour voir les circulaires et les épiceries de <b>ton coin</b> : <button class="btn sm red" id="geoGo">📍 Utiliser ma position</button> ou mets ton code postal dans Réglages.</div>`}
     <h1>Les spéciaux de la semaine</h1>
@@ -3293,6 +3298,7 @@ function toggleCol(id) {
 // Snack ingredients the GitHub robot did not read yet: read them live once per week
 const COL_ONLY = ["banane", "poire", "clementine", "orange", "raisins", "bleuets", "fraises", "avoine", "dattes", "raisins_secs", "graines_tournesol", "graines_citrouille", "mais_eclater", "beurre_tournesol", "edamame", "farine_ble", "graines_lin"];
 async function topUpSnackSpecials() {
+  return; // the robot now downloads every ingredient once a week: nothing to read live (no second visit to Flipp)
   if (!SPEC || !SPEC.items || S.colTop === SPEC.debut || SPEC.fin < today()) return;
   const ids = COL_ONLY.filter((id) => Flipp.TERMS[id] && ING[id] && !SPEC.items.some((x) => x.ing === id));
   S.colTop = SPEC.debut; save(false);
@@ -3972,7 +3978,7 @@ try { SIZES = JSON.parse(localStorage.getItem("panierfute.sizes") || "{}"); } ca
 const saveSizes = () => { try { const k = Object.keys(SIZES); if (k.length > 3000) for (const x of k.slice(0, k.length - 3000)) delete SIZES[x]; localStorage.setItem("panierfute.sizes", JSON.stringify(SIZES)); } catch (e) {} };
 async function rawToSpec(raw, debut, fin, source, useAI) {
   raw = raw.filter((r) => Flipp.matches(r.ing, r.name)); // today's filters, even on older robot files
-  if (useAI) { try { await Flipp.addDetails(raw, { maxDetails: 320 }); } catch (e) {} } // fruits and vegetables "per lb, sold in a bag": the item's own page says the bag price
+  // item pages (bag sizes, "per lb") were read by the robot when it downloaded the week: the app does not go back to Flipp
   const sizes = SIZES;
   let { unknown } = Flipp.toItems(raw, ING, { sizes });
   if (useAI && unknown.length && aiOn()) {
@@ -4002,17 +4008,23 @@ Réponds UNIQUEMENT par un tableau JSON : [{"n":0,"qte":2,"unite":"L"},{"n":1,"q
   const items = Flipp.bestPerStore(Flipp.toItems(raw, ING, { sizes, guess: true }).items, L.unitPrice, ING);
   return { debut, fin, source, items };
 }
-// One week of flyers: robot file -> live Flipp (current week) -> Noovo Moi text (past weeks) -> AI web search
+// One week of flyers: robot file (downloaded once, Thursday noon / 20 h) -> Noovo Moi text (past weeks)
+// Where this week's download stands, for the message on the specials page
+function flyerState() {
+  if (SPEC && SPEC.debut === weekKey()) return { ok: true, txt: "" };
+  const n = new Date(), d = n.getDay(), h = n.getHours() + n.getMinutes() / 60;
+  if (d === 4 && h < 12.5) return { ok: false, lvl: "info", txt: "Les nouvelles circulaires sont téléchargées une seule fois, jeudi midi" };
+  if (d === 4 && h < 21) return { ok: false, lvl: "info", txt: "Le téléchargement de midi n'a pas marché ou n'est pas fini : nouvel essai à 20 h" };
+  return { ok: false, lvl: "err", txt: "Les circulaires de cette semaine n'ont PAS pu être téléchargées (essais de jeudi midi et de 20 h)" };
+}
 async function fetchWeek(debut, current, msg) {
   const fin = addDays(debut, 6);
   const f = robotDir() ? await repoFile(`${robotDir()}${debut}.json`, true) : null;
   if (f && Array.isArray(f.raw) && f.raw.length >= 20 && current) setNear(f.raw);
   if (f && Array.isArray(f.raw) && f.raw.length >= 20) return rawToSpec(f.raw, f.debut || debut, f.fin || fin, "Vraies circulaires de la semaine (Flipp)", current);
   if (current) {
-    try {
-      const raw = await Flipp.collect(S.reg.postal || "H2X1Y4", debut, { progress: (n, t) => msg && msg(`Lecture des vraies circulaires… ${Math.round((100 * n) / t)} %`) });
-      if (raw.length >= 20) { setNear(raw); if (msg) msg("Lecture des formats…"); return rawToSpec(raw, debut, fin, "Vraies circulaires de la semaine (Flipp)", true); }
-    } catch (e) {}
+    // downloaded once a week by the robot (Thursday noon, second try 20 h): the app does not read Flipp live
+    throw new Error(flyerState().txt);
   } else {
     const txt = await repoFile(`data/noovo/${debut}.txt`, false);
     if (txt && aiOn()) return aiWeek(debut, false, txt);

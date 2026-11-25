@@ -303,6 +303,10 @@
     const todo = out.filter((x) => !x.det && (noSizeTxt(x.post) || String(x.ing || "").startsWith("k_")) && !/\d\s*(lb|kg|g|ml|l|un\.?)\b/i.test(x.name) && x.fid).slice(0, opts.maxDetails || 320);
     let i = 0;
     const worker = async () => { while (i < todo.length) { const x = todo[i++]; const d = await detailOf(x.fid, opts.fetch); if (d.trim()) { applyDetail(x, d); x.det = 1; } } };
+    if (opts.pause) { // slow and polite: one page at a time (a page already read is not asked again)
+      for (const x of todo) { const seen = DETAIL.has(x.fid), d = await detailOf(x.fid, opts.fetch); if (d.trim()) { applyDetail(x, d); x.det = 1; } if (!seen) await new Promise((res) => setTimeout(res, opts.pause)); }
+      return;
+    }
     await Promise.all([worker(), worker(), worker(), worker(), worker(), worker()]);
   }
 

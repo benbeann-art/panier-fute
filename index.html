@@ -150,6 +150,7 @@ body:has(#timers:not([hidden])){padding-bottom:calc(170px + env(safe-area-inset-
 .art.on{border-color:var(--red);box-shadow:0 0 0 3px var(--red)}
 .art .body{display:flex;flex-direction:column;gap:2px;padding:8px 10px 10px}
 .art .nm{font-weight:700;font-size:14px;line-height:1.25}
+.art .mag{display:block;font-weight:800;font-size:13px;color:#fff;background:#151515;border-radius:6px;padding:1px 7px;width:max-content;max-width:100%;margin-bottom:3px}
 .art .price{font-weight:900;font-size:20px;color:#d4241b;white-space:normal;overflow-wrap:anywhere;line-height:1.15;display:block;max-width:100%}
 .art .meta{font-size:12px;color:#5d5952}
 .selbar{position:sticky;top:64px;z-index:15;display:flex;gap:8px;align-items:center;background:var(--ink);color:var(--bg);padding:8px 10px;border-radius:12px;margin:0 0 10px}
@@ -1947,8 +1948,8 @@ function rSpec() {
       ${x.sp.box && x.sp.pdf ? ((u) => u ? `<div class="ph fl"><img src="${u}" alt=""></div>` : `<div class="ph fl ph-empty" data-crop="${cropKey(x.sp)}"><span>${esc(x.sp.txt)}</span></div>`)(flyerImg(x.sp))
       : x.sp.img && AIS.photos !== "off" ? `<div class="ph fl"><img src="${esc(x.sp.img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.classList.add('ph-empty');this.remove()"></div>` : x.ing ? ingPic(x.sp.ing) : `<div class="ph ph-empty"><span>${esc(x.sp.txt)}</span></div>`}
       ${two(x)}${on ? `<span class="ok">✓ Choisi</span>` : ""}
-      <span class="body"><span class="nm">${esc(x.sp.txt || (x.ing && x.ing.n))}</span>
-      <span class="price">${L.fmtSpecial(x.sp)}</span><span class="meta">${S.store ? "" : esc(x.sp.mag) + " · "}${notRealTxt(x.sp) ? notRealTxt(x.sp) : x.h ? (x.h.lowest ? "<b style='color:var(--green)'>Plus bas de l'année</b>" : `Déjà été moins cher (${esc(x.h.min[1])})`) : x.ing && x.n ? `${x.n} recettes` : x.nc ? `${x.nc} collation${x.nc > 1 ? "s" : ""}` : "Pas dans les recettes"}</span></span></button>`; };
+      <span class="body"><span class="mag">${esc(x.sp.mag)}</span><span class="nm">${esc(x.sp.txt || (x.ing && x.ing.n))}</span>
+      <span class="price">${L.fmtSpecial(x.sp)}</span><span class="meta">${notRealTxt(x.sp) ? notRealTxt(x.sp) : x.h ? (x.h.lowest ? "<b style='color:var(--green)'>Plus bas de l'année</b>" : `Déjà été moins cher (${esc(x.h.min[1])})`) : x.ing && x.n ? `${x.n} recettes` : x.nc ? `${x.nc} collation${x.nc > 1 ? "s" : ""}` : "Pas dans les recettes"}</span></span></button>`; };
   const selBar = S.sel.length ? `<div class="selbar"><span><b>${S.sel.length}</b> article${S.sel.length > 1 ? "s" : ""} choisi${S.sel.length > 1 ? "s" : ""}</span><button class="btn sm" id="selClear">Effacer</button><button class="btn sm red" id="selGo">Voir les recettes →</button></div>` : "";
   const FLYER = { Maxi: "https://www.circulaire-en-ligne.ca/circulaire-maxi/speciaux-promotions-rabais-semaine", "Super C": "https://www.circulaire-en-ligne.ca/circulaire-super-c",
     IGA: "https://www.iga.net/fr/circulaire", Metro: "https://www.circulaire-en-ligne.ca/circulaire-metro", Provigo: "https://www.circulaire-en-ligne.ca/circulaire-provigo/speciaux-promotions-rabais-semaine",

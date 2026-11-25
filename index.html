@@ -51,7 +51,7 @@ h2{font-weight:800;font-size:20px;margin:26px 0 10px;line-height:1.2}
 .tag{display:inline-grid;place-items:center;min-width:44px;height:44px;border-radius:10px 10px 10px 2px;background:var(--yel);color:#151515;font-weight:900;font-size:22px;line-height:1;position:relative;flex:none}
 .tag small{font-size:9px;font-weight:700;position:absolute;bottom:3px;right:5px}
 .tag.hot{background:var(--red);color:#fff}
-.tag.c-g{background:#1f9d4c;color:#fff}.tag.c-y{background:#f5c518;color:#151515}.tag.c-r{background:#d4241b;color:#fff}.tag.c-o{background:#f26a21;color:#fff}
+.tag.c-g{background:#1f9d4c;color:#fff}.tag.c-y{background:#f5c518;color:#151515}.tag.c-r{background:#d4241b;color:#fff}.tag.c-o{background:#f26a21;color:#fff}.tag.c-n{background:#9a958c;color:#fff}
 .leg{display:inline-flex;flex-wrap:wrap;gap:4px 6px;align-items:center;margin-top:6px}.leg .tag.mini{min-width:28px}
 .hero.drop{outline:4px dashed var(--red);outline-offset:-6px}
 .qstep{display:inline-flex;gap:4px;flex:none}.qstep .btn{min-width:38px;font-size:18px;font-weight:900;padding:4px 0}
@@ -383,7 +383,8 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
       const h0 = weeks.size >= 3 ? histInfo(sp.ing, pu) : null;
       return h0 ? (h0.lowest ? 10 : Math.max(1, Math.min(9, 10 - Math.round((pu / h0.min[2] - 1) / 0.05)))) : null;
     }
-    if (pu >= ref * 0.98) return 1; // not cheaper than the cheapest everyday price of all my stores: not a real special
+    if (pu > ref * 1.02) return 0; // dearer than the normal price
+    if (pu >= ref * 0.98) return 1; // about the normal price: not a real special
     const h = histInfo(sp.ing, pu);
     // year: 10 = the lowest price seen this year in my stores; each 5 % above it costs 1 point
     if (h) return h.lowest ? 10 : Math.max(1, Math.min(9, 10 - Math.round((pu / h.min[2] - 1) / 0.05)));
@@ -1916,7 +1917,7 @@ function rSpec() {
     const pu = ing ? L.unitPrice(sp, ing) : null;
     return { sp, ing, c, w: ing ? (sp.mag === "Costco" ? costcoWeek(sp) : L.weekCote(sp, ing)) : null, costco: sp.mag === "Costco", n, nc, on: S.reg.stores.includes(sp.mag), h: pu ? L.histInfo(sp.ing, pu) : null };
   }).sort((a, b) => (b.c || 0) + (b.w || 0) - (a.c || 0) - (a.w || 0) || (b.c || 0) - (a.c || 0));
-  const two = (x) => x.costco ? `<span class="tags2"><span class="tag ${x.w == null ? "c-o" : x.w >= 8 ? "c-g" : x.w >= 5 ? "c-y" : "c-r"}" title="Costco comparé au même produit ailleurs, au gramme">${x.w == null ? "–" : x.w}<small>/10</small></span></span>` : `<span class="tags2"><span class="tag ${coteCls(x.sp, x.c)}" title="Année : ${x.c || "?"} sur 10">${x.c || "–"}<small>an</small></span><span class="tag ${x.w == null ? "c-o" : x.w >= 8 ? "c-g" : x.w >= 5 ? "c-y" : "c-r"}" title="Semaine : ${x.w || "?"} sur 10">${x.w || "–"}<small>sem</small></span></span>`;
+  const two = (x) => x.costco ? `<span class="tags2"><span class="tag ${noteCls(x.w)}" title="Costco comparé au même produit ailleurs, au gramme">${x.w == null ? "–" : x.w}<small>/10</small></span></span>` : `<span class="tags2"><span class="tag ${coteCls(x.sp, x.c)}" title="Année : ${x.c || "?"} sur 10">${x.c ?? "–"}<small>an</small></span><span class="tag ${noteCls(x.w)}" title="Semaine : ${x.w || "?"} sur 10">${x.w ?? "–"}<small>sem</small></span></span>`;
   const row = (x) => `<div class="spec" style="${x.on ? "" : "opacity:.5"}">
       ${two(x)}
       <div><div class="nm">${esc(x.sp.txt || (x.ing && x.ing.n))}</div>
@@ -2890,7 +2891,7 @@ function rList() {
     return `<button class="item ${done ? "done" : ""}" data-ck="${it.id}" aria-pressed="${done}">
       <span class="bx">${done ? "✓" : ""}</span>
       <span><span class="nm">${esc(ing.n)}</span><span class="q">${L.fmtQty(ing, it.buy)}${it.partial ? ` (il en manque; tu en as déjà ${L.fmtQty(ing, it.partial)})` : ""}${packTxt(it.id, a)}${done ? " · " + esc(a.mag) : ""}</span></span>
-      <span class="p">${a.sp ? `<span class="tag mini ${a.sp.cote >= 8 ? "c-g" : a.sp.cote >= 5 ? "c-y" : "c-r"}">${a.sp.cote}</span> ` : ""}${a.cost >= 0.5 ? "≈ " + L.FR(a.cost) + " $" : ""}</span></button>`;
+      <span class="p">${a.sp ? `<span class="tag mini ${noteCls(a.sp.cote)}">${a.sp.cote}</span> ` : ""}${a.cost >= 0.5 ? "≈ " + L.FR(a.cost) + " $" : ""}</span></button>`;
   };
   const todo = list.filter((it) => !S.coches[it.id]);
   const done = list.filter((it) => S.coches[it.id]);
@@ -3019,12 +3020,7 @@ function learnRegular(items, src, date) {
   if (n) rankCache = null;
   return n;
 }
-function coteCls(sp, c) {
-  const ing = ING[sp.ing]; if (!ing || c == null) return "c-o";
-  const pu = L.unitPrice(sp, ing), low = lowReg(sp.ing);
-  if (pu != null && low && (low.real || !ing.k) && pu >= low.p * 0.98) return "c-o";
-  return c >= 8 ? "c-g" : c >= 5 ? "c-y" : "c-r";
-}
+function coteCls(sp, c) { return noteCls(c); }
 // "not a real special": who sells it cheaper every day
 function notRealTxt(sp) {
   const ing = ING[sp.ing]; if (!ing) return "";
@@ -3032,7 +3028,8 @@ function notRealTxt(sp) {
   if (pu == null || !low || pu < low.p * 0.98 || (ing.k && !low.real)) return ""; // snacks: no estimated everyday price
   return `<b style="color:#c4500f">Pas un vrai spécial</b> : ${low.s === sp.mag ? "c'est son prix habituel" : `${esc(low.s)} ≈ ${perUnitTxt(ing, low.p)} tous les jours${low.real ? "" : " (estimé)"}`}`;
 }
-const COTE_LEG = `<span class="leg"><span class="tag mini c-g">8+</span> bon achat <span class="tag mini c-y">5-7</span> correct <span class="tag mini c-r">1-4</span> plus cher <span class="tag mini c-o">–</span> pas un vrai spécial</span>`;
+const noteCls = (v) => v == null || v === "" ? "c-n" : v >= 8 ? "c-g" : v >= 5 ? "c-y" : v >= 1 ? "c-o" : "c-r";
+const COTE_LEG = `<span class="leg"><span class="tag mini c-g">8-10</span> bon achat <span class="tag mini c-y">5-7</span> correct <span class="tag mini c-o">1-4</span> pas un vrai spécial <span class="tag mini c-r">0</span> plus cher que le prix normal</span>`;
 const CUIS = ["Québécois", "Italien", "Français", "Américain", "Mexicain", "Asiatique", "Monde"];
 // Tags: from the recipe base, else worked out (AI recipes): quick = 30 min or less, veggie = no meat or fish
 function tagsOf(r) {
@@ -3208,7 +3205,7 @@ function openRec(id) {
     ${(() => { const n = nutrition(r); return `<p class="small" style="margin:10px 0 0"><b>Par portion (environ) :</b> ${Math.round(n.kcal / 10) * 10} calories · ${Math.round(n.prot)} g de protéines</p>`; })()}
     <button class="btn red" id="cookGo" style="margin-top:12px;width:100%">Mode cuisine pas à pas</button>
     <h3 style="margin:22px 0 4px;font-weight:900">Ingrédients</h3>
-    <ul class="ings">${lines.map(([k, q, isAj]) => { const sp = ix[k]; return `<li><span>${esc(ING[k].n)}${sp ? ` <span class="tag mini ${sp[0].cote >= 8 ? "c-g" : sp[0].cote >= 5 ? "c-y" : "c-r"}">${sp[0].cote}</span> <span class="small mute">${esc(sp[0].mag)}</span>` : ""}</span><span class="q">${L.fmtQty(ING[k], q, true)}${isAj ? ` <span class="chip sp">IA</span>` : ""}</span></li>`; }).join("")}</ul>
+    <ul class="ings">${lines.map(([k, q, isAj]) => { const sp = ix[k]; return `<li><span>${esc(ING[k].n)}${sp ? ` <span class="tag mini ${noteCls(sp[0].cote)}">${sp[0].cote}</span> <span class="small mute">${esc(sp[0].mag)}</span>` : ""}</span><span class="q">${L.fmtQty(ING[k], q, true)}${isAj ? ` <span class="chip sp">IA</span>` : ""}</span></li>`; }).join("")}</ul>
     <h3 style="margin:22px 0 4px;font-weight:900">Étapes</h3>
     <p class="small mute" style="margin:0 0 8px">${r.col ? "Les étapes sont écrites pour 12 collations ; les quantités entre parenthèses suivent ton nombre de collations." : "Les étapes sont écrites pour 12 portions ; pour une plus grosse recette, prends une plus grande casserole ou cuis en 2 fois."}</p>
     <div class="row" style="margin:0 0 8px"><label class="chk"><input type="checkbox" id="awake" ${wakeOn ? "checked" : ""}>Garder l'écran allumé pendant que je cuisine</label></div>
@@ -4418,7 +4415,7 @@ function costcoTags(x) {
   if (!sp) return "";
   const ing = ING[sp.ing]; if (!ing) return "";
   const w = costcoWeek(sp); if (w == null) return "";
-  const cls = (v) => v >= 8 ? "c-g" : v >= 5 ? "c-y" : "c-r"; // 0-4 red
+  const cls = noteCls;
   return `<span class="tags2"><span class="tag ${cls(w)}" title="Costco comparé au même produit ailleurs, au gramme">${w}<small>/10</small></span></span>`;
 }
 // Costco only: compare per gram / ml with the SAME product elsewhere when another store has it (Ruffles with Ruffles),

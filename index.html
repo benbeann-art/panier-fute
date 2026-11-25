@@ -3261,20 +3261,27 @@ function rRec() {
   if (S.tag) pool = pool.filter((r) => tagsOf(r).includes(S.tag));
   const selNames = (r) => S.rf === "sel" ? r.i.filter((l) => S.sel.includes(l[0])).map((l) => ING[l[0]].n.split(" (")[0]) : [];
   const card = (r) => recCard(r, selNames(r));
+  const searching = !!S.q.trim();
   $("#v-recettes").innerHTML = `<h1>Recettes</h1>
-    <p class="lead">${S.q.trim() ? `Résultats pour « ${esc(S.q.trim())} » dans toutes les recettes, les plus proches en premier.` : `${REC.length} recettes. Celles qui profitent le plus des spéciaux sont en premier.`}</p>
-    <div class="card" style="margin-bottom:12px;border:2px solid var(--red)">
-      <label class="f" for="askTxt" style="margin-top:0;font-size:16px">Demander une recette à l'IA ${aiOn() ? `(${AI.PROVIDERS[AI.ready(AIS).includes(AIS.main) ? AIS.main : AI.ready(AIS)[0]].name})` : ""}</label>
+    <div class="card" style="margin-bottom:12px;border:3px solid var(--red);padding:12px">
+      <label for="q" style="display:block;font-weight:800;font-size:18px;margin-bottom:6px">🔍 Chercher dans les ${REC.length} recettes de l'app</label>
+      <div class="row" style="flex-wrap:nowrap;gap:6px"><input type="search" id="q" placeholder="Ex. : poulet, chili, sole, hot-dog…" value="${esc(S.q)}" aria-label="Chercher une recette" enterkeyhint="search" style="font-size:18px;padding:12px 14px;flex:1;min-width:0;border:2px solid var(--red);border-radius:12px">
+        ${searching ? `<button class="btn" data-qclear="1" aria-label="Effacer la recherche">✕</button>` : ""}</div>
+      <p class="small mute" style="margin:6px 0 0">Instantané, sans IA : par nom, viande ou ingrédient.</p>
+    </div>
+    <p class="lead">${searching ? `Résultats pour « ${esc(S.q.trim())} » dans toutes les recettes, les plus proches en premier.` : `${REC.length} recettes. Celles qui profitent le plus des spéciaux sont en premier.`}</p>
+    ${searching ? "" : `<details class="card" style="margin-bottom:12px" ${iaAskBusy || iaAskMsg ? "open" : ""}><summary><b>🤖 Demander une nouvelle recette à l'IA</b></summary>
+      <label class="f" for="askTxt" style="margin-top:8px">Une recette qui n'est pas dans l'app ${aiOn() ? `(${AI.PROVIDERS[AI.ready(AIS).includes(AIS.main) ? AIS.main : AI.ready(AIS)[0]].name})` : ""}</label>
       ${aiOn() ? `<form id="askForm" class="row" style="flex-wrap:nowrap"><input type="text" id="askTxt" value="${esc(iaAskText)}" placeholder="Ex. : ragoût de bœuf, poulet au beurre pas épicé…" enterkeyhint="send">
         <button class="btn red" ${iaAskBusy ? "disabled" : ""}>${iaAskBusy ? "…" : "Demander"}</button></form>
         ${iaAskMsg ? `<p class="small mute" style="margin:8px 0 0">${esc(iaAskMsg)}</p>` : ""}`
       : `<p class="small mute" style="margin:0">Ajoute ta clé Gemini dans Réglages (roue dentée) pour demander des recettes à l'IA.</p>`}
-    </div>
+    </details>`}
     ${iaProps.length ? `<h2 style="margin-top:4px">Propositions de l'IA</h2><div class="recs" style="margin-bottom:18px">${iaProps.map((r) => `<article class="rec" style="outline:2px solid var(--yel)"><button class="pic" data-open="${r.id}" aria-label="Voir la recette">${pic(r)}</button>
       <button class="nm" data-open="${r.id}">${esc(r.n)}</button><p class="small" style="margin:0">${esc(r.why)}</p>
       <div class="chips"><span class="chip">${esc(r.c)}</span><span class="chip">Lunch : ${LUNCH[r.l][0]}</span><span class="chip">${fmtTime(r.t)}</span></div>
       <div class="foot"><button class="btn sm" data-open="${r.id}">Voir</button><button class="btn sm red" data-keep="${r.id}">Garder dans l'app</button></div></article>`).join("")}</div>` : ""}
-    <details class="card" ${S.rf === "ia" ? "open" : ""} style="margin-bottom:12px"><summary>Mes goûts et nouvelles recettes</summary>
+    ${searching ? "" : `    <details class="card" ${S.rf === "ia" ? "open" : ""} style="margin-bottom:12px"><summary>Mes goûts et nouvelles recettes</summary>
       <label class="f" for="gouts">Ce qu'on aime, ce qu'on n'aime pas, allergies (l'IA s'en sert pour inventer des recettes)</label>
       <textarea id="gouts" placeholder="Ex. : on adore le poulet et le mexicain, pas de champignons, pas trop épicé pour ma fille">${esc(S.gouts)}</textarea>
       <p class="small mute">${Object.values(S.aime).filter((v) => v === 1).length} recettes aimées · ${Object.values(S.aime).filter((v) => v === -1).length} refusées. Chaque semaine, 4 nouvelles recettes arrivent toutes seules quand tu ouvres l'app${aiOn() ? " ; tu peux aussi en demander tout de suite." : "."}</p>
@@ -3288,9 +3295,9 @@ function rRec() {
       <p class="small mute" id="impFiles">${impFiles.length ? `${impFiles.length} photo${impFiles.length > 1 ? "s" : ""} de recette choisie${impFiles.length > 1 ? "s" : ""}` : ""}${impDish ? (impFiles.length ? " · " : "") + "photo du plat choisie" : ""}</p>
       <label class="f" for="impText">Texte de la recette (ou seulement la photo)</label><textarea id="impText" rows="7" placeholder="Colle ici le nom, les ingrédients et les étapes">${esc(impText)}</textarea>
       ${aiOn() ? `<button class="btn red sm" id="impGo" ${impBusy ? "disabled" : ""}>${impBusy ? "Importation…" : "Importer la recette"}</button>` : ""} <span class="small mute" id="impMsg">${esc(impMsg)}</span>
-    </details>
+    </details>`}
     <div class="seg" role="group" aria-label="Quelles recettes">${(S.sel.length ? [["sel", `Avec mes choix (${S.sel.length})`]] : []).concat([["spec", "Avec les spéciaux"]]).concat([["ia", `Nouvelles IA (${REC.filter((r) => r.ia).length})`], ["mes", `Mes recettes (${S.mes.length})`], ["aime", "J'aime"], ["all", `Toutes (${REC.length})`]]).map(([k, t]) => `<button data-rf="${k}" aria-pressed="${S.rf === k}">${t}</button>`).join("")}</div>
-    <div class="grid2" style="margin-top:10px"><input type="search" id="q" placeholder="Chercher : poulet, sandwich, chili…" value="${esc(S.q)}" aria-label="Chercher une recette">
+    <div class="grid2" style="margin-top:10px">
       <select id="cat" aria-label="Catégorie"><option value="">Toutes les catégories</option>${cats.map((c) => `<option ${c === S.cat ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>
       <select id="cuis" aria-label="Cuisine"><option value="">Toutes les cuisines</option>${CUIS.map((c) => `<option ${c === S.cuis ? "selected" : ""}>${c}</option>`).join("")}</select></div>
     <div class="seg" role="group" aria-label="Genre de recette" style="margin-top:8px">${[["", "Toutes"], ["vite", "Vite fait (30 min)"], ["sante", "Santé"], ["vege", "Végé"]].map(([k, t]) => `<button data-tagf="${k}" aria-pressed="${(S.tag || "") === k}">${t}</button>`).join("")}</div>
@@ -5027,6 +5034,7 @@ document.addEventListener("click", (e) => {
   if (d.msort) { S.msort = d.msort; minLimit = 40; save(); return rMince(); }
   if (d.mcat !== undefined) { S.mcat = d.mcat; minLimit = 40; save(); return rMince(); }
   if (d.mmore) { minLimit += 40; return rMince(); }
+  if (d.qclear) { S.q = ""; recLimit = 40; save(); rRec(); const el = $("#q"); if (el) el.focus(); return; }
   if (d.profnew) { keepProfile(); S.profils.push({ nomProfil: "Profil " + (S.profils.length + 1) }); profOpen = true; return loadProfile(S.profils.length - 1); }
   if (d.profdel) { ensureProfiles(); if (S.profils.length < 2 || !confirm(`Supprimer le profil « ${S.nomProfil} » (son poids et ses chiffres) ?`)) return; const i = S.profIdx || 0; S.profils.splice(i, 1); S.profIdx = 0; const o = S.profils[0] || {}; for (const k of PROF_KEYS) { if (o[k] !== undefined) S[k] = JSON.parse(JSON.stringify(o[k])); else delete S[k]; } save(); return rMince(); }
   if (d.poidsu) { const nu = (S.poidsU || "lb") === "lb" ? "kg" : "lb", f = nu === "kg" ? 0.45359237 : 1 / 0.45359237; S.poids = (S.poids || []).map((x) => ({ d: x.d, v: Math.round(x.v * f * 10) / 10 })); S.poidsU = nu; save(); return rMince(); }

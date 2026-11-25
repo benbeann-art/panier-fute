@@ -45,6 +45,8 @@ async function flyers(reg) {
   const raw = await Flipp.collect(reg.postal, debut, { pause: 150 });
   console.log(`${reg.name}: ${raw.length} flyer items for the week of ${debut}`);
   if (raw.length < 20) return;
+  // snacks, coffee, drinks without a size in their name: the item's own page has it (compared per 100 g / per litre)
+  try { await Flipp.addDetails(raw.filter((r) => String(r.ing).startsWith("k_")), { maxDetails: 200 }); } catch (e) {}
   write(file, JSON.stringify({ debut, fin: addDays(debut, 6), made: new Date().toISOString(), region: reg.name, raw }));
   const idx = JSON.parse(read(`${dir}index.json`) || "[]").filter((w) => w !== debut).concat(debut).sort();
   write(`${dir}index.json`, JSON.stringify(idx));

@@ -375,7 +375,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
   function baseCote(sp, ing) {
     const pu = unitPrice(sp, ing);
     if (pu == null) return null;
-    const ref = (LOWREG && LOWREG(sp.ing)) || ing.p;
+    const realRef = LOWREG && LOWREG(sp.ing), ref = realRef || ing.p;
     // snacks, coffee, nuts, drinks (k_): no estimated price, only real prices seen this year
     if (ing.k) {
       // at least 3 different weeks of real prices in my stores before saying "lowest of the year"
@@ -383,8 +383,8 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
       const h0 = weeks.size >= 3 ? histInfo(sp.ing, pu) : null;
       return h0 ? (h0.lowest ? 10 : Math.max(1, Math.min(9, 10 - Math.round((pu / h0.min[2] - 1) / 0.05)))) : null;
     }
-    if (pu > ref * 1.1) return 0; // clearly dearer (10 %+) than the normal price
-    if (pu >= ref * 0.98) return 1; // about the normal price: not a real special
+    if (realRef && pu > ref * 1.1) return 0; // clearly dearer (10 %+) than the real normal price
+    if (realRef && pu >= ref * 0.98) return 1; // about the normal price: not a real special
     const h = histInfo(sp.ing, pu);
     // year: 10 = the lowest price seen this year in my stores; each 5 % above it costs 1 point
     if (h) return h.lowest ? 10 : Math.max(1, Math.min(9, 10 - Math.round((pu / h.min[2] - 1) / 0.05)));
@@ -1464,7 +1464,9 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
     return x;
   }
   async function addDetails(out, opts) {
-    const todo = out.filter((x) => !x.det && (!x.post || /^\s*ch\.?\s*$|^\s*chacun/i.test(x.post)) && !/\d\s*(lb|kg|g|un\.?)\b/i.test(x.name) && x.fid).slice(0, opts.maxDetails || 320);
+    // no size in the name: the item's own page usually has it ("200-235 g"); taxes / "each" after the price do not count
+    const noSizeTxt = (p) => !p || /^\s*(ch\.?|chacun\w*|l.un\.?|\+?\s*tx|taxable|\+?\s*tax\w*|\s)*\s*$/i.test(p);
+    const todo = out.filter((x) => !x.det && (noSizeTxt(x.post) || String(x.ing || "").startsWith("k_")) && !/\d\s*(lb|kg|g|ml|l|un\.?)\b/i.test(x.name) && x.fid).slice(0, opts.maxDetails || 320);
     let i = 0;
     const worker = async () => { while (i < todo.length) { const x = todo[i++]; const d = await detailOf(x.fid, opts.fetch); if (d.trim()) { applyDetail(x, d); x.det = 1; } } };
     await Promise.all([worker(), worker(), worker(), worker(), worker(), worker()]);
@@ -1535,11 +1537,19 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
       const ing = ING[r.ing]; if (!ing) continue;
       const fix = opts.sizes && opts.sizes[r.ing + "|" + r.name];
       if (fix && fix.skip) continue;
-      let s = sizeOf(r, ing.u) || (fix && fix.qte ? fix : null);
+      const perU = ing.u === "u" && String(ing.n || "").match(/\((\d+(?:[.,]\d+)?)\s*(g|ml)\)/i);
+      let s = sizeOf(r, ing.u) || (perU ? sizeOf(r, perU[2].toLowerCase() === "ml" ? "ml" : "g") : null) || (fix && fix.qte ? fix : null);
       if (s && fix && s === fix && ing.u === "g" && perLbNotKg(r.prix, s, ing)) s = { qte: 1, unite: "lb" }; // "2,49 $" read as per kg but it is per lb
       if (!s && opts.guess && ing.u === "u" && PACK[r.ing] && !sizeOf(r, "g")) s = { qte: PACK[r.ing], unite: "u" };
       if (!s) { unknown.push(r); continue; }
       if (ing.u === "u" && (s.unite === "lb" || s.unite === "kg") && EACH_LB[r.ing]) s = { qte: Math.max(1, Math.round(s.qte * (s.unite === "kg" ? 2.2046 : 1) * EACH_LB[r.ing])), unite: "u" };
+      // sold by the unit of a known size ("Tofu ferme (454 g)", "Thon (170 g)"): a 1,25 kg pack = 2.75 units
+      const per = ing.u === "u" && String(ing.n || "").match(/\((\d+(?:[.,]\d+)?)\s*(g|ml)\)/i);
+      if (per && ["g", "kg", "lb", "ml", "L"].includes(s.unite)) {
+        const amt = s.unite === "kg" ? s.qte * 1000 : s.unite === "lb" ? s.qte * 453.6 : s.unite === "L" ? s.qte * 1000 : s.qte;
+        const u1 = Number(per[1].replace(",", "."));
+        if (u1 > 0 && amt / u1 >= 0.5 && amt / u1 <= 24) s = { qte: Math.round((amt / u1) * 100) / 100, unite: "u" };
+      }
       if (ing.u === "u" && s.unite !== "u") { unknown.push(r); continue; }
       if (ing.u === "u" && MAXEACH[r.ing] && r.prix / s.qte > MAXEACH[r.ing]) { unknown.push(r); continue; } // "3,99 $ ch." for one onion: it is a bag
       if (ing.u === "g" && !["lb", "kg", "g"].includes(s.unite)) { unknown.push(r); continue; }
@@ -3006,7 +3016,16 @@ function lowReg(id) { // cheapest everyday price among my stores: {p, s}
   for (const s of S.reg.stores.length ? S.reg.stores : L.STORES) { const p = regAt(id, s); if (p > 0 && (!best || p < best.p)) best = { p, s, real: !!(((S.regStore || {})[id] || {})[s]) }; }
   return best;
 }
-L.setRegs((id, s) => regAt(id, s), (id) => { const b = lowReg(id); return b && b.p; });
+// "Normal price" used by the notes: the typical REAL everyday price in my stores (store sites, flyers' "regular price",
+// my receipts) - the middle one, so one odd club pack or misread price does not decide. Costco (bulk) is not a "normal price".
+// Without any real price: the app's estimate, flagged (then a special is never called "dearer than normal").
+function normalRef(id) {
+  const rs = (S.regStore || {})[id] || {}, mine = S.reg.stores.length ? S.reg.stores : L.STORES;
+  const l = mine.filter((s) => s !== "Costco" && rs[s] && rs[s].p > 0).map((s) => ({ p: rs[s].p, s })).sort((a, b) => a.p - b.p);
+  if (l.length) { const m = l[Math.floor((l.length - 1) / 2)]; return { p: m.p, s: m.s, real: true, low: l[0] }; }
+  const g = ING[id]; return g && g.p > 0 ? { p: g.p, s: null, real: false, low: null } : null;
+}
+L.setRegs((id, s) => regAt(id, s), (id) => { const b = normalRef(id); return b && b.real ? b.p : null; });
 function learnRegular(items, src, date) {
   S.regStore = S.regStore || {}; let n = 0;
   for (const x of items || []) {
@@ -3024,9 +3043,10 @@ function coteCls(sp, c) { return noteCls(c); }
 // "not a real special": who sells it cheaper every day
 function notRealTxt(sp) {
   const ing = ING[sp.ing]; if (!ing) return "";
-  const pu = L.unitPrice(sp, ing), low = lowReg(sp.ing);
-  if (pu == null || !low || pu < low.p * 0.98 || (ing.k && !low.real)) return ""; // snacks: no estimated everyday price
-  return `<b style="color:${pu > low.p * 1.1 ? "#d4241b" : "#c4500f"}">${pu > low.p * 1.1 ? "Plus cher que le prix normal" : "Pas un vrai spécial"}</b> : ${low.s === sp.mag ? "c'est son prix habituel" : `${esc(low.s)} ≈ ${perUnitTxt(ing, low.p)} tous les jours${low.real ? "" : " (estimé)"}`}`;
+  const pu = L.unitPrice(sp, ing), ref = normalRef(sp.ing);
+  if (pu == null || !ref || !ref.real || pu < ref.p * 0.98) return ""; // only against real everyday prices
+  const low = ref, red = pu > ref.p * 1.1;
+  return `<b style="color:${red ? "#d4241b" : "#c4500f"}">${red ? "Plus cher que le prix normal" : "Pas un vrai spécial"}</b> : ${low.s === sp.mag ? "c'est son prix habituel" : `${esc(low.s)} ≈ ${perUnitTxt(ing, low.p)} tous les jours (prix normal)`}`;
 }
 const noteCls = (v) => v == null || v === "" ? "c-n" : v >= 8 ? "c-g" : v >= 5 ? "c-y" : v >= 1 ? "c-o" : "c-r";
 const COTE_LEG = `<span class="leg"><span class="tag mini c-g">8-10</span> bon achat <span class="tag mini c-y">5-7</span> correct <span class="tag mini c-o">1-4</span> pas un vrai spécial <span class="tag mini c-r">0</span> plus cher que le prix normal</span>`;

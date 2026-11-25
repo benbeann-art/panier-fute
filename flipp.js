@@ -298,7 +298,9 @@
     return x;
   }
   async function addDetails(out, opts) {
-    const todo = out.filter((x) => !x.det && (!x.post || /^\s*ch\.?\s*$|^\s*chacun/i.test(x.post)) && !/\d\s*(lb|kg|g|un\.?)\b/i.test(x.name) && x.fid).slice(0, opts.maxDetails || 320);
+    // no size in the name: the item's own page usually has it ("200-235 g"); taxes / "each" after the price do not count
+    const noSizeTxt = (p) => !p || /^\s*(ch\.?|chacun\w*|l.un\.?|\+?\s*tx|taxable|\+?\s*tax\w*|\s)*\s*$/i.test(p);
+    const todo = out.filter((x) => !x.det && (noSizeTxt(x.post) || String(x.ing || "").startsWith("k_")) && !/\d\s*(lb|kg|g|ml|l|un\.?)\b/i.test(x.name) && x.fid).slice(0, opts.maxDetails || 320);
     let i = 0;
     const worker = async () => { while (i < todo.length) { const x = todo[i++]; const d = await detailOf(x.fid, opts.fetch); if (d.trim()) { applyDetail(x, d); x.det = 1; } } };
     await Promise.all([worker(), worker(), worker(), worker(), worker(), worker()]);
@@ -359,10 +361,18 @@
       const ing = ING[r.ing]; if (!ing) continue;
       const fix = opts.sizes && opts.sizes[r.ing + "|" + r.name];
       if (fix && fix.skip) continue;
-      let s = sizeOf(r, ing.u) || (fix && fix.qte ? fix : null);
+      const perU = ing.u === "u" && String(ing.n || "").match(/\((\d+(?:[.,]\d+)?)\s*(g|ml)\)/i);
+      let s = sizeOf(r, ing.u) || (perU ? sizeOf(r, perU[2].toLowerCase() === "ml" ? "ml" : "g") : null) || (fix && fix.qte ? fix : null);
       if (!s && opts.guess && ing.u === "u" && PACK[r.ing] && !sizeOf(r, "g")) s = { qte: PACK[r.ing], unite: "u" };
       if (!s) { unknown.push(r); continue; }
       if (ing.u === "u" && (s.unite === "lb" || s.unite === "kg") && EACH_LB[r.ing]) s = { qte: Math.max(1, Math.round(s.qte * (s.unite === "kg" ? 2.2046 : 1) * EACH_LB[r.ing])), unite: "u" };
+      // sold by the unit of a known size ("Tofu ferme (454 g)", "Thon (170 g)"): a 1,25 kg pack = 2.75 units
+      const per = ing.u === "u" && String(ing.n || "").match(/\((\d+(?:[.,]\d+)?)\s*(g|ml)\)/i);
+      if (per && ["g", "kg", "lb", "ml", "L"].includes(s.unite)) {
+        const amt = s.unite === "kg" ? s.qte * 1000 : s.unite === "lb" ? s.qte * 453.6 : s.unite === "L" ? s.qte * 1000 : s.qte;
+        const u1 = Number(per[1].replace(",", "."));
+        if (u1 > 0 && amt / u1 >= 0.5 && amt / u1 <= 24) s = { qte: Math.round((amt / u1) * 100) / 100, unite: "u" };
+      }
       if (ing.u === "u" && s.unite !== "u") { unknown.push(r); continue; }
       if (ing.u === "u" && MAXEACH[r.ing] && r.prix / s.qte > MAXEACH[r.ing]) { unknown.push(r); continue; } // "3,99 $ ch." for one onion: it is a bag
       if (ing.u === "g" && !["lb", "kg", "g"].includes(s.unite)) { unknown.push(r); continue; }

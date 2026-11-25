@@ -1916,7 +1916,7 @@ function rSpec() {
     const pu = ing ? L.unitPrice(sp, ing) : null;
     return { sp, ing, c, w: ing ? (sp.mag === "Costco" ? costcoWeek(sp) : L.weekCote(sp, ing)) : null, costco: sp.mag === "Costco", n, nc, on: S.reg.stores.includes(sp.mag), h: pu ? L.histInfo(sp.ing, pu) : null };
   }).sort((a, b) => (b.c || 0) + (b.w || 0) - (a.c || 0) - (a.w || 0) || (b.c || 0) - (a.c || 0));
-  const two = (x) => x.costco ? `<span class="tags2"><span class="tag ${x.w == null ? "c-o" : x.w >= 8 ? "c-g" : x.w >= 5 ? "c-y" : "c-r"}" title="Costco comparé au même produit ailleurs, au gramme">${x.w || "–"}<small>/10</small></span></span>` : `<span class="tags2"><span class="tag ${coteCls(x.sp, x.c)}" title="Année : ${x.c || "?"} sur 10">${x.c || "–"}<small>an</small></span><span class="tag ${x.w == null ? "c-o" : x.w >= 8 ? "c-g" : x.w >= 5 ? "c-y" : "c-r"}" title="Semaine : ${x.w || "?"} sur 10">${x.w || "–"}<small>sem</small></span></span>`;
+  const two = (x) => x.costco ? `<span class="tags2"><span class="tag ${x.w == null ? "c-o" : x.w >= 8 ? "c-g" : x.w >= 5 ? "c-y" : "c-r"}" title="Costco comparé au même produit ailleurs, au gramme">${x.w == null ? "–" : x.w}<small>/10</small></span></span>` : `<span class="tags2"><span class="tag ${coteCls(x.sp, x.c)}" title="Année : ${x.c || "?"} sur 10">${x.c || "–"}<small>an</small></span><span class="tag ${x.w == null ? "c-o" : x.w >= 8 ? "c-g" : x.w >= 5 ? "c-y" : "c-r"}" title="Semaine : ${x.w || "?"} sur 10">${x.w || "–"}<small>sem</small></span></span>`;
   const row = (x) => `<div class="spec" style="${x.on ? "" : "opacity:.5"}">
       ${two(x)}
       <div><div class="nm">${esc(x.sp.txt || (x.ing && x.ing.n))}</div>
@@ -4416,7 +4416,7 @@ function costcoTags(x) {
   if (!sp) return "";
   const ing = ING[sp.ing]; if (!ing) return "";
   const w = costcoWeek(sp); if (w == null) return "";
-  const cls = (v) => v >= 8 ? "c-g" : v >= 5 ? "c-y" : "c-r";
+  const cls = (v) => v >= 8 ? "c-g" : v >= 5 ? "c-y" : "c-r"; // 0-4 red
   return `<span class="tags2"><span class="tag ${cls(w)}" title="Costco comparé au même produit ailleurs, au gramme">${w}<small>/10</small></span></span>`;
 }
 // Costco only: compare per gram / ml with the SAME product elsewhere when another store has it (Ruffles with Ruffles),
@@ -4435,16 +4435,19 @@ function costcoCompare(sp) {
   const note = mine <= best.pu * 1.005 ? 10 : Math.max(1, Math.min(9, 10 - Math.round((mine / best.pu - 1) / 0.05)));
   return { mine, best, same: !!same.length, note };
 }
-// Note /10: Costco vs the same product elsewhere, per gram / ml (its regular price, or this week's special if lower).
-// 1 = not cheaper; +1 per 5 % saved; 10 = 45 % cheaper or more.
+// Note /10 for a Costco deal, per gram / ml:
+// 0 = not cheaper than the same product elsewhere (its regular price or this week's special),
+// 10 = the lowest price seen this year (in my stores); in between: how far it goes from "elsewhere" toward the year's low.
 function costcoWeek(sp) {
-  const c = costcoCompare(sp), r = costcoRegular(sp);
-  // the same product's own prices first (regular and this week's special); else the same brand; else a similar product
+  const c = costcoCompare(sp), r = costcoRegular(sp), ing = ING[sp.ing];
   const refs = (r ? [r.pu, r.sale] : c ? [c.best.pu] : []).filter((v) => v > 0);
-  if (!refs.length) return null;
-  const mine = (c && c.mine) || (r && r.mine), min = Math.min(...refs);
-  const saved = 1 - mine / min; // 0.30 = Costco is 30 % cheaper
-  return Math.max(1, Math.min(10, 1 + Math.round((saved * 100) / 5)));
+  if (!refs.length || !ing) return null;
+  const mine = (c && c.mine) || (r && r.mine), ref = Math.min(...refs);
+  if (!(mine > 0)) return null;
+  if (mine >= ref * 0.995) return 0;
+  const h = L.histInfo(sp.ing, mine), low = h && h.min && h.min[2] > 0 ? Math.min(h.min[2], mine) : mine;
+  if (mine <= low * 1.005) return 10;
+  return Math.max(1, Math.min(9, Math.round((10 * (ref - mine)) / (ref - low))));
 }
 // regular price of the same product in a grocery store, per g / ml, and Costco's own per g / ml
 function costcoRegular(sp) {

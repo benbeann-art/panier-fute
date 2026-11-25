@@ -1,0 +1,8 @@
+name: probe
+on: { push: { branches: [probe] } }
+jobs:
+  p:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          for u in "https://www.maxi.ca/fr/search?search-bar=ruffles" "https://www.provigo.ca/fr/search?search-bar=ruffles"; do curl -s -L -m 30 -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36" -H "Accept-Language: fr-CA,fr;q=0.9" "$u" -o p.html -w "%{http_code} %{size_download} $u\n"; grep -o '__NEXT_DATA__' p.html | head -1; done

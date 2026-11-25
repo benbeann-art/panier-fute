@@ -3026,7 +3026,7 @@ function notRealTxt(sp) {
   const ing = ING[sp.ing]; if (!ing) return "";
   const pu = L.unitPrice(sp, ing), low = lowReg(sp.ing);
   if (pu == null || !low || pu < low.p * 0.98 || (ing.k && !low.real)) return ""; // snacks: no estimated everyday price
-  return `<b style="color:#c4500f">Pas un vrai spécial</b> : ${low.s === sp.mag ? "c'est son prix habituel" : `${esc(low.s)} ≈ ${perUnitTxt(ing, low.p)} tous les jours${low.real ? "" : " (estimé)"}`}`;
+  return `<b style="color:${pu > low.p * 1.1 ? "#d4241b" : "#c4500f"}">${pu > low.p * 1.1 ? "Plus cher que le prix normal" : "Pas un vrai spécial"}</b> : ${low.s === sp.mag ? "c'est son prix habituel" : `${esc(low.s)} ≈ ${perUnitTxt(ing, low.p)} tous les jours${low.real ? "" : " (estimé)"}`}`;
 }
 const noteCls = (v) => v == null || v === "" ? "c-n" : v >= 8 ? "c-g" : v >= 5 ? "c-y" : v >= 1 ? "c-o" : "c-r";
 const COTE_LEG = `<span class="leg"><span class="tag mini c-g">8-10</span> bon achat <span class="tag mini c-y">5-7</span> correct <span class="tag mini c-o">1-4</span> pas un vrai spécial <span class="tag mini c-r">0</span> plus cher que le prix normal</span>`;

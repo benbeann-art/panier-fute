@@ -616,6 +616,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
   }
   function fmtSpecial(sp) {
     // a 5 lb bag at 1,44 $ is "1,44 $ / 5 lb", not "1,44 $/lb"
+    if (sp.pack) return FR(sp.prix) + " $ / " + (/sac/i.test(sp.txt || "") ? "sac de " : "") + sp.pack; // a 5 lb bag of onions: "1,44 $ / sac de 5 lb", not "15 pour 1,44 $"
     const q = Number(sp.qte) || 1;
     if ((sp.unite === "lb" || sp.unite === "kg" || sp.unite === "L") && Math.abs(q - 1) > 1e-9) return FR(sp.prix) + " $ / " + FR(q, q % 1 ? 1 : 0).replace(/,0$/, "") + " " + sp.unite;
     const u = { lb: "/lb", kg: "/kg", g: "", ml: "", L: "/L", u: "" }[sp.unite] || "";
@@ -1542,6 +1543,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
       if (s && fix && s === fix && ing.u === "g" && perLbNotKg(r.prix, s, ing)) s = { qte: 1, unite: "lb" }; // "2,49 $" read as per kg but it is per lb
       if (!s && opts.guess && ing.u === "u" && PACK[r.ing] && !sizeOf(r, "g")) s = { qte: PACK[r.ing], unite: "u" };
       if (!s) { unknown.push(r); continue; }
+      const shown = ing.u === "u" && ["lb", "kg", "g", "ml", "L"].includes(s.unite) ? String(Math.round(s.qte * 100) / 100).replace(".", ",") + " " + s.unite : ""; // "5 lb" bag, shown as such
       if (ing.u === "u" && (s.unite === "lb" || s.unite === "kg") && EACH_LB[r.ing]) s = { qte: Math.max(1, Math.round(s.qte * (s.unite === "kg" ? 2.2046 : 1) * EACH_LB[r.ing])), unite: "u" };
       // sold by the unit of a known size ("Tofu ferme (454 g)", "Thon (170 g)"): a 1,25 kg pack = 2.75 units
       const per = ing.u === "u" && String(ing.n || "").match(/\((\d+(?:[.,]\d+)?)\s*(g|ml)\)/i);
@@ -1555,7 +1557,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
       if (ing.u === "g" && !["lb", "kg", "g"].includes(s.unite)) { unknown.push(r); continue; }
       if (ing.u === "ml" && !["L", "ml"].includes(s.unite)) { unknown.push(r); continue; }
       if (["cs", "ct"].includes(ing.u)) { unknown.push(r); continue; }
-      items.push({ ing: r.ing, mag: r.mag, prix: r.prix, qte: s.qte, unite: s.unite, txt: pretty(r.name).slice(0, 90), img: r.img || "", reg: r.orig > r.prix ? r.orig : 0, story: r.story || "" });
+      items.push({ ing: r.ing, mag: r.mag, prix: r.prix, qte: s.qte, unite: s.unite, txt: pretty(r.name).slice(0, 90), img: r.img || "", reg: r.orig > r.prix ? r.orig : 0, story: r.story || "", pack: shown && s.unite === "u" ? shown : "" });
     }
     return { items, unknown };
   }
@@ -5075,7 +5077,7 @@ Promise.all([getJSON("recettes.json", window.DATA_RECETTES), getJSON("speciaux.j
     fetch("photos/index.json", { cache: "no-cache" }).then((r) => (r.ok ? r.json() : [])).then((l) => { if (Array.isArray(l) && l.length) { REPO_PH = new Set(l); render(S.view); if (S.open) openRec(S.open); } }).catch(() => {});
     setTimeout(async () => { loadCostco(); await syncNow(); try { if (!S.costcoOff && !S.reg.stores.includes("Costco")) { S.reg.stores.push("Costco"); save(); render(S.view); } } catch (e) {}
       // v3.13.70: the flyers now also hold snacks, coffee, nuts and drinks: read this week's flyers again once
-      try { if (S.kTermsV !== 2) { S.kTermsV = 2; save(); updateFlyers(true).then(() => render(S.view)).catch(() => {}); } } catch (e) {} try { receiptFix1122(); siteFix(); updateBadge(); } catch (e) {} weeklyAuto(); }, 800);
+      try { if (S.kTermsV !== 3) { S.kTermsV = 3; save(); updateFlyers(true).then(() => render(S.view)).catch(() => {}); } } catch (e) {} try { receiptFix1122(); siteFix(); updateBadge(); } catch (e) {} weeklyAuto(); }, 800);
   })
   .catch(() => { $("#loading").textContent = "Impossible de charger les recettes. Recharge la page."; });
 

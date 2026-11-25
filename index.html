@@ -2627,6 +2627,7 @@ function autoMenu(opts) {
   opts = opts || {};
   let menu = S.menu.slice();
   let pool = ranked().filter((x) => S.aime[x.r.id] !== -1 && (!opts.mince || isMince(x.r)));
+  if (opts.mince && myNumbers()) pool = pool.map((x) => Object.assign({}, x, { rank: x.rank + fitScore(x.r) * 1.5 })).sort((a, b) => b.rank - a.rank); // best for me first
   const budget = Number(S.reg.budget) || 0;
   if (budget > 0) { // stay under budget: recipes that fit their share of the budget, best value first
     const per = budget / 5;
@@ -3101,18 +3102,48 @@ function rMince() {
   let pool = REC.filter((r) => isMince(r) && S.aime[r.id] !== -1 && !isBanned(r, bans));
   const cats = [...new Set(pool.map((r) => r.c))].sort((a, b) => a.localeCompare(b, "fr"));
   if (S.mcat && cats.includes(S.mcat)) pool = pool.filter((r) => r.c === S.mcat);
-  const by = S.msort || "spec";
-  pool.sort(by === "kcal" ? (a, b) => kcalOf(a).k - kcalOf(b).k : by === "gros" ? (a, b) => kcalOf(b).w / kcalOf(b).k - kcalOf(a).w / kcalOf(a).k : by === "prot" ? (a, b) => protPer100(b) - protPer100(a)
+  const by = S.msort || (myNumbers() ? "toi" : "spec");
+  pool.sort(by === "toi" ? (a, b) => fitScore(b) + scoreOf(b.id).save / 5 - fitScore(a) - scoreOf(a.id).save / 5 : by === "kcal" ? (a, b) => kcalOf(a).k - kcalOf(b).k : by === "gros" ? (a, b) => kcalOf(b).w / kcalOf(b).k - kcalOf(a).w / kcalOf(a).k : by === "prot" ? (a, b) => protPer100(b) - protPer100(a)
     : (a, b) => scoreOf(b.id).save - scoreOf(a.id).save || kcalOf(a).k - kcalOf(b).k);
   $("#v-minceur").innerHTML = `<h1>Minceur</h1>${minceTop()}
     <p class="lead">${pool.length} recettes à <b>350 calories ou moins</b> par portion, avec une <b>grosse assiette</b> (400 g et plus) : beaucoup de légumes, des protéines maigres, peu de gras. Elles s'ajoutent au menu et à la liste d'épicerie comme les autres.</p>
-    <div class="seg" role="group" aria-label="Ordre">${[["spec", "Avec les spéciaux"], ["kcal", "Moins de calories"], ["prot", "Plus de protéines"], ["gros", "Plus grosse assiette"]].map(([k, t]) => `<button data-msort="${k}" aria-pressed="${by === k}">${t}</button>`).join("")}</div>
+    <div class="seg" role="group" aria-label="Ordre">${(myNumbers() ? [["toi", "Pour toi"]] : []).concat([["spec", "Avec les spéciaux"], ["kcal", "Moins de calories"], ["prot", "Plus de protéines"], ["gros", "Plus grosse assiette"]]).map(([k, t]) => `<button data-msort="${k}" aria-pressed="${by === k}">${t}</button>`).join("")}</div>
     <div class="seg" role="group" aria-label="Sorte de plat" style="margin-top:8px">${[["", "Toutes"]].concat(cats.map((c) => [c, c])).map(([k, t]) => `<button data-mcat="${esc(k)}" aria-pressed="${(S.mcat || "") === k}">${esc(t)}</button>`).join("")}</div>
     <p class="small mute" style="margin:8px 0 0">Calories calculées avec les ingrédients de la recette (environ). Pour maigrir, garde les mêmes portions et n'ajoute pas de gras, de fromage ou de sauce en plus. « Plus de protéines » : celles qui tiennent le plus longtemps sans avoir faim.</p>
-    <div class="recs">${pool.slice(0, minLimit).map((r) => recCard(r)).join("")}</div>
+    <div class="recs">${pool.slice(0, minLimit).map((r) => recCard(r, [], true)).join("")}</div>
     ${pool.length > minLimit ? `<div class="row" style="justify-content:center;margin-top:14px"><button class="btn" data-mmore="1">Voir plus (${pool.length - minLimit})</button></div>` : ""}
     ${!pool.length ? `<div class="empty" style="margin-top:12px">Aucune recette minceur avec ce choix.</div>` : ""}
     ${minceSnacks()}`;
+}
+// ---- personal numbers (Mifflin-St Jeor) ----
+const ACT_SEM = [[1.2, "Assis (bureau)"], [1.4, "Debout, environ 7 000 pas"], [1.6, "Travail physique, plus de 10 000 pas"]];
+const ACT_WE = [[1.2, "Peu (environ 2 000 pas)"], [1.375, "Moyen (environ 6 000 pas)"], [1.55, "Actif (sport, longues marches)"]];
+function lastKg() { const W = (S.poids || []).slice().sort((a, b) => a.d.localeCompare(b.d)), w = W[W.length - 1]; return w ? ((S.poidsU || "lb") === "lb" ? w.v * 0.45359237 : w.v) : 0; }
+function myNumbers() {
+  const pr = S.prof, kg = lastKg();
+  if (!pr || !pr.age || !pr.cm || !kg) return null;
+  const bmr = 10 * kg + 6.25 * pr.cm - 5 * pr.age + (pr.sexe === "F" ? -161 : 5);
+  const maint = Math.round((bmr * (5 * (pr.sem || 1.2) + 2 * (pr.we || 1.2))) / 7 / 10) * 10;
+  const floor = pr.sexe === "F" ? 1200 : 1500;
+  const advice = Math.max(floor, Math.round((maint - 700) / 50) * 50);
+  const goal = Number(S.kcalJour) || advice;
+  const lbWeek = Math.max(0, ((maint - goal) * 7) / 3500);
+  const prot = Math.round(Math.min(170, Math.max(90, kg * 1.2)) / 5) * 5;
+  const meal = Math.max(300, Math.round((goal - 450 - 200) / 2 / 25) * 25); // breakfast ~450, snacks ~200, the rest split between lunch and supper
+  return { maint, advice, goal, lbWeek, prot, meal, floor };
+}
+// How well a Minceur recipe fits me: protein per calorie (keeps hunger away) and plate size per calorie
+function fitScore(r) {
+  const x = kcalOf(r); if (!x.ok || !x.k) return 0;
+  const p100 = nutrition(r).prot / x.k * 100, gk = x.w / x.k;
+  return Math.max(0, Math.min(1, (p100 - 6) / 8)) * 6 + Math.max(0, Math.min(1, (gk - 1.2) / 1.3)) * 3 + (S.aime[r.id] === 1 ? 1.5 : 0);
+}
+// Portion for me: Minceur meals are small for a big man; 1, 1 1/2 or 2 portions to reach my meal budget
+function myPortion(r) { const n = myNumbers(), x = kcalOf(r); if (!n || !x.ok || !x.k) return 1; return Math.max(1, Math.min(2, Math.floor((n.meal / x.k) * 2) / 2)); }
+const fracTxt = (m) => (m === 1 ? "1 portion" : m === 1.5 ? "1 portion et demie" : "2 portions");
+function youChip(r) {
+  const m = myPortion(r), x = kcalOf(r); if (!x.ok || !myNumbers()) return "";
+  return `<span class="chip" style="background:#fff4d6;border-color:#c99a1a;color:#6b4e00">Pour toi : ${fracTxt(m)} ≈ ${Math.round(x.k * m)} kcal · ${Math.round(nutrition(r).prot * m)} g protéines</span>`;
 }
 // Goal, weight follow-up and "Minceur menu" button, at the top of the Minceur page
 function minceTop() {
@@ -3131,7 +3162,27 @@ function minceTop() {
       <button type="button" class="btn sm" data-poidsu="1">${u}</button><button class="btn sm red">Ajouter</button></form>
     ${W.length ? `<p class="small" style="margin:8px 0 0">Dernier : <b>${fmt(last.v)} ${u}</b> (${frDate(last.d)})${W.length > 1 ? ` · depuis le ${frDate(first.d)} : <b style="color:${diff <= 0 ? "var(--green)" : "var(--red)"}">${diff <= 0 ? "−" : "+"}${fmt(Math.abs(diff))} ${u}</b>` : ""}
       <button class="btn sm" data-poidsdel="1" style="margin-left:6px">Effacer le dernier</button></p>${poidsChart(W, u)}` : `<p class="small mute" style="margin:6px 0 0">Pèse-toi une fois par semaine, le même jour et à la même heure : la courbe se fera toute seule.</p>`}
+    <hr style="border:0;border-top:1px solid var(--line,#ddd);margin:12px 0">
+    ${myNumbersBox()}
   </div>`;
+}
+function myNumbersBox() {
+  const pr = S.prof || {}, n = myNumbers(), fmt = (v) => L.FR(v, 1).replace(/,0$/, "");
+  const ft = pr.cm ? Math.floor(pr.cm / 30.48) : "", inch = pr.cm ? Math.round((pr.cm / 2.54) % 12) : "";
+  return `<b>Mes chiffres</b>
+    ${n ? `<p class="small" style="margin:6px 0 0">Pour garder ton poids : <b>≈ ${L.FR(n.maint, 0)} calories par jour</b>. Objectif conseillé : <b>${L.FR(n.advice, 0)}</b>.<br>
+      Avec ${Number(S.kcalJour) ? "ton objectif de" : "l'objectif conseillé,"} ${L.FR(n.goal, 0)} : perte d'environ <b>${fmt(n.lbWeek)} lb par semaine</b>${n.goal < n.floor ? ` <b style="color:var(--red)">(trop bas : ne descends pas sous ${L.FR(n.floor, 0)} sans suivi médical)</b>` : ""}.<br>
+      Protéines à viser : <b>≈ ${n.prot} g par jour</b>. Dîner ou souper : <b>≈ ${L.FR(n.meal, 0)} calories</b> chacun (le reste pour le déjeuner et les collations).</p>
+      <p class="small mute" style="margin:4px 0 0">Les recettes sont triées « Pour toi » : le plus de protéines et la plus grosse assiette pour le moins de calories, et la portion qui te convient. Estimations (formule Mifflin-St Jeor) : ta courbe de poids montrera le vrai rythme.</p>`
+    : `<p class="small mute" style="margin:6px 0 0">${lastKg() ? "" : "Ajoute ton poids ci-dessus, puis "}remplis ton profil : l'app calcule tes calories et te propose les recettes qui te conviennent le mieux.</p>`}
+    <details style="margin-top:8px" ${n ? "" : "open"}><summary class="small">Mon profil</summary>
+    <form id="profForm" class="grid2" style="margin-top:8px">
+      <label class="small">Sexe<select id="pSexe"><option value="H" ${pr.sexe !== "F" ? "selected" : ""}>Homme</option><option value="F" ${pr.sexe === "F" ? "selected" : ""}>Femme</option></select></label>
+      <label class="small">Âge<input type="number" id="pAge" inputmode="numeric" min="15" max="99" value="${pr.age || ""}"></label>
+      <label class="small">Grandeur (pieds et pouces)<span class="row" style="flex-wrap:nowrap;gap:4px"><input type="number" id="pFt" inputmode="numeric" min="4" max="7" value="${ft}" style="max-width:70px"> pi <input type="number" id="pIn" inputmode="numeric" min="0" max="11" value="${inch}" style="max-width:70px"> po</span></label>
+      <label class="small">Semaine (travail)<select id="pSem">${ACT_SEM.map(([v, t]) => `<option value="${v}" ${Number(pr.sem) === v ? "selected" : ""}>${t}</option>`).join("")}</select></label>
+      <label class="small">Fin de semaine<select id="pWe">${ACT_WE.map(([v, t]) => `<option value="${v}" ${Number(pr.we) === v ? "selected" : ""}>${t}</option>`).join("")}</select></label>
+      <button class="btn sm red" style="align-self:end">Calculer</button></form></details>`;
 }
 function poidsChart(W, u) {
   if (W.length < 2) return "";
@@ -3154,11 +3205,11 @@ function minceSnacks() {
       <div class="foot"><span></span><button class="btn sm ${on ? "" : "red"}" data-coltg="${r.id}">${on ? "✓ Dans la liste" : "+ Ajouter"}</button></div></article>`; }).join("")}</div>`;
 }
 // recipe card, shared by Recettes and Minceur
-function recCard(r, mine) {
+function recCard(r, mine, you) {
   mine = mine || [];
     const s = scoreOf(r.id), on = S.menu.includes(r.id);
     return `<article class="rec"><button class="pic" data-open="${r.id}" aria-label="Voir la recette">${pic(r)}</button><button class="nm" data-open="${r.id}">${esc(r.n)}</button>
-      <div class="chips">${r.ia ? `<span class="chip sp">Nouvelle (IA)</span>` : ""}${S.aime[r.id] === 1 ? `<span class="chip">J'aime</span>` : ""}<span class="chip">${esc(r.c)}</span><span class="chip">Lunch : ${LUNCH[r.l][0]}</span><span class="chip">${fmtTime(r.t)}</span>${kcalChip(r)}
+      <div class="chips">${r.ia ? `<span class="chip sp">Nouvelle (IA)</span>` : ""}${S.aime[r.id] === 1 ? `<span class="chip">J'aime</span>` : ""}<span class="chip">${esc(r.c)}</span><span class="chip">Lunch : ${LUNCH[r.l][0]}</span><span class="chip">${fmtTime(r.t)}</span>${kcalChip(r)}${you ? youChip(r) : ""}
       ${mine.map((n) => `<span class="chip" style="background:var(--red);color:#fff;border-color:var(--red)">✓ ${esc(n)}</span>`).join("")}
       ${s.hits.filter((h) => !mine.includes(ING[h.id].n.split(" (")[0])).slice(0, 3).map((h) => `<span class="chip sp">${esc(ING[h.id].n.split(" (")[0])} ${h.cote}/10</span>`).join("")}</div>
       <div class="foot"><span class="small">${s.save > 0.5 ? `<span class="save">−${L.FR(s.save, 0)} $</span> avec les spéciaux` : `<span class="mute">Pas de spécial</span>`}</span>
@@ -5172,6 +5223,11 @@ document.addEventListener("input", (e) => {
 document.addEventListener("submit", (e) => {
   if (e.target.id === "invForm") { e.preventDefault(); const v = $("#invTxt").value.trim(); if (!v) return; const id = guessIng(v);
     addInv(S.invTab || "frigo", { n: id ? ING[id].n.split(" (")[0] : v.charAt(0).toUpperCase() + v.slice(1), id, qte: "" }); rankCache = null; save(); toast(id ? `Ajouté : ${ING[id].n.split(" (")[0]}` : `Ajouté : ${v}`); return rHome(); }
+  if (e.target.id === "profForm") { e.preventDefault();
+    const ft = Number($("#pFt").value) || 0, inch = Number($("#pIn").value) || 0, age = Number($("#pAge").value) || 0;
+    if (!(ft >= 4 && ft <= 7) || !(age >= 15 && age <= 99)) return toast("Écris ton âge et ta grandeur (ex. 5 pi 10 po)");
+    S.prof = { sexe: $("#pSexe").value, age, cm: Math.round((ft * 12 + inch) * 2.54), sem: Number($("#pSem").value), we: Number($("#pWe").value) }; S.msort = "toi"; save();
+    const n = myNumbers(); toast(n ? `Maintien ≈ ${L.FR(n.maint, 0)} calories par jour` : "Profil enregistré : ajoute ton poids"); return rMince(); }
   if (e.target.id === "kcalForm") { e.preventDefault(); const v = Math.round(Number($("#kcalJour").value) || 0); S.kcalJour = v >= 800 && v <= 5000 ? v : 0; save(); toast(S.kcalJour ? `Objectif : ${S.kcalJour} calories par jour` : "Objectif enlevé"); return rMince(); }
   if (e.target.id === "poidsForm") { e.preventDefault(); const v = Number(String($("#poidsVal").value).replace(",", ".")); if (!(v > 20 && v < 1000)) return toast("Écris ton poids, par exemple 210");
     const t = today(); S.poids = (S.poids || []).filter((x) => x.d !== t).concat({ d: t, v: Math.round(v * 10) / 10 }); save(); toast("Poids ajouté"); return rMince(); }
@@ -5218,7 +5274,7 @@ Promise.all([getJSON("recettes.json", window.DATA_RECETTES), getJSON("speciaux.j
     fetch("photos/index.json", { cache: "no-cache" }).then((r) => (r.ok ? r.json() : [])).then((l) => { if (Array.isArray(l) && l.length) { REPO_PH = new Set(l); render(S.view); if (S.open) openRec(S.open); } }).catch(() => {});
     setTimeout(async () => { loadCostco(); await syncNow(); try { if (!S.costcoOff && !S.reg.stores.includes("Costco")) { S.reg.stores.push("Costco"); save(); render(S.view); } } catch (e) {}
       // v3.13.70: the flyers now also hold snacks, coffee, nuts and drinks: read this week's flyers again once
-      try { if (S.banCrevV !== 2) { S.banCrevV = 2; S.reg.ban = (S.reg.ban || []).filter((x) => x !== "crevettes"); save(); } } catch (e) {} try { if (S.kTermsV !== 4) { S.kTermsV = 4; for (const k of Object.keys(SIZES)) if (!SIZES[k].skip) delete SIZES[k]; saveSizes(); save(); updateFlyers(true).then(() => render(S.view)).catch(() => {}); } } catch (e) {} try { receiptFix1122(); siteFix(); updateBadge(); } catch (e) {} weeklyAuto(); }, 800);
+      try { if (!S.prof && !S.profV) { S.profV = 1; S.prof = { sexe: "H", age: 47, cm: 178, sem: 1.4, we: 1.2 }; save(); } } catch (e) {} try { if (S.banCrevV !== 2) { S.banCrevV = 2; S.reg.ban = (S.reg.ban || []).filter((x) => x !== "crevettes"); save(); } } catch (e) {} try { if (S.kTermsV !== 4) { S.kTermsV = 4; for (const k of Object.keys(SIZES)) if (!SIZES[k].skip) delete SIZES[k]; saveSizes(); save(); updateFlyers(true).then(() => render(S.view)).catch(() => {}); } } catch (e) {} try { receiptFix1122(); siteFix(); updateBadge(); } catch (e) {} weeklyAuto(); }, 800);
   })
   .catch(() => { $("#loading").textContent = "Impossible de charger les recettes. Recharge la page."; });
 

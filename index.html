@@ -1926,7 +1926,9 @@ function rSpec() {
       ${x.n ? `<button class="go" data-ing="${x.sp.ing}">${x.n} recettes avec ça →</button>` : x.nc ? `<button class="go" data-go="collations">${x.nc} collation${x.nc > 1 ? "s" : ""} avec ça →</button>` : `<span class="meta" style="grid-column:2/4">Pas utilisé dans les recettes</span>`}
     </div>`;
   const storesHere = L.STORES.filter((s) => items.some((sp) => sp.mag === s) || (s === "Costco" && COSTCO));
-  const shown = rows.filter((x) => !S.store || x.sp.mag === S.store);
+  // one flyer offer for 2 ingredients ("bleuets ou fraises") is shown once (the best-noted line, rows are sorted)
+  const seenOffer = new Set();
+  const shown = rows.filter((x) => !S.store || x.sp.mag === S.store).filter((x) => { const k = x.sp.mag + "|" + (x.sp.txt || "") + "|" + x.sp.prix; if (!x.sp.txt || !seenOffer.has(k)) { seenOffer.add(k); return true; } return false; });
   const card = (x) => { const on = x.ing && S.sel.includes(x.sp.ing);
     return `<button class="art ${on ? "on" : ""}" ${x.ing ? `data-sel="${x.sp.ing}"` : "disabled"} aria-pressed="${on}" style="${x.on ? "" : "opacity:.5"}">
       ${x.sp.box && x.sp.pdf ? ((u) => u ? `<div class="ph fl"><img src="${u}" alt=""></div>` : `<div class="ph fl ph-empty" data-crop="${cropKey(x.sp)}"><span>${esc(x.sp.txt)}</span></div>`)(flyerImg(x.sp))

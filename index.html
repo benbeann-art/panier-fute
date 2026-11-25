@@ -3304,7 +3304,7 @@ function rRec() {
 }
 // ---------- calories per portion (NUT table, raw weights; a recipe is written for 12 portions) ----------
 const UNIT_G = {"thon":170,"oeufs":50,"pois_chiches":540,"lentilles":540,"haricots_noirs":540,"haricots_rouges":540,"tofu":454,"oignon":150,"ail":5,"poivron":160,"brocoli":300,"chou_fleur":600,"courgette":200,"laitue":500,"tomate":120,"concombre":300,"poireau":250,"citron":60,"lime":45,"coriandre":40,"persil":40,"oignon_vert":100,"avocat":150,"fromage_tranche":20,"pain_tranche":35,"kaiser":60,"baguette":270,"tortilla":60,"pita":60,"croissant":55,"ciabatta":90,"bagel":100,"pain_sousmarin":80,"tomates_des":796,"pate_tomate":156,"lait_coco":400,"ananas":398,"mais_conserve":398,"sel":6,"poivre":2,"pate_tarte":250,"aubergine":450,"pomme":180,"pain_burger":60,"pain_hotdog":45,"kd":200,"haricots_blancs":540,"poire":180,"clementine":75,"orange":130}; // grams in one unit (for the size of a portion)
-const KC_DRY = new Set(["riz", "riz_basmati", "pates", "spaghetti", "macaroni", "lasagne", "nouilles_oeufs", "nouilles_riz", "nouilles_lomein", "couscous", "quinoa", "orge", "pois_jaunes", "feves_seches", "riz_arborio", "avoine"]);
+const KC_DRY = new Set(["riz", "riz_basmati", "pates", "spaghetti", "macaroni", "lasagne", "nouilles_oeufs", "nouilles_riz", "nouilles_lomein", "couscous", "quinoa", "orge", "pois_jaunes", "feves_seches", "riz_arborio", "avoine", "kd"]);
 const kcalCache = new Map();
 function kcalOf(r) { // {k: kcal per portion, w: grams per portion (cooked), ok: every ingredient known}
   if (kcalCache.has(r.id)) return kcalCache.get(r.id);

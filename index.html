@@ -4508,15 +4508,16 @@ function costcoShot(x) {
 }
 function costcoBox() {
   if (!COSTCO || (S.store && S.store !== "Costco")) return "";
-  const t = today(), list = COSTCO.items.filter((x) => (!x.au || x.au >= t) && (!x.du || x.du <= t));
+  window.__csc = costcoSpecials();
+  // a deal already in the specials list (with its note) is not shown a second time here
+  const t = today(), list = COSTCO.items.filter((x) => (!x.au || x.au >= t) && (!x.du || x.du <= t) && !window.__csc.some((o) => o.no && o.no === x.no));
   const narAll = (COSTCO.narcity || []).filter((x) => x.au && x.au >= t && (!x.du || x.du <= t));
   const price = new Map(); for (const x of narAll) { const tw = costcoTwin(x); if (tw) price.set(tw, x); }
   const nar = narAll.filter((x) => !costcoTwin(x)); // the others are shown on their Costco card
   if (!list.length && !nar.length) return "";
-  return `<details class="card" style="margin:12px 0" ${S.store === "Costco" ? "open" : ""}><summary><b>Circulaire Costco</b> : ${list.length + nar.length} rabais d'épicerie en entrepôt (touche pour voir)</summary>
+  return `<details class="card" style="margin:12px 0" ${S.store === "Costco" ? "open" : ""}><summary><b>Autres rabais Costco</b> : ${list.length + nar.length} sans comparaison possible (touche pour voir)</summary>
     <div class="row" style="margin:8px 0"><label class="btn sm" style="cursor:pointer">📷 Lire mes captures de la page Costco<input type="file" id="costcoShots" accept="image/*" multiple hidden></label><a class="btn sm" href="https://www.costco.ca/coupons.html?langId=-25" target="_blank" rel="noopener">Ouvrir la page Costco</a></div>
     <p class="small mute" style="margin:6px 0">Costco montre ses prix aux gens, pas aux robots : ouvre la page Costco, fais des captures d'écran, puis « Lire mes captures ». L'IA y lit le prix en entrepôt, le rabais et le prix final. Quand le vrai prix est connu (article Narcity, « offre choc » ou ton prix Costco appris sur une facture moins le rabais), l'article est aussi dans les spéciaux avec ses 2 notes, au même prix par kg ou par litre que les autres.</p>
-    ${(() => { const sc = costcoSpecials(); window.__csc = sc; return ""; })()}
     <div class="flyer">${list.map((x) => `<div class="art" style="cursor:default">${costcoTags(x)}
       <div class="ph fl">${x.img ? `<img src="${esc(x.img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.classList.add('ph-empty');this.remove()">` : ""}</div>
       <div style="padding:6px 8px"><div class="nm">${esc(x.n)}</div>

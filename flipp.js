@@ -52,6 +52,7 @@
     saumon: ["filet de saumon", ["saumon"], ["fume", "farci", "tournedos", "conserve", "boite", "roulade", "burger", "galette", "sushi", "pate", "mousse", "croquette", "nourriture"]],
     truite: ["truite", ["truite"], ["fume", "farci", "conserve"]],
     tilapia: ["tilapia", ["tilapia"], ["pane", "farci"]],
+    sole: ["filets de sole", ["=sole"], ["pane", "farci", "fume", "frit"]],
     crevettes: ["crevettes", ["crevette"], ["anneau", "cocktail", "pane", "pates", "surimi", "batonnet", "poisson", "goberge", "salade", "bouchee", "moghrabieh", "tempura", "sauce", "croustil", "chips", "dumpling", "rouleau", "won", "bol", "popcorn", "couronne", "coco", "papillon", "brochette"]],
     thon: ["thon en conserve", ["thon"], ["steak", "frais", "sushi", "longe", "tataki", "salade", "chat", "nourriture"]],
     oeufs: ["oeufs", ["oeuf"], ["chocolat", "paques", "nouille", "pate", "blanc d oeufs|blancs d oeufs", "liquide", "cuit", "kinder", "sandwich", "muffin"]],

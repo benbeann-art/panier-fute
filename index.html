@@ -3005,15 +3005,18 @@ function searchScore(r, words, fuzzy) {
   const inName = (w) => w.length >= 5 && joined.includes(w);
   // typing mistakes: 1 wrong letter from 4 letters, 2 from 8 letters ("poullet", "spagetti", "crevete")
   const near = (set, w) => { if (!fuzzy) return false; const k = w.length >= 8 ? 2 : w.length >= 4 ? 1 : 0; return k > 0 && [...set].some((x) => Math.abs(x.length - w.length) <= k && x.length >= 4 && editDist(x, w, k) <= k); };
+  // the last word may be still being typed: "club sa" finds "Club sandwich"
+  const last = words[words.length - 1], pre = (set, w) => w === last && [...set].some((x) => x.startsWith(w));
   let s = 0;
   for (const w of words) {
     if (has(name, w)) s += 10;
+    else if (pre(name, w)) s += 9;
     else if (inName(w)) s += 9;
     else if (has(cat, w)) s += 8;
     else if (near(name, w)) s += 7;
     else if (has(main, w)) s += 6;
     else if (near(main, w)) s += 5;
-    else if (has(ings, w)) s += 1;
+    else if (has(ings, w) || pre(main, w)) s += 1;
     else if (near(ings, w)) s += 0.5;
     else return 0; // every word must be found somewhere
   }

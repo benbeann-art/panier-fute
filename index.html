@@ -4320,7 +4320,7 @@ const nearCustom = () => { const g = S.reg.geo; return allCustom().filter((x) =>
 let regGist = null;
 // The shared list is the public gist "panierfute-epiceries.json" of the app's owner (no key needed to read it)
 async function findRegistry() {
-  try { const reg = await repoFile("data/registry.json", true); if (reg && reg.gist) return reg.gist; } catch (e) {}
+  try { const reg = await repoFile("data/registry.json", true); if (reg && reg.gist) return reg.gist; if (reg && reg.gist === null) return null; } catch (e) {} // null = no shared list yet
   try { const l = await fetch("https://api.github.com/users/benbeann-art/gists?per_page=100").then((r) => r.json()); const g = (l || []).find((x) => x.files && x.files["panierfute-epiceries.json"]); return g ? g.id : null; } catch (e) { return null; }
 }
 async function loadRegistry(force) {
@@ -4328,7 +4328,7 @@ async function loadRegistry(force) {
     const c = JSON.parse(localStorage.getItem("panierfute.registry") || "{}");
     if (!force && c.t && Date.now() - c.t < 12 * 36e5) { CUSTOM = c.list || []; regGist = c.gist; return CUSTOM; }
     const gid = await findRegistry();
-    if (!gid) return CUSTOM;
+    if (!gid) { localStorage.setItem("panierfute.registry", JSON.stringify({ t: Date.now(), gist: null, list: CUSTOM })); return CUSTOM; } // no shared list yet: don't look again for 12 h
     regGist = gid;
     const g = await fetch(`https://api.github.com/gists/${gid}`).then((r) => r.json());
     const f = Object.values(g.files || {})[0];

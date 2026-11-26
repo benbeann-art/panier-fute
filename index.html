@@ -915,8 +915,12 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
   async function post(url, headers, body, signal) {
     let res;
     try {
-      res = await fetch(url, { method: "POST", headers: Object.assign({ "content-type": "application/json" }, headers), body: JSON.stringify(body), signal });
+      // never wait forever: an answer that hangs (seen with big flyer pages) is dropped after 3 minutes and the next model answers
+      const tm = typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(180000) : null;
+      const sig = tm && signal && typeof AbortSignal.any === "function" ? AbortSignal.any([signal, tm]) : signal || tm || undefined;
+      res = await fetch(url, { method: "POST", headers: Object.assign({ "content-type": "application/json" }, headers), body: JSON.stringify(body), signal: sig });
     } catch (e) {
+      if (e && e.name === "TimeoutError") throw new AIError("down", "Cette IA n'a pas répondu après 3 minutes.");
       throw new AIError("network", "Impossible de joindre cette IA (Internet coupé, ou elle refuse les appels depuis une app web).");
     }
     const text = await res.text();
@@ -4593,7 +4597,18 @@ function cropBlob(c, box) {
   return new Promise((r) => cc.toBlob(r, "image/jpeg", 0.85));
 }
 const toCanvas = (src, max) => { const k = Math.min(1, max / Math.max(src.width, src.height)), c = document.createElement("canvas"); c.width = Math.round(src.width * k); c.height = Math.round(src.height * k); c.getContext("2d").drawImage(src, 0, 0, c.width, c.height); return c; };
-// One file -> the parts to read (one per PDF page or image, or pieces of text), rendered one at a time to keep memory low
+// Tall pages (web flyers are often 2 to 3 screens high) are cut in slices: the small print stays readable
+function sliceCanvas(c) {
+  const n = Math.min(4, Math.ceil(c.height / (c.width * 1.35)));
+  if (n <= 1) return [c];
+  const h = Math.ceil(c.height / n), ov = Math.round(h * 0.08), out = [];
+  for (let i = 0; i < n; i++) {
+    const y = Math.max(0, i * h - ov), hh = Math.min(c.height - y, h + 2 * ov), cc = document.createElement("canvas");
+    cc.width = c.width; cc.height = hh; cc.getContext("2d").drawImage(c, 0, y, c.width, hh, 0, 0, c.width, hh); out.push(cc);
+  }
+  return out;
+}
+// One file -> the parts to read (each PDF page or image, cut in slices when tall, or pieces of text), rendered one at a time to keep memory low
 async function* dropParts(f) {
   const isPdf = f.type === "application/pdf" || /\.pdf$/i.test(f.name);
   if (isPdf) {
@@ -4601,21 +4616,60 @@ async function* dropParts(f) {
     const doc = await lib.getDocument({ data: await f.arrayBuffer() }).promise;
     const n = Math.min(doc.numPages, 40);
     for (let i = 1; i <= n; i++) {
-      const pg = await doc.getPage(i), v0 = pg.getViewport({ scale: 1 }), vp = pg.getViewport({ scale: Math.min(3, 2200 / Math.max(v0.width, v0.height)) });
-      const c = document.createElement("canvas"); c.width = vp.width; c.height = vp.height;
+      const pg = await doc.getPage(i), v0 = pg.getViewport({ scale: 1 });
+      const sc = Math.min(3, 1400 / v0.width, 5600 / v0.height, 2200 / Math.min(v0.width, v0.height)), vp = pg.getViewport({ scale: sc });
+      const c = document.createElement("canvas"); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
       await pg.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
       let text = ""; try { text = (await pg.getTextContent()).items.map((x) => x.str).join(" ").replace(/\s+/g, " ").trim().slice(0, 6000); } catch (e) {}
-      yield { canvas: c, text, pg: i - 1, of: n };
-      c.width = c.height = 0;
+      const sl = sliceCanvas(c);
+      for (let k = 0; k < sl.length; k++) yield { canvas: sl[k], text: sl.length > 1 ? "" : text, key: `${i}.${k}`, label: `page ${i}${sl.length > 1 ? ` (${k + 1}/${sl.length})` : ""} sur ${n}`, page: i, of: n };
+      if (sl[0] !== c) c.width = c.height = 0; // a page that was not cut is still being read: freed when its reading ends
     }
     return;
   }
-  if (/^image\//.test(f.type) || /\.(png|jpe?g|webp|gif|bmp)$/i.test(f.name)) { const bmp = await createImageBitmap(f); yield { canvas: toCanvas(bmp, 2200), text: "", pg: 0, of: 1 }; return; }
+  if (/^image\//.test(f.type) || /\.(png|jpe?g|webp|gif|bmp)$/i.test(f.name)) {
+    const bmp = await createImageBitmap(f), k = Math.min(1, 1400 / bmp.width, 5600 / bmp.height), c = document.createElement("canvas");
+    c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k); c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+    const sl = sliceCanvas(c);
+    for (let k = 0; k < sl.length; k++) yield { canvas: sl[k], text: "", key: `1.${k}`, label: sl.length > 1 ? `morceau ${k + 1} sur ${sl.length}` : "", page: 1, of: 1 };
+    return;
+  }
   let txt = await f.text();
   if (/\.html?$/i.test(f.name) || /^\s*</.test(txt)) { const d = new DOMParser().parseFromString(txt, "text/html"); d.querySelectorAll("script,style,noscript,svg").forEach((x) => x.remove()); txt = d.body ? d.body.textContent : ""; }
   txt = txt.replace(/[ \t\r]+/g, " ").replace(/\n\s*\n+/g, "\n").trim();
   const n = Math.min(Math.ceil(txt.length / 12000), 20);
-  for (let i = 0; i < n; i++) yield { canvas: null, text: txt.slice(i * 12000, (i + 1) * 12000), pg: i, of: n };
+  for (let i = 0; i < n; i++) yield { canvas: null, text: txt.slice(i * 12000, (i + 1) * 12000), key: `${i + 1}.0`, label: n > 1 ? `partie ${i + 1} sur ${n}` : "", page: i + 1, of: n };
+}
+// Week written in the file name, e.g. "SuperC_Weekly_Flyer_1_Valid_26-11-26_-_02-12-26.pdf" (day-month-year)
+function weekFromName(name) {
+  const m = String(name).match(/(\d{1,2})[-_.](\d{1,2})[-_.](\d{2}|\d{4})(?!\d)/);
+  if (!m) return "";
+  const y = m[3].length === 2 ? "20" + m[3] : m[3], d = `${y}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+  return /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(d) ? thuOf(d) : "";
+}
+function dropPrompt(part, mag) {
+  const ids = Object.entries(ING).map(([k, v]) => `${k} = ${v.n} [${v.u}]`).join("\n");
+  return `Nous sommes le ${today()}. Voici ${part.canvas ? "une page (ou un morceau de page)" : "un extrait"} d'une circulaire d'épicerie du Québec${mag ? ` de ${mag}` : ""}.
+Relève TOUS les produits en spécial avec leur prix, exactement comme écrit : n'invente aucun prix, saute un produit si son prix n'est pas lisible ou s'il est coupé au bord.
+Associe chaque produit à un identifiant de cette liste (sinon "ing": null) :
+${ids}
+Règles : prix au lb → "unite":"lb","qte":1 (si le prix au lb et au kg sont écrits, prends celui au lb) ; prix au kg seulement → "unite":"kg","qte":1 ; paquet de 375 g à 3,33 $ → "prix":3.33,"qte":375,"unite":"g" ; 2 pour 5 $ → "prix":5,"qte":2,"unite":"u" ; douzaine d'œufs → "qte":12,"unite":"u" ; 2 L → "qte":2,"unite":"L" ; un seul article → "qte":1,"unite":"u".
+Prix membre : si un prix pour tout le monde est aussi écrit, prends celui-là ; sinon garde le prix membre et ajoute « (prix membre) » au nom.
+Réponds UNIQUEMENT par un objet JSON : {"magasin":"nom de l'épicerie d'après le logo ou le texte, sinon null","debut":"premier jour de la circulaire (AAAA-MM-JJ) s'il est écrit, sinon null","items":[{"ing":"id ou null","prix":3.99,"qte":1,"unite":"lb|kg|g|ml|L|u","txt":"nom court + format","reg":0${part.canvas ? ',"box":[0,0,0,0]' : ""}}]}
+("reg" = prix régulier s'il est écrit, sinon 0${part.canvas ? ` ; "box" = [ymin,xmin,ymax,xmax], le rectangle (de 0 à 1000) qui entoure la photo et le prix du produit sur l'image` : ""})${part.text ? `\n\nTexte de la page (aide pour les petits caractères ; les prix doivent venir de la circulaire) :\n${part.text}` : ""}`;
+}
+// Save as we go: every page read is kept right away (closing the app or a quota stop loses nothing; dropping the file again goes on where it stopped)
+function dropCommit(wk, items) {
+  S.drop = S.drop || {};
+  const w = S.drop[wk] = S.drop[wk] || { items: [], mags: {} };
+  let n = 0, dup = 0;
+  for (const it of items) {
+    const same = (y) => y.mag === it.mag && Math.abs(y.prix - it.prix) < 0.005 && (norm(y.txt) === norm(it.txt) || (it.ing && y.ing === it.ing && y.unite === it.unite && y.qte === it.qte));
+    if (w.items.some(same)) { dup++; continue; }
+    w.items.push(it); n++;
+    const m = w.mags[it.mag] = w.mags[it.mag] || { n: 0, files: [], at: 0 }; m.n++; m.at = Date.now();
+  }
+  return { n, dup };
 }
 async function readDropped(files) {
   if (dropBusy) return toast("Une circulaire est déjà en lecture : attends qu'elle finisse");
@@ -4624,76 +4678,77 @@ async function readDropped(files) {
   if (!files.length) { setDropMsg("Ce fichier n'est pas une circulaire lisible : il faut un PDF, une image ou une page web enregistrée."); return; }
   const choice = ($("#dropMag") || {}).value || "", wkChosen = ($("#dropWk") || {}).value || defDropWk();
   const okWks = [weekKey(), addDays(weekKey(), 7)];
-  const ids = Object.entries(ING).map(([k, v]) => `${k} = ${v.n} [${v.u}]`).join("\n");
   dropBusy = true; const z = $("#dropZone"); if (z) z.innerHTML = "⏳ Lecture en cours… (garde l'app ouverte)";
-  const got = {}, notes = [], fileMag = {}; let noStore = 0, fails = 0, parts = 0;
+  S.dropDone = S.dropDone || {};
+  const notes = [], t0 = Date.now(), mags = new Set(), later = new Set();
+  let total = 0, dup = 0, noStore = 0, fails = 0, parts = 0, done = 0, skipped = 0, stop = false;
+  const t = () => { const s = Math.round((Date.now() - t0) / 1000); return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, "0")}`; };
   try {
-    for (let fi = 0; fi < files.length; fi++) {
+    for (let fi = 0; fi < files.length && !stop; fi++) {
       const f = files[fi], fid = "drop:" + hashStr(f.name + "|" + f.size + "|" + f.lastModified);
-      let mag = choice || storeFromName(f.name), wk = wkChosen, wkSeen = false;
-      try {
-        for await (const part of dropParts(f)) {
-          parts++;
-          setDropMsg(`Lecture de ${f.name}${part.of > 1 ? ` : ${part.canvas ? "page" : "partie"} ${part.pg + 1} sur ${part.of}` : ""}${files.length > 1 ? ` (fichier ${fi + 1} sur ${files.length})` : ""}…`);
-          const prompt = `Nous sommes le ${today()}. Voici ${part.canvas ? "une page" : "un extrait"} d'une circulaire d'épicerie du Québec${mag ? ` de ${mag}` : ""}.
-Relève TOUS les produits en spécial avec leur prix, exactement comme écrit : n'invente aucun prix, saute un produit si son prix n'est pas lisible.
-Associe chaque produit à un identifiant de cette liste (sinon "ing": null) :
-${ids}
-Règles : prix au lb → "unite":"lb","qte":1 ; prix au kg seulement → "unite":"kg","qte":1 ; paquet de 375 g à 3,33 $ → "prix":3.33,"qte":375,"unite":"g" ; 2 pour 5 $ → "prix":5,"qte":2,"unite":"u" ; douzaine d'œufs → "qte":12,"unite":"u" ; 2 L → "qte":2,"unite":"L" ; un seul article → "qte":1,"unite":"u".
-Réponds UNIQUEMENT par un objet JSON : {"magasin":"nom de l'épicerie d'après le logo ou le texte, sinon null","debut":"premier jour de la circulaire (AAAA-MM-JJ) s'il est écrit, sinon null","items":[{"ing":"id ou null","prix":3.99,"qte":1,"unite":"lb|kg|g|ml|L|u","txt":"nom court + format","reg":0${part.canvas ? ',"box":[0,0,0,0]' : ""}}]}
-("reg" = prix régulier s'il est écrit, sinon 0${part.canvas ? ` ; "box" = [ymin,xmin,ymax,xmax], le rectangle (de 0 à 1000) qui entoure la photo et le prix du produit sur la page` : ""})${part.text ? `\n\nTexte de la page (aide pour les petits caractères ; les prix doivent venir de la circulaire) :\n${part.text}` : ""}`;
-          let j = null;
-          try {
-            const img = part.canvas ? await new Promise((r) => part.canvas.toBlob(r, "image/jpeg", 0.85)) : null;
-            j = AI.extractJSON(await askAI(prompt, { images: img ? [img] : [], maxTokens: 12000, quiet: true }), "object");
-          } catch (e) { fails++; if (/limite|quota|429|clé|key|401|403/i.test(e.message || "")) { notes.push("L'IA a refusé (" + (e.message || "erreur") + ")"); throw e; } continue; }
-          if (!j || !Array.isArray(j.items)) { fails++; continue; }
-          if (!mag) mag = storeFromAI(j.magasin);
-          if (!wkSeen && j.debut && /^\d{4}-\d{2}-\d{2}$/.test(j.debut)) {
-            wkSeen = true; const w = thuOf(j.debut);
-            if (okWks.includes(w)) wk = w; else notes.push(`${f.name} : la circulaire dit qu'elle commence le ${frDate(j.debut)}, gardée pour la semaine choisie`);
-          }
-          for (const x of j.items) {
-            const prix = Number(String(x && x.prix).replace(",", "."));
-            if (!x || !(prix > 0 && prix < 500)) continue;
-            const it = { ing: ING[x.ing] ? x.ing : null, mag: mag || "?", prix, qte: Number(x.qte) > 0 ? Number(x.qte) : 1, unite: ["lb", "kg", "g", "ml", "L", "u"].includes(x.unite) ? x.unite : "u",
-              txt: String(x.txt || (ING[x.ing] || {}).n || "").slice(0, 90), reg: Number(x.reg) > prix ? Number(x.reg) : 0, drop: 1 };
-            if (part.canvas && Array.isArray(x.box) && x.box.length === 4 && x.box.some((v) => Number(v) > 0)) {
-              it.box = x.box.map((v) => Math.round(Number(v))); it.pdf = fid; it.pg = part.pg;
-              try { const b = await cropBlob(part.canvas, it.box); if (b) await Photos.put(cropKey(it), b, true); else { delete it.box; delete it.pdf; delete it.pg; } } catch (e) { delete it.box; delete it.pdf; delete it.pg; }
-            }
-            (got[wk] = got[wk] || []).push(it);
-          }
+      const fromName = weekFromName(f.name);
+      let mag = choice || storeFromName(f.name), wk = okWks.includes(fromName) ? fromName : wkChosen, wkSeen = okWks.includes(fromName);
+      const doneHere = new Set((S.dropDone[fid] || {}).parts || []), pending = [], pendKeys = [];
+      const read = async (part) => {
+        let j = null;
+        try {
+          const img = part.canvas ? await new Promise((r) => part.canvas.toBlob(r, "image/jpeg", 0.86)) : null;
+          j = AI.extractJSON(await askAI(dropPrompt(part, mag), { images: img ? [img] : [], maxTokens: 16000, quiet: true, json: true }), "object");
+        } catch (e) { fails++; if (/limite|quota|429|clé|key|401|403/i.test(e.message || "")) { if (!stop) notes.push("L'IA a arrêté (" + (e.message || "limite") + ") : redépose plus tard, ça continue où c'était rendu"); stop = true; } return; }
+        if (!j || !Array.isArray(j.items)) { fails++; return; }
+        if (!mag) mag = storeFromAI(j.magasin);
+        if (!wkSeen && j.debut && /^\d{4}-\d{2}-\d{2}$/.test(j.debut)) {
+          wkSeen = true; const w = thuOf(j.debut);
+          if (okWks.includes(w)) wk = w; else notes.push(`${f.name} : la circulaire dit qu'elle commence le ${frDate(j.debut)}, gardée pour la semaine choisie`);
         }
+        const its = [];
+        for (const x of j.items) {
+          const prix = Number(String(x && x.prix).replace(",", "."));
+          if (!x || !(prix > 0 && prix < 500)) continue;
+          const it = { ing: ING[x.ing] ? x.ing : null, mag: mag || "?", prix, qte: Number(x.qte) > 0 ? Number(x.qte) : 1, unite: ["lb", "kg", "g", "ml", "L", "u"].includes(x.unite) ? x.unite : "u",
+            txt: String(x.txt || (ING[x.ing] || {}).n || "").slice(0, 90), reg: Number(x.reg) > prix ? Number(x.reg) : 0, drop: 1 };
+          if (part.canvas && Array.isArray(x.box) && x.box.length === 4 && x.box.some((v) => Number(v) > 0)) {
+            it.box = x.box.map((v) => Math.round(Number(v))); it.pdf = fid; it.pg = part.key;
+            try { const b = await cropBlob(part.canvas, it.box); if (b) await Photos.put(cropKey(it), b, true); else { delete it.box; delete it.pdf; delete it.pg; } } catch (e) { delete it.box; delete it.pdf; delete it.pg; }
+          }
+          its.push(it);
+        }
+        const known = its.filter((x) => x.mag !== "?"); pending.push(...its.filter((x) => x.mag === "?"));
+        const r = dropCommit(wk, known); total += r.n; dup += r.dup; known.forEach((x) => mags.add(x.mag)); if (r.n && wk > weekKey()) later.add(wk);
+        if (its.some((x) => x.mag === "?")) pendKeys.push(part.key); else { doneHere.add(part.key); S.dropDone[fid] = { wk, parts: [...doneHere] }; } save(false);
+      };
+      try {
+        // the first part alone (it usually shows the store and the dates), then 4 at a time
+        const running = new Set(); let first = true;
+        for await (const part of dropParts(f)) {
+          if (stop) break;
+          parts++;
+          if (doneHere.has(part.key)) { skipped++; part.canvas && (part.canvas.width = 0); continue; }
+          setDropMsg(`Lecture de ${f.name}${part.label ? ` : ${part.label}` : ""}${files.length > 1 ? ` (fichier ${fi + 1} sur ${files.length})` : ""} · ${total} spéciaux trouvés · ${t()}…`);
+          const p = read(part).finally(() => { running.delete(p); done++; if (part.canvas) part.canvas.width = 0; });
+          running.add(p);
+          if (first) { await p; first = false; } else if (running.size >= 4) await Promise.race(running);
+        }
+        await Promise.all(running);
       } catch (e) {
-        if (notes.some((t) => /L'IA a refusé/.test(t))) break;
         notes.push(`${f.name} : ${/pdf\.js/.test(e.message || "") ? "le lecteur de PDF n'a pas pu se charger (Internet ?)" : "fichier illisible"}`);
       }
-      // pages read before the store was known (no logo on page 1): give them the store found later in the same file
-      for (const wk of Object.keys(got)) got[wk].forEach((it) => { if (it.mag === "?" && mag) it.mag = mag; });
-      if (mag) fileMag[f.name] = mag;
+      // parts read before the store was known (no logo on them): they get the store found in the same file
+      if (pending.length) {
+        if (mag) { pending.forEach((it) => (it.mag = mag)); const r = dropCommit(wk, pending); total += r.n; dup += r.dup; mags.add(mag); if (r.n && wk > weekKey()) later.add(wk); pendKeys.forEach((k) => doneHere.add(k)); S.dropDone[fid] = { wk, parts: [...doneHere] }; }
+        else noStore += pending.length;
+      }
+      if (mag && S.drop && S.drop[wk] && S.drop[wk].mags[mag] && !S.drop[wk].mags[mag].files.includes(f.name.slice(0, 60))) S.drop[wk].mags[mag].files.push(f.name.slice(0, 60));
+      save(false);
     }
   } finally { dropBusy = false; }
-  // keep the result: per week and per store, same product + same price only once
-  S.drop = S.drop || {};
-  let total = 0, dup = 0; const mags = new Set(), later = new Set();
-  for (const [wk, items] of Object.entries(got)) {
-    const known = items.filter((x) => x.mag !== "?"); noStore += items.length - known.length;
-    if (!known.length) continue;
-    const w = S.drop[wk] = S.drop[wk] || { items: [], mags: {} };
-    for (const it of known) {
-      if (w.items.some((y) => y.mag === it.mag && y.prix === it.prix && norm(y.txt) === norm(it.txt))) { dup++; continue; }
-      w.items.push(it); total++; mags.add(it.mag); if (wk > weekKey()) later.add(wk);
-      const m = w.mags[it.mag] = w.mags[it.mag] || { n: 0, files: [], at: 0 }; m.n++; m.at = Date.now();
-    }
-    for (const f of files) { const st = fileMag[f.name]; if (st && w.mags[st] && !w.mags[st].files.includes(f.name.slice(0, 60))) w.mags[st].files.push(f.name.slice(0, 60)); }
-  }
-  for (const wk of Object.keys(S.drop)) if (wk < weekKey()) delete S.drop[wk]; // past weeks are over
+  for (const wk of Object.keys(S.drop || {})) if (wk < weekKey()) delete S.drop[wk]; // past weeks are over
+  for (const [fid, v] of Object.entries(S.dropDone)) if (!v.wk || v.wk < weekKey()) delete S.dropDone[fid];
   rankCache = null; save();
-  const msg = [total ? `✓ ${total} spécia${total > 1 ? "ux ajoutés" : "l ajouté"} (${[...mags].join(", ")}) : c'est prêt${later.size ? `, ils compteront à partir du jeudi ${frDate([...later][0])}` : ""}.` : dup ? "Cette circulaire était déjà déposée : rien de nouveau." : parts ? "Aucun spécial reconnu dans ce fichier." : ""];
+  const msg = [total && stop ? `⏸ ${total} spécia${total > 1 ? "ux gardés" : "l gardé"} (${[...mags].join(", ")}), mais la lecture n'est pas finie.` : total ? `✓ ${total} spécia${total > 1 ? "ux ajoutés" : "l ajouté"} (${[...mags].join(", ")}) en ${t()} : c'est prêt${later.size ? `, ils compteront à partir du jeudi ${frDate([...later][0])}` : ""}.` : skipped && !fails ? "Cette circulaire était déjà lue au complet : rien de nouveau." : dup ? "Cette circulaire était déjà déposée : rien de nouveau." : parts ? "Aucun spécial reconnu dans ce fichier." : ""];
   if (total && dup) msg.push(`${dup} déjà là (pas en double).`);
   if (noStore) msg.push(`${noStore} produits sans épicerie reconnue : choisis l'épicerie dans la liste et dépose le fichier de nouveau.`);
-  if (fails) msg.push(`${fails} ${fails > 1 ? "pages n'ont pas pu être lues" : "page n'a pas pu être lue"} : dépose-la de nouveau (ou une capture plus nette).`);
+  if (fails && !stop) msg.push(`${fails} ${fails > 1 ? "morceaux n'ont pas pu être lus" : "morceau n'a pas pu être lu"} : redépose le même fichier, seuls ceux qui manquent seront relus.`);
   msg.push(...notes);
   dropMsg = msg.filter(Boolean).join(" ");
   if (S.view === "reglages") rReg(); else render(S.view);

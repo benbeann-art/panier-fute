@@ -1,5 +1,5 @@
 // Offline cache for the installed app (same-origin files only; AI and photo requests always go to the network)
-const CACHE = "panierfute-v3.23.6";
+const CACHE = "panierfute-v3.23.7";
 const FILES = ["./", "index.html", "manifest.webmanifest", "icon-192.png", "icon-512.png"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES.map((f) => new Request(f, { cache: "reload" })))).then(() => self.skipWaiting())); });
 self.addEventListener("activate", (e) => {

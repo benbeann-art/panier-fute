@@ -1706,7 +1706,9 @@ let DATA = null, ING = {}, REC = [], BYID = {}, SPEC = null, COL = [];
 const AIKEY = "panierfute.ai";
 let AIS = { main: "gemini", auto: true, autoMaj: true, keys: {}, models: {}, last: "", photos: "web", photoBy: "" };
 try { const j = JSON.parse(localStorage.getItem(AIKEY) || "null"); if (j) AIS = Object.assign(AIS, j, { keys: j.keys || {}, models: j.models || {} }); } catch (e) {}
-if (!AIS.photoV2) { AIS.photos = "web"; AIS.photoV2 = 1; } // v2.3: real web photos become the default
+if (!AIS.photoV2) { AIS.photos = "gemini"; AIS.photoV2 = 1; }
+// v3.23.7: only the Gemini photos (and my own); the Wikimedia web photos are gone, with their 2 MB cache
+if (!AIS.photoV3) { if (AIS.photos === "web") AIS.photos = "gemini"; AIS.photoV3 = 1; try { localStorage.removeItem("panierfute.webphotos3"); localStorage.removeItem("panierfute.webslim"); localStorage.setItem(AIKEY, JSON.stringify(AIS)); } catch (e) {} }
 const saveAI = () => { try { localStorage.setItem(AIKEY, JSON.stringify(AIS)); } catch (e) {} };
 const aiOn = () => AI.ready(AIS).length > 0;
 const sample = { on: true };
@@ -2062,7 +2064,7 @@ function rReg() {
       <label class="chk"><input type="checkbox" id="aiMaj" ${AIS.autoMaj !== false ? "checked" : ""}>Chaque semaine, mettre à jour les circulaires et inventer 4 recettes toute seule</label>
       <h3 style="margin:16px 0 4px;font-size:17px">Photos des recettes</h3>
       <select id="aiPhotos" aria-label="Photos des recettes">
-        <option value="web" ${AIS.photos === "web" ? "selected" : ""}>Vraies photos du web (Wikimedia, gratuit, sans clé)</option>
+        <option value="gemini" ${AIS.photos === "gemini" || AIS.photos === "web" ? "selected" : ""}>Photos Gemini seulement (dessin si la recette n'en a pas encore)</option>
         <option value="auto" ${AIS.photos === "auto" ? "selected" : ""}>Photo faite par l'IA pour chaque recette affichée</option>
         <option value="open" ${AIS.photos === "open" ? "selected" : ""}>Seulement quand j'ouvre une recette</option>
         <option value="off" ${AIS.photos === "off" ? "selected" : ""}>Non, garder les dessins</option></select>
@@ -3464,8 +3466,8 @@ function openRec(id) {
   const like = S.aime[id] || 0;
   $("#sheetIn").innerHTML = `<button class="close" id="closeSheet" aria-label="Fermer">×</button>
     <div class="hero">${pic(r)}</div>
-    <p class="small mute" id="photoCredit" style="margin:-6px 0 6px">${MYPH[r.id] && Photos.url(r.id) ? "Ta photo" : Photos.url(r.id) ? "Photo faite par l'IA" : REPO_PH.has(r.id) ? "Photo faite par l'IA (Gemini) pour cette recette" : creditHTML(r.id)}</p>
-    <div class="row small" style="margin:0 0 8px">${AIS.photos !== "off" && !Photos.url(r.id) && !REPO_PH.has(r.id) ? `<button class="btn sm" id="photoWebNext">Cette photo n'est pas la bonne</button>` : ""}
+    <p class="small mute" id="photoCredit" style="margin:-6px 0 6px">${MYPH[r.id] && Photos.url(r.id) ? "Ta photo" : Photos.url(r.id) ? "Photo faite par l'IA" : REPO_PH.has(r.id) ? "Photo faite par l'IA (Gemini) pour cette recette" : "Pas encore de photo Gemini : c'est un dessin"}</p>
+    <div class="row small" style="margin:0 0 8px">
       <label class="btn sm" for="myPhoto" title="Ou glisse une photo sur l'image">📷 Mettre ma photo</label><input type="file" id="myPhoto" accept="image/*" hidden>
       ${MYPH[r.id] && Photos.url(r.id) ? `<button class="btn sm" id="myPhotoDel">Enlever ma photo</button>` : ""}
       ${AI.imageReady(AIS).length ? `<button class="btn sm" id="photoNew">${Photos.url(r.id) ? "Refaire la photo IA" : "Photo faite par l'IA"}</button>` : ""}<span class="mute" id="photoMsg"></span></div>
@@ -3500,7 +3502,6 @@ function openRec(id) {
     <p class="small mute">Les minuteries continuent même si tu changes d'onglet dans l'app. Une alarme sonne et le cell vibre à la fin.</p>`;
   $("#sheet").classList.add("on");
   if (AIS.photos === "auto" || AIS.photos === "open") wantPhoto(id);
-  else if (AIS.photos === "web") wantWeb(id);
 }
 function closeRec() { $("#sheet").classList.remove("on"); S.open = null; save(false); }
 
@@ -3614,7 +3615,6 @@ function slimWeb(hard) {
   }
   try { localStorage.setItem(WKEY, JSON.stringify(WEB)); } catch (e) {}
 }
-if (!localStorage.getItem("panierfute.webslim")) { slimWeb(false); try { localStorage.setItem("panierfute.webslim", "1"); } catch (e) {} }
 const saveWeb = () => { if (!lsSet(WKEY, JSON.stringify(WEB))) {} };
 const EN_P = { poulet: "chicken", boeuf: "beef", porc: "pork", cotes: "pork", crevettes: "shrimp", saumon: "salmon", truite: "trout", tilapia: "fish",
   tofu: "tofu", lentilles: "lentil", pois: "chickpea", haricots: "black bean", saucisses: "sausage", dinde: "turkey", jambon: "ham", thon: "tuna", bacon: "bacon", oeufs: "egg" };
@@ -3703,6 +3703,7 @@ function relevant(list, q) {
 }
 const usedUrls = (except) => new Set(Object.entries(WEB).filter(([k, w]) => k !== except && !k.startsWith("ing:") && w && w.url).map(([, w]) => w.url));
 function wantWeb(id, next) {
+  return; // web photos (Wikimedia) are no longer used: only the Gemini photos
   if (!next && ((WEB[id] && !WEB[id].tryFr) || webQ.includes(id))) return;
   if (Date.now() < webPauseUntil && !next) return;
   if (next) webQ.unshift(id + "|next"); else webQ.push(id);
@@ -3760,8 +3761,7 @@ function pic(r) {
   const u = Photos.url(r.id), w = WEB[r.id];
   if (u) return `<div class="ph" data-ph="${r.id}"><img src="${u}" alt="Photo : ${esc(r.n)}" loading="lazy"></div>`;
   if (REPO_PH.has(r.id) && AIS.photos !== "off") return `<div class="ph" data-ph="${r.id}"><img src="photos/${r.id}.jpg" alt="Photo : ${esc(r.n)}" loading="lazy"></div>`;
-  if (w && w.url && !(w.bad || []).includes(w.url) && AIS.photos !== "off") return `<div class="ph" data-ph="${r.id}"><img src="${esc(w.url)}" alt="Photo : ${esc(r.n)}" loading="lazy" referrerpolicy="no-referrer"><span class="cred">${esc(cleanBy(w.by))} · ${esc(w.lic)}</span></div>`;
-  if ((w && w.none && AIS.photos !== "off") || r.col) return collage(r);
+  if (false && w && w.url) return `<div class="ph" data-ph="${r.id}"><img src="${esc(w.url)}" alt="Photo : ${esc(r.n)}" loading="lazy" referrerpolicy="no-referrer"><span class="cred">${esc(cleanBy(w.by))} · ${esc(w.lic)}</span></div>`;
   return `<div class="ph" data-ph="${r.id}">${Illus.svg(r)}</div>`;
 }
 // No good photo of the dish: show close-ups of what's in it (main protein + 2 main vegetables or starch)
@@ -3804,8 +3804,8 @@ async function runPhotos() {
 }
 // Ask for photos only for cards actually on screen (saves money)
 function hydratePhotos() {
-  if (AIS.photos === "off") return;
-  const want = (id) => (id.startsWith("ing:") ? wantWeb(id) : AIS.photos === "auto" ? wantPhoto(id) : wantWeb(id));
+  if (AIS.photos !== "auto") return; // Gemini photos come with the app; only "auto" makes the missing ones here
+  const want = (id) => (id.startsWith("ing:") ? null : wantPhoto(id));
   if (!photoObs && "IntersectionObserver" in window) photoObs = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { photoObs.unobserve(e.target); want(e.target.dataset.ph); } }), { rootMargin: "100px" });
   const skipRec = AIS.photos === "open" || (AIS.photos === "auto" && !AI.imageReady(AIS).length);
   document.querySelectorAll(".view.on [data-ph], #sheetIn [data-ph]").forEach((el) => { if (!el.querySelector("img") && photoObs && (el.dataset.ph.startsWith("ing:") || !skipRec)) photoObs.observe(el); });

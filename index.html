@@ -1835,9 +1835,9 @@ const toast = (t, ms) => { const el = $("#toast"); el.textContent = t; el.style.
 // ---------- derived data ----------
 function allSpecials() {
   // the store filters apply to every source (flyers read by the AI too): frozen chopped spinach is not baby spinach
-  const dw = dropWeek(), dm = dw ? Object.keys(dw.mags) : [];
+  const dw = dropWeek(), dm = dropMags();
   const base = (SPEC ? SPEC.items : []).filter((x) => !Flipp.excluded(x.ing, x.txt) && !dm.includes(x.mag));
-  const dropped = dw ? dw.items.filter((x) => !Flipp.excluded(x.ing, x.txt)) : [];
+  const dropped = dw ? dw.items.filter((x) => dm.includes(x.mag) && !Flipp.excluded(x.ing, x.txt)) : [];
   const now = today(); // local date (UTC was already tomorrow every evening after 19 h)
   const mine = S.extra.filter((x) => !x.fin || x.fin >= now);
   return base.concat(dropped, mine, costcoSpecials());
@@ -4275,6 +4275,8 @@ function flyerState() {
   const dm = dropMags();
   if (dm.length) {
     const miss = S.reg.stores.filter((st) => st !== "Costco" && L.STORES.includes(st) && !dm.includes(st));
+    const n = new Date(), h = n.getHours() + n.getMinutes() / 60;
+    if (miss.length && n.getDay() === 4 && h < 21) return { ok: false, lvl: "info", txt: `Circulaires déposées à la main : ${dm.join(", ")}. Les autres arrivent avec le téléchargement de jeudi ${h < 12.5 ? "midi" : "20 h"}` };
     return miss.length ? { ok: false, lvl: "info", drop: 1, txt: `Circulaires déposées à la main : ${dm.join(", ")}. Pas encore déposées : ${miss.join(", ")}` } : { ok: true, txt: "" };
   }
   const n = new Date(), d = n.getDay(), h = n.getHours() + n.getMinutes() / 60;
@@ -4561,8 +4563,10 @@ async function pdfFlyerItems(url, ask, mag, parse) {
 const DROP_OK = /\.(pdf|png|jpe?g|webp|gif|bmp|txt|html?)$/i;
 let dropBusy = false, dropMsg = "";
 const dropWeek = (wk = weekKey()) => (S.drop || {})[wk] || null;
-const dropMags = (wk) => { const w = dropWeek(wk); return w ? Object.keys(w.mags) : []; };
-const dropWeekTxt = (wk) => { const w = dropWeek(wk); return w ? Object.entries(w.mags).map(([m, v]) => `${m} (${v.n})`).join(", ") : ""; };
+// a store the robot downloaded well this week (30 products or more) keeps the robot's flyer: the dropped one is the backup
+const robotHas = (mag) => !!(SPEC && SPEC.debut === weekKey() && SPEC.items.filter((x) => x.mag === mag).length >= 30);
+const dropMags = (wk) => { const w = dropWeek(wk); return w ? Object.keys(w.mags).filter((m) => (wk && wk !== weekKey()) || !robotHas(m)) : []; };
+const dropWeekTxt = (wk) => { const w = dropWeek(wk), use = dropMags(wk); return w ? Object.entries(w.mags).filter(([m]) => use.includes(m)).map(([m, v]) => `${m} (${v.n})`).join(", ") : ""; };
 const thuOf = (date) => { const d = new Date(date + "T12:00"); d.setDate(d.getDate() - ((d.getDay() + 3) % 7)); return d.toISOString().slice(0, 10); };
 const defDropWk = () => (new Date().getDay() === 3 ? addDays(weekKey(), 7) : weekKey()); // Wednesday: next week's flyers are already out
 function storeFromName(name) {
@@ -4583,7 +4587,7 @@ function dropCard() {
       <input type="file" id="dropFile" accept=".pdf,application/pdf,image/*,.txt,.html,.htm" multiple hidden>`
     : `<div class="dropz off">📥 Glisse la circulaire ici</div><p class="small" style="color:var(--red)">Il faut une clé d'IA pour lire une circulaire : ajoute ta clé Gemini (gratuite) dans « Intelligence artificielle » plus haut.</p>`}
     <p class="small" id="dropMsg" aria-live="polite">${esc(dropMsg)}</p>
-    ${kept.map((wk) => `<div class="small" style="margin-top:8px"><b>Déposées pour la semaine du ${frDate(wk)} au ${frDate(addDays(wk, 6))} :</b>${Object.entries(S.drop[wk].mags).map(([m, v]) => `<div class="xrow"><span>${esc(m)} · ${v.n} produit${v.n > 1 ? "s" : ""}${v.files && v.files.length ? ` <span class="mute">(${esc(v.files.slice(-3).join(", "))})</span>` : ""}</span><button class="btn sm" data-dropdel="${wk}|${esc(m)}" aria-label="Enlever">✕</button></div>`).join("")}</div>`).join("")}`;
+    ${kept.map((wk) => `<div class="small" style="margin-top:8px"><b>Déposées pour la semaine du ${frDate(wk)} au ${frDate(addDays(wk, 6))} :</b>${Object.entries(S.drop[wk].mags).map(([m, v]) => `<div class="xrow"><span>${esc(m)} · ${v.n} produit${v.n > 1 ? "s" : ""}${wk === weekKey() && robotHas(m) ? " · pas utilisée : le téléchargement l'a bien eue" : ""}${v.files && v.files.length ? ` <span class="mute">(${esc(v.files.slice(-3).join(", "))})</span>` : ""}</span><button class="btn sm" data-dropdel="${wk}|${esc(m)}" aria-label="Enlever">✕</button></div>`).join("")}</div>`).join("")}`;
 }
 function setDropMsg(t) { dropMsg = t; const el = $("#dropMsg"); if (el) el.textContent = t; }
 function cropBlob(c, box) {

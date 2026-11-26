@@ -1606,7 +1606,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
     return Object.values(best).map((b) => b.x);
   }
 
-  const api = { STORES, REGIONS, distKm, nearestRegion, TERMS: T, norm, matches, search, collect, sizeOf, toItems, pretty, bestPerStore, LB, applyDetail, excluded, addDetails };
+  const api = { STORES, REGIONS, distKm, nearestRegion, TERMS: T, norm, matches, search, collect, sizeOf, toItems, pretty, bestPerStore, LB, applyDetail, excluded, addDetails, PACK };
   if (typeof module === "object" && module.exports) module.exports = api;
   api.perLbNotKg = perLbNotKg;
   root.Flipp = api;
@@ -4679,17 +4679,19 @@ function dropNormalize(list) {
     let ing = a.ing && ING[a.ing] ? a.ing : null;
     if (ing && (Flipp.excluded(ing, x.txt) || !dropNameOk(ing, x.txt))) ing = null;
     if (!ing) return Object.assign(base, { ing: null, qte: a.qte, unite: a.unite });
-    const hasSize = /\d\s*(kg|g|ml|l|lb)\b/i.test(x.txt), hasCount = /\b\d+\s*(un\b|unités?|x\b)/i.test(x.txt), one = Number(a.qte) === 1;
-    let name = x.txt;
+    // "8/440 ml" = 8 cans of 440 ml; "22 slices" = 22 pieces
+    let name = String(x.txt).replace(/\b(\d+)\s*\/\s*(\d+(?:[.,]\d+)?)\s*(ml|l|g)\b/i, "$1 x $2 $3").replace(/\b(\d+)\s*(?:slices|tranches)\b/i, "$1 un.");
+    const hasSize = /\d\s*(kg|g|ml|l|lb)\b/i.test(name), hasCount = /\b\d+\s*(un\b|unités?|x\b)/i.test(name), one = Number(a.qte) === 1;
     if (!hasSize && ["g", "kg", "ml", "L"].includes(a.unite) && !(a.unite === "kg" && one)) name += ` ${a.qte} ${a.unite === "L" ? "l" : a.unite}`;
     if (!hasSize && a.unite === "lb" && !one) name += ` ${a.qte} lb`;
     if (!hasCount && !hasSize && a.unite === "u" && a.qte > 1) name += ` ${a.qte} un.`;
-    const r = { ing, mag: x.mag, prix: x.prix, name, pre: a.unite === "u" && a.qte > 1 && hasSize && !/\d\s*[x×]\s*\d/i.test(x.txt) && !hasCount ? `${a.qte} pour` : "", post: one && a.unite === "lb" ? "/lb" : one && a.unite === "kg" ? "/kg" : "", orig: x.reg || 0 };
+    const r = { ing, mag: x.mag, prix: x.prix, name, pre: a.unite === "u" && a.qte > 1 && hasSize && !/\d\s*[x×]\s*\d/i.test(name) && !hasCount ? `${a.qte} pour` : "", post: one && a.unite === "lb" ? "/lb" : one && a.unite === "kg" ? "/kg" : "", orig: x.reg || 0 };
     let res = null; try { res = Flipp.toItems([r], ING, { guess: true }); } catch (e) {}
     const eggs = ing === "oeufs" && Flipp.norm(x.txt).match(/(?:^| )(6|12|18|24|30|36)(?: |$)(?!g|ml)/);
     if (eggs) return Object.assign(base, { ing, qte: Number(eggs[1]), unite: "u" }); // "œufs blancs 30 calibre gros": a box of 30
     if (res && res.items.length) { const it = res.items[0]; return Object.assign(base, { ing, qte: it.qte, unite: it.unite }, it.pack ? { pack: it.pack } : {}, it.guess ? { guess: true } : {}); }
-    const u = ING[ing].u;
+    const u = ING[ing].u, pk = (Flipp.PACK || {})[ing];
+    if (pk && u === "u" && a.unite === "u" && hasSize && !hasCount) return Object.assign(base, { ing, qte: a.qte * pk, unite: "u", guess: true }); // 2 loaves of 650 g = about 40 slices
     if (fam[u] && fam[u].includes(a.unite) && !(u === "u" && a.unite === "u" && one && hasSize)) return Object.assign(base, { ing, qte: a.qte, unite: a.unite });
     return Object.assign(base, { ing: null, qte: a.qte, unite: a.unite }); // size not usable for this ingredient: shown, but not used in recipes
   });
@@ -4871,9 +4873,9 @@ async function robotWebHistory() {
 // One-time cleanup (v3.13.40): wrong products had been read on the sites (plant-based butter, mixed ground meat, prepared foods)
 // One-time fix (v3.13.46): the two receipts of 2026-11-22 had been counted too low. Real amounts: Super C 167,20 $ and IGA 98,74 $.
 function dropFix1126() {
-  if (S.dropFixV === 2) return;
+  if (S.dropFixV === 3) return;
   for (const w of Object.values(S.drop || {})) if (Array.isArray(w.items)) w.items = dropNormalize(w.items);
-  S.dropFixV = 2; rankCache = null; save(false);
+  S.dropFixV = 3; rankCache = null; save(false);
 }
 function receiptFix1122() {
   if (S.fixRecu1122 === 1) return;

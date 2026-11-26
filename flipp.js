@@ -416,7 +416,7 @@
     return Object.values(best).map((b) => b.x);
   }
 
-  const api = { STORES, REGIONS, distKm, nearestRegion, TERMS: T, norm, matches, search, collect, sizeOf, toItems, pretty, bestPerStore, LB, applyDetail, excluded, addDetails };
+  const api = { STORES, REGIONS, distKm, nearestRegion, TERMS: T, norm, matches, search, collect, sizeOf, toItems, pretty, bestPerStore, LB, applyDetail, excluded, addDetails, PACK };
   if (typeof module === "object" && module.exports) module.exports = api;
   root.Flipp = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

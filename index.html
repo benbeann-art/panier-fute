@@ -2879,7 +2879,7 @@ function renderSugg() {
   if (!t) { el.innerHTML = ""; return; }
   const list = suggest(t);
   el.innerHTML = `<p class="small mute" style="margin:6px 0 4px">${list.length ? "Touche le bon article :" : "Rien de pareil dans la liste d'articles."}</p>` +
-    list.map((c) => { const b = bestFor(c.id); return `<button class="sug" data-addk="${c.id}"><span>${esc(c.n)}</span><span class="small">${b ? `≈ ${L.FR(b.price)} $${b.mag ? ` chez ${esc(b.mag)} <span class="tag mini ${b.cote >= 8 ? "hot" : ""}">${b.cote}</span>` : ""}` : ""}</span></button>`; }).join("") +
+    list.map((c) => { const b = bestFor(c.id); return `<button class="sug" data-addk="${c.id}"><span>${esc(c.n)}</span><span class="small">${b ? `≈ ${L.FR(b.price)} $${b.mag ? ` chez ${esc(b.mag)} <span class="tag mini ${b.cote >= 8 ? "hot" : ""}">${noteTxt(b.cote)}</span>` : ""}` : ""}</span></button>`; }).join("") +
     (aiOn() ? `<button class="sug" data-addai="1" style="border-color:var(--red)"><span>Demander à l'IA : « ${esc(t)} »</span><span class="small mute">elle trouve le prix et le magasin</span></button>` : "") +
     `<button class="sug" data-addc="1"><span>Ajouter « ${esc(t)} » tel quel</span><span class="small mute">prix à entrer</span></button>`;
 }
@@ -2929,7 +2929,7 @@ function rList() {
     return `<button class="item ${done ? "done" : ""}" data-ck="${it.id}" aria-pressed="${done}">
       <span class="bx">${done ? "✓" : ""}</span>
       <span><span class="nm">${esc(ing.n)}</span><span class="q">${L.fmtQty(ing, it.buy)}${it.partial ? ` (il en manque; tu en as déjà ${L.fmtQty(ing, it.partial)})` : ""}${packTxt(it.id, a)}${done ? " · " + esc(a.mag) : ""}</span></span>
-      <span class="p">${a.sp ? `<span class="tag mini ${noteCls(a.sp.cote)}">${a.sp.cote}</span> ` : ""}${a.cost >= 0.5 ? "≈ " + L.FR(a.cost) + " $" : ""}</span></button>`;
+      <span class="p">${a.sp ? `<span class="tag mini ${noteCls(a.sp.cote)}">${noteTxt(a.sp.cote)}</span> ` : ""}${a.cost >= 0.5 ? "≈ " + L.FR(a.cost) + " $" : ""}</span></button>`;
   };
   const todo = list.filter((it) => !S.coches[it.id]);
   const done = list.filter((it) => S.coches[it.id]);
@@ -3106,6 +3106,7 @@ function notRealTxt(sp) {
   const low = ref, red = pu > ref.p * 1.1;
   return `<b style="color:${red ? "#d4241b" : "#c4500f"}">${red ? "Plus cher que le prix normal" : "Pas un vrai spécial"}</b> : ${low.s === sp.mag ? "c'est son prix habituel" : `${esc(low.s)} ≈ ${perUnitTxt(ing, low.p)} tous les jours (prix normal)`}`;
 }
+const noteTxt = (v) => (v == null || v === "" ? "–" : v);
 const noteCls = (v) => v == null || v === "" ? "c-n" : v >= 8 ? "c-g" : v >= 5 ? "c-y" : v >= 1 ? "c-o" : "c-r";
 const COTE_LEG = `<span class="leg"><span class="tag mini c-g">8-10</span> bon achat <span class="tag mini c-y">5-7</span> correct <span class="tag mini c-o">1-4</span> pas un vrai spécial <span class="tag mini c-r">0</span> plus cher que le prix normal</span>`;
 const CUIS = ["Québécois", "Italien", "Français", "Américain", "Mexicain", "Asiatique", "Monde"];
@@ -3254,7 +3255,7 @@ function recCard(r, mine, you) {
     return `<article class="rec"><button class="pic" data-open="${r.id}" aria-label="Voir la recette">${pic(r)}</button><button class="nm" data-open="${r.id}">${esc(r.n)}</button>
       <div class="chips">${r.ia ? `<span class="chip sp">Nouvelle (IA)</span>` : ""}${S.aime[r.id] === 1 ? `<span class="chip">J'aime</span>` : ""}<span class="chip">${esc(r.c)}</span><span class="chip">Lunch : ${LUNCH[r.l][0]}</span><span class="chip">${fmtTime(r.t)}</span>${kcalChip(r)}${you ? youChip(r) : ""}
       ${mine.map((n) => `<span class="chip" style="background:var(--red);color:#fff;border-color:var(--red)">✓ ${esc(n)}</span>`).join("")}
-      ${s.hits.filter((h) => !mine.includes(ING[h.id].n.split(" (")[0])).slice(0, 3).map((h) => `<span class="chip sp">${esc(ING[h.id].n.split(" (")[0])} ${h.cote}/10</span>`).join("")}</div>
+      ${s.hits.filter((h) => !mine.includes(ING[h.id].n.split(" (")[0])).slice(0, 3).map((h) => `<span class="chip sp">${esc(ING[h.id].n.split(" (")[0])} ${noteTxt(h.cote)}/10</span>`).join("")}</div>
       <div class="foot"><span class="small">${s.save > 0.5 ? `<span class="save">−${L.FR(s.save, 0)} $</span> avec les spéciaux` : `<span class="mute">Pas de spécial</span>`}</span>
       <button class="btn sm ${on ? "" : "red"}" data-tg="${r.id}">${on ? "✓ Dans ma liste" : "+ Ajouter"}</button></div></article>`;
 }
@@ -3450,7 +3451,7 @@ function openRec(id) {
     ${(() => { const n = nutrition(r), x = kcalOf(r); return `<p class="small" style="margin:10px 0 0"><b>Par portion (environ) :</b> ${Math.round(n.kcal / 10) * 10} calories · ${Math.round(n.prot)} g de protéines${x.w && !r.col ? ` · une assiette d'environ ${x.w} g` : ""}${isMince(r) ? ` <span class="chip" style="background:#e3f4e6;border-color:#2e8b47;color:#1d6332">Minceur</span>` : ""}</p>`; })()}
     <button class="btn red" id="cookGo" style="margin-top:12px;width:100%">Mode cuisine pas à pas</button>
     <h3 style="margin:22px 0 4px;font-weight:900">Ingrédients</h3>
-    <ul class="ings">${lines.map(([k, q, isAj]) => { const sp = ix[k]; return `<li><span>${esc(ING[k].n)}${sp ? ` <span class="tag mini ${noteCls(sp[0].cote)}">${sp[0].cote}</span> <span class="small mute">${esc(sp[0].mag)}</span>` : ""}</span><span class="q">${L.fmtQty(ING[k], q, true)}${isAj ? ` <span class="chip sp">IA</span>` : ""}</span></li>`; }).join("")}</ul>
+    <ul class="ings">${lines.map(([k, q, isAj]) => { const sp = ix[k]; return `<li><span>${esc(ING[k].n)}${sp ? ` <span class="tag mini ${noteCls(sp[0].cote)}">${noteTxt(sp[0].cote)}</span> <span class="small mute">${esc(sp[0].mag)}</span>` : ""}</span><span class="q">${L.fmtQty(ING[k], q, true)}${isAj ? ` <span class="chip sp">IA</span>` : ""}</span></li>`; }).join("")}</ul>
     <h3 style="margin:22px 0 4px;font-weight:900">Étapes</h3>
     <p class="small mute" style="margin:0 0 8px">${r.col ? "Les étapes sont écrites pour 12 collations ; les quantités entre parenthèses suivent ton nombre de collations." : "Les étapes sont écrites pour 12 portions ; pour une plus grosse recette, prends une plus grande casserole ou cuis en 2 fois."}</p>
     <div class="row" style="margin:0 0 8px"><label class="chk"><input type="checkbox" id="awake" ${wakeOn ? "checked" : ""}>Garder l'écran allumé pendant que je cuisine</label></div>
@@ -3483,7 +3484,7 @@ function rCol() {
   const card = (x) => { const r = x.r, on = S.col.includes(r.id);
     return `<article class="rec"><button class="pic" data-open="${r.id}" aria-label="Voir la collation">${pic(r)}</button><button class="nm" data-open="${r.id}">${esc(r.n)}</button>
       <div class="chips"><span class="chip">${esc(r.sc)}</span><span class="chip">${fmtTime(r.t)}</span>${(r.g || []).includes("a_l_avance") ? `<span class="chip">À faire d'avance</span>` : ""}
-      ${x.h.slice(0, 3).map((h) => `<span class="chip sp">${esc(ING[h.k].n.split(" (")[0])} ${h.sp.cote}/10 · ${esc(h.sp.mag)}</span>`).join("")}</div>
+      ${x.h.slice(0, 3).map((h) => `<span class="chip sp">${esc(ING[h.k].n.split(" (")[0])} ${noteTxt(h.sp.cote)}/10 · ${esc(h.sp.mag)}</span>`).join("")}</div>
       <p class="small mute" style="margin:6px 0 0">${esc(r.keep || "")}</p>
       <div class="foot"><span class="small">${x.s.save > 0.3 ? `<span class="save">−${L.FR(x.s.save, 2)} $</span> avec les spéciaux` : x.h.length ? `<span class="save">En spécial</span>` : `<span class="mute">Pas de spécial</span>`}</span>
       <span class="row" style="gap:6px"><button class="btn sm" data-colhide="${r.id}" title="Ne plus me la proposer">Enlever</button>
@@ -4995,7 +4996,7 @@ function keepIA(id) {
 async function iaGenerate(silent) {
   const msg = silent ? null : $("#iaMsg");
   if (msg) msg.textContent = "L'IA cuisine des idées…";
-  const best = Object.entries(rankCache ? rankCache.ix : idx()).map(([k, v]) => `${ING[k].n} (${v[0].mag}, cote ${v[0].cote}/10)`).slice(0, 25).join("; ");
+  const best = Object.entries(rankCache ? rankCache.ix : idx()).map(([k, v]) => `${ING[k].n} (${v[0].mag}, cote ${noteTxt(v[0].cote)}/10)`).slice(0, 25).join("; ");
   const prompt = `Invente 4 NOUVELLES recettes de souper pour une famille québécoise, qui se réchauffent bien pour le lunch (micro-ondes ou thermos) ou se mangent froides.
 Goûts de la famille : ${S.gouts || "(non précisés)"}
 ${banText() ? `INTERDIT (allergies ou interdits, aucun de ces aliments ni ingrédients qui en contiennent) : ${banText()}.` : ""}

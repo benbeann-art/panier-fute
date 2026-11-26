@@ -43,8 +43,9 @@ jobs:
         id: when
         run: |
           H=$(TZ=America/Toronto date +%H)
-          echo "try=$([ "$H" -ge 18 ] && echo soir || echo midi)" >> "$GITHUB_OUTPUT"
-          if [ "${{ github.event_name }}" = "schedule" ] && [ "$H" != "12" ] && [ "$H" != "20" ]; then echo "Pas la bonne heure ($H h)"; echo "skip=1" >> "$GITHUB_OUTPUT"; exit 0; fi
+          echo "try=$([ "$H" -ge 20 ] && echo soir || echo midi)" >> "$GITHUB_OUTPUT"
+          # GitHub often starts scheduled runs late: noon try = 12 h to 17 h, evening try = 20 h to 23 h (Montreal time)
+          if [ "${{ github.event_name }}" = "schedule" ] && ! { [ "$H" -ge 12 ] && [ "$H" -le 17 ]; } && ! { [ "$H" -ge 20 ] && [ "$H" -le 23 ]; }; then echo "Pas la bonne heure ($H h)"; echo "skip=1" >> "$GITHUB_OUTPUT"; exit 0; fi
           DONE=$(node -e '
             const d=new Date(new Date().toLocaleString("en-US",{timeZone:"America/Toronto"}));d.setDate(d.getDate()-(d.getDay()+3)%7);
             const wk=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");

@@ -138,6 +138,7 @@
     sauce_tomate: ["sauce tomate", ["passata|sauce tomate|sauce tomates|coulis de tomate|tomates tamisees"], ["pizza", "pates", "spaghetti", "viande", "boulette", "ketchup", "soupe"]],
     pate_tomate: ["pâte de tomate", ["pate de tomate|pate de tomates|concentre de tomate"], ["sauce", "pizza"]],
     bouillon_poulet: ["bouillon de poulet", ["bouillon", "poulet"], ["cube", "poudre", "soupe aux nouilles", "nouille", "base", "cubes", "concentre en"]],
+    bouillon_legumes: ["bouillon de légumes", ["bouillon", "legume"], ["cube", "poudre", "soupe", "nouille", "base", "cubes", "concentre en", "poulet", "boeuf"]],
     // snacks, coffee, nuts and drinks (not in recipes): compared between stores per 100 g / per litre (Costco too)
     k_chips: ["croustilles", ["croustille|chips|ruffles|lays|doritos|miss vickie|kettle chips|croustilles kettle|pringles|old dutch"], ["tortilla", "bagel", "pita", "pomme", "legume", "trempette", "salsa", "chocolat", "bonbon"]],
     k_chocolat: ["chocolat", ["chocolat|lindt|lindor|godiva|ferrero|toblerone|cadbury|hershey|kinder"], ["lait au chocolat", "boisson", "cereale", "biscuit", "gateau", "muffin", "pouding", "glace", "lait", "croissant", "chaud", "tartinade", "nutella", "barre tendre", "granola", "pepite", "brisure", "cuisson", "fondue", "patisserie"]],

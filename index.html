@@ -4658,6 +4658,38 @@ Prix membre : si un prix pour tout le monde est aussi écrit, prends celui-là ;
 Réponds UNIQUEMENT par un objet JSON : {"magasin":"nom de l'épicerie d'après le logo ou le texte, sinon null","debut":"premier jour de la circulaire (AAAA-MM-JJ) s'il est écrit, sinon null","items":[{"ing":"id ou null","prix":3.99,"qte":1,"unite":"lb|kg|g|ml|L|u","txt":"nom court + format","reg":0${part.canvas ? ',"box":[0,0,0,0]' : ""}}]}
 ("reg" = prix régulier s'il est écrit, sinon 0${part.canvas ? ` ; "box" = [ymin,xmin,ymax,xmax], le rectangle (de 0 à 1000) qui entoure la photo et le prix du produit sur l'image` : ""})${part.text ? `\n\nTexte de la page (aide pour les petits caractères ; les prix doivent venir de la circulaire) :\n${part.text}` : ""}`;
 }
+// AI-read lines go through the robot's own rules: sizes written in the name ("650 g", "sac 3 lb", "12 un."), bags of fruit counted,
+// and a product the store filters reject for that ingredient ("beurre d'arachide" is not butter) keeps no ingredient. The AI's reading is kept in x.ai.
+// the product's main word must be in the name (the AI put "mangue rouge" on tomatoes and "canard entier" on whole chicken)
+function dropNameOk(id, txt) {
+  const t = Flipp.TERMS[id]; if (!t || !t[1] || !t[1].length) return true;
+  const all = " " + Flipp.norm(txt) + " ";
+  return String(t[1][0]).split("|").some((w) => (w.startsWith("=") ? all.includes(" " + w.slice(1) + " ") || all.includes(" " + w.slice(1) + "s ") : all.includes(w)));
+}
+function dropNormalize(list) {
+  const fam = { g: ["g", "kg", "lb"], ml: ["ml", "L"], u: ["u"] };
+  return list.map((x) => {
+    const a = x.ai || { ing: x.ing, qte: x.qte, unite: x.unite };
+    const base = Object.assign({}, x, { ai: a });
+    delete base.pack; delete base.guess;
+    let ing = a.ing && ING[a.ing] ? a.ing : null;
+    if (ing && (Flipp.excluded(ing, x.txt) || !dropNameOk(ing, x.txt))) ing = null;
+    if (!ing) return Object.assign(base, { ing: null, qte: a.qte, unite: a.unite });
+    const hasSize = /\d\s*(kg|g|ml|l|lb)\b/i.test(x.txt), hasCount = /\b\d+\s*(un\b|unités?|x\b)/i.test(x.txt), one = Number(a.qte) === 1;
+    let name = x.txt;
+    if (!hasSize && ["g", "kg", "ml", "L"].includes(a.unite) && !(a.unite === "kg" && one)) name += ` ${a.qte} ${a.unite === "L" ? "l" : a.unite}`;
+    if (!hasSize && a.unite === "lb" && !one) name += ` ${a.qte} lb`;
+    if (!hasCount && !hasSize && a.unite === "u" && a.qte > 1) name += ` ${a.qte} un.`;
+    const r = { ing, mag: x.mag, prix: x.prix, name, pre: a.unite === "u" && a.qte > 1 && hasSize ? `${a.qte} pour` : "", post: one && a.unite === "lb" ? "/lb" : one && a.unite === "kg" ? "/kg" : "", orig: x.reg || 0 };
+    let res = null; try { res = Flipp.toItems([r], ING, { guess: true }); } catch (e) {}
+    const eggs = ing === "oeufs" && Flipp.norm(x.txt).match(/(?:^| )(6|12|18|24|30|36)(?: |$)(?!g|ml)/);
+    if (eggs) return Object.assign(base, { ing, qte: Number(eggs[1]), unite: "u" }); // "œufs blancs 30 calibre gros": a box of 30
+    if (res && res.items.length) { const it = res.items[0]; return Object.assign(base, { ing, qte: it.qte, unite: it.unite }, it.pack ? { pack: it.pack } : {}, it.guess ? { guess: true } : {}); }
+    const u = ING[ing].u;
+    if (fam[u] && fam[u].includes(a.unite) && !(u === "u" && a.unite === "u" && one && hasSize)) return Object.assign(base, { ing, qte: a.qte, unite: a.unite });
+    return Object.assign(base, { ing: null, qte: a.qte, unite: a.unite }); // size not usable for this ingredient: shown, but not used in recipes
+  });
+}
 // Save as we go: every page read is kept right away (closing the app or a quota stop loses nothing; dropping the file again goes on where it stopped)
 function dropCommit(wk, items) {
   S.drop = S.drop || {};
@@ -4713,7 +4745,7 @@ async function readDropped(files) {
           }
           its.push(it);
         }
-        const known = its.filter((x) => x.mag !== "?"); pending.push(...its.filter((x) => x.mag === "?"));
+        const known = dropNormalize(its.filter((x) => x.mag !== "?")); pending.push(...its.filter((x) => x.mag === "?"));
         const r = dropCommit(wk, known); total += r.n; dup += r.dup; known.forEach((x) => mags.add(x.mag)); if (r.n && wk > weekKey()) later.add(wk);
         if (its.some((x) => x.mag === "?")) pendKeys.push(part.key); else { doneHere.add(part.key); S.dropDone[fid] = { wk, parts: [...doneHere] }; } save(false);
       };
@@ -4735,7 +4767,7 @@ async function readDropped(files) {
       }
       // parts read before the store was known (no logo on them): they get the store found in the same file
       if (pending.length) {
-        if (mag) { pending.forEach((it) => (it.mag = mag)); const r = dropCommit(wk, pending); total += r.n; dup += r.dup; mags.add(mag); if (r.n && wk > weekKey()) later.add(wk); pendKeys.forEach((k) => doneHere.add(k)); S.dropDone[fid] = { wk, parts: [...doneHere] }; }
+        if (mag) { pending.forEach((it) => (it.mag = mag)); const r = dropCommit(wk, dropNormalize(pending)); total += r.n; dup += r.dup; mags.add(mag); if (r.n && wk > weekKey()) later.add(wk); pendKeys.forEach((k) => doneHere.add(k)); S.dropDone[fid] = { wk, parts: [...doneHere] }; }
         else noStore += pending.length;
       }
       if (mag && S.drop && S.drop[wk] && S.drop[wk].mags[mag] && !S.drop[wk].mags[mag].files.includes(f.name.slice(0, 60))) S.drop[wk].mags[mag].files.push(f.name.slice(0, 60));
@@ -4834,6 +4866,11 @@ async function robotWebHistory() {
 // Everyday prices read on the Maxi and Provigo websites: those two stores' own prices, and the normal price for the other stores
 // One-time cleanup (v3.13.40): wrong products had been read on the sites (plant-based butter, mixed ground meat, prepared foods)
 // One-time fix (v3.13.46): the two receipts of 2026-11-22 had been counted too low. Real amounts: Super C 167,20 $ and IGA 98,74 $.
+function dropFix1126() {
+  if (S.dropFixV === 1) return;
+  for (const w of Object.values(S.drop || {})) if (Array.isArray(w.items)) w.items = dropNormalize(w.items);
+  S.dropFixV = 1; rankCache = null; save(false);
+}
 function receiptFix1122() {
   if (S.fixRecu1122 === 1) return;
   S.depenses = S.depenses || [];
@@ -5184,7 +5221,7 @@ async function weeklyAuto() {
   try { await topUpSnackSpecials(); } catch (e) {}
   try { await ensureCoords(); await loadRegistry(); addNearCustom(); } catch (e) {}
   try { await robotHistory(); } catch (e) {}
-  try { siteFix(); receiptFix1122(); await robotWebHistory(); } catch (e) {}
+  try { siteFix(); receiptFix1122(); dropFix1126(); await robotWebHistory(); } catch (e) {}
   try { await robotSitePrices(); } catch (e) {}
   if (aiOn() && SPEC && nearCustom().length) { try { await mergeCustom(); } catch (e) {} }
   if (aiOn() && SPEC && S.reg.stores.includes("Bonanza") && !(S.bonanza && S.bonanza.v === 2 && S.bonanza.date >= addDays(today(), -6) && SPEC.items.some((x) => x.mag === "Bonanza"))) { try { await mergeBonanza(false); } catch (e) {} }

@@ -1749,9 +1749,15 @@ async function saveIAShared(r) {
   if (!dbAPI || !isOwner || !r || !r.id) return;
   try { await dbAPI.doc("recettes_ia/" + r.id.replace(/[^a-zA-Z0-9_.~:@+-]/g, "-")).set(JSON.parse(JSON.stringify(r))); } catch (e) {}
 }
+// The phone/browser keeps about 5 MB: when it is full, the photo search cache gives its room back so my data is always saved
+function lsSet(k, v) {
+  try { localStorage.setItem(k, v); return true; } catch (e) {}
+  try { if (typeof slimWeb === "function") slimWeb(true); localStorage.setItem(k, v); return true; } catch (e) {}
+  try { localStorage.removeItem("panierfute.webphotos3"); localStorage.setItem(k, v); return true; } catch (e) { return false; }
+}
 function save(sync = true) {
   if (sync) S.t = Date.now(); // only real changes count for the phone <-> computer sync
-  try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {}
+  lsSet(KEY, JSON.stringify(S));
   if (sync && Sync.on()) { clearTimeout(saveTimer); saveTimer = setTimeout(() => syncNow(), 2500); }
 }
 // ---------- phone <-> computer sync (private GitHub Gist) ----------
@@ -1796,12 +1802,12 @@ async function syncNow(manual) {
       if (changedHere) { S.t = Date.now(); await Sync.push(shared()); for (const k in pendingCk) delete pendingCk[k]; syncState = "Fusionné avec l'autre appareil"; }
       else syncState = "Reçu de l'autre appareil";
       S.base = S.t;
-      try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {}
+      lsSet(KEY, JSON.stringify(S));
       render(S.view); if (S.open) openRec(S.open);
     } else if (!remote || (S.t || 0) > (remote.t || 0)) {
       await Sync.push(shared());
       for (const k in pendingCk) delete pendingCk[k];
-      S.base = S.t; try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {}
+      S.base = S.t; lsSet(KEY, JSON.stringify(S));
       syncState = "Envoyé";
     } else { S.base = remote.t; syncState = "À jour"; }
     if (manual) toast("Synchro : " + syncState.toLowerCase());
@@ -3597,7 +3603,19 @@ Réponds UNIQUEMENT par un tableau JSON : [{"ing":"id ou null","mag":"magasin","
 const WKEY = "panierfute.webphotos3"; try { localStorage.removeItem("panierfute.webphotos"); localStorage.removeItem("panierfute.webphotos2"); } catch (e) {}
 let WEB = {};
 try { WEB = JSON.parse(localStorage.getItem(WKEY) || "{}"); } catch (e) {}
-const saveWeb = () => { try { localStorage.setItem(WKEY, JSON.stringify(WEB)); } catch (e) {} };
+// the photo cache only keeps a few spare photos per recipe, without the tracking part of the links (it had grown to 4.5 MB)
+const cleanUrl = (u) => String(u || "").replace(/\?utm_[^#]*$/, "");
+function slimWeb(hard) {
+  for (const w of Object.values(WEB)) {
+    if (!w || typeof w !== "object") continue;
+    if (w.url) w.url = cleanUrl(w.url);
+    if (Array.isArray(w.list)) { const i = Number(w.i) || 0; w.list = hard ? [] : w.list.slice(0, Math.max(5, i + 1)).map((x) => ({ url: cleanUrl(x.url), page: x.page, by: x.by, lic: x.lic })); if (hard) w.i = 0; }
+    if (Array.isArray(w.bad) && w.bad.length > 20) w.bad = w.bad.slice(-20);
+  }
+  try { localStorage.setItem(WKEY, JSON.stringify(WEB)); } catch (e) {}
+}
+if (!localStorage.getItem("panierfute.webslim")) { slimWeb(false); try { localStorage.setItem("panierfute.webslim", "1"); } catch (e) {} }
+const saveWeb = () => { if (!lsSet(WKEY, JSON.stringify(WEB))) {} };
 const EN_P = { poulet: "chicken", boeuf: "beef", porc: "pork", cotes: "pork", crevettes: "shrimp", saumon: "salmon", truite: "trout", tilapia: "fish",
   tofu: "tofu", lentilles: "lentil", pois: "chickpea", haricots: "black bean", saucisses: "sausage", dinde: "turkey", jambon: "ham", thon: "tuna", bacon: "bacon", oeufs: "egg" };
 const EN_K = { saute: "stir fry", cari: "curry", beurre_ch: "butter chicken", chili: "chili con carne", bolo: "spaghetti bolognese", alfredo: "creamy pasta",
@@ -3670,7 +3688,7 @@ async function commons(q) {
   const pages = Object.values((j.query && j.query.pages) || {}).sort((a, b) => (a.index || 0) - (b.index || 0));
   return pages.filter((p) => p.imageinfo && p.imageinfo[0] && p.imageinfo[0].thumburl).map((p) => {
     const m = p.imageinfo[0].extmetadata || {}, clean = (v) => String((v || {}).value || "").replace(/<[^>]+>/g, "").trim().slice(0, 60);
-    return { url: p.imageinfo[0].thumburl, page: p.imageinfo[0].descriptionurl, by: clean(m.Artist) || "Wikimedia Commons", lic: clean(m.LicenseShortName) || "licence libre", title: String(p.title || "").toLowerCase() };
+    return { url: cleanUrl(p.imageinfo[0].thumburl), page: p.imageinfo[0].descriptionurl, by: clean(m.Artist) || "Wikimedia Commons", lic: clean(m.LicenseShortName) || "licence libre", title: String(p.title || "").toLowerCase() };
   });
 }
 const webQ = []; let webBusy = false, webPauseUntil = 0;
@@ -3710,7 +3728,7 @@ async function runWeb() {
       if (!list.length) { WEB[id] = { none: true }; saveWeb(); if (!r.ingId && AIS.photos === "web" && AI.imageReady(AIS).length) wantPhoto(id); continue; }
       let i = next && old ? ((old.i || 0) + 1) % list.length : 0;
       if (!next && !r.ingId) { const used = usedUrls(id); const j = list.findIndex((x) => !used.has(x.url)); if (j >= 0) i = j; else { WEB[id] = { none: true }; saveWeb(); document.querySelectorAll(`[data-ph="${CSS.escape(id)}"]`).forEach((el) => (el.outerHTML = pic(r))); continue; } }
-      WEB[id] = Object.assign({}, list[i], { i, list: list.slice(0, 12).map((x) => ({ url: x.url, page: x.page, by: x.by, lic: x.lic })), bad: (old && old.bad) || [] });
+      WEB[id] = Object.assign({}, list[i], { url: cleanUrl(list[i].url), i, list: list.slice(0, Math.max(5, i + 1)).map((x) => ({ url: cleanUrl(x.url), page: x.page, by: x.by, lic: x.lic })), bad: (old && old.bad) || [] });
       delete WEB[id].title;
       saveWeb();
       document.querySelectorAll(`[data-ph="${CSS.escape(id)}"]`).forEach((el) => (el.outerHTML = r.ingId ? ingPic(r.ingId) : pic(r)));
@@ -4873,6 +4891,11 @@ async function robotWebHistory() {
 // One-time cleanup (v3.13.40): wrong products had been read on the sites (plant-based butter, mixed ground meat, prepared foods)
 // One-time fix (v3.13.46): the two receipts of 2026-11-22 had been counted too low. Real amounts: Super C 167,20 $ and IGA 98,74 $.
 function dropFix1126() {
+  // past weeks are over: their dropped flyers are removed at start-up (not only when a new flyer is dropped)
+  let gone = false;
+  for (const wk of Object.keys(S.drop || {})) if (wk < weekKey()) { delete S.drop[wk]; gone = true; }
+  for (const [fid, v] of Object.entries(S.dropDone || {})) if (!v || !v.wk || v.wk < weekKey()) { delete S.dropDone[fid]; gone = true; }
+  if (gone) save(false);
   if (S.dropFixV === 3) return;
   for (const w of Object.values(S.drop || {})) if (Array.isArray(w.items)) w.items = dropNormalize(w.items);
   S.dropFixV = 3; rankCache = null; save(false);

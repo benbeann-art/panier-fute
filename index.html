@@ -4684,7 +4684,7 @@ function dropNormalize(list) {
     if (!hasSize && ["g", "kg", "ml", "L"].includes(a.unite) && !(a.unite === "kg" && one)) name += ` ${a.qte} ${a.unite === "L" ? "l" : a.unite}`;
     if (!hasSize && a.unite === "lb" && !one) name += ` ${a.qte} lb`;
     if (!hasCount && !hasSize && a.unite === "u" && a.qte > 1) name += ` ${a.qte} un.`;
-    const r = { ing, mag: x.mag, prix: x.prix, name, pre: a.unite === "u" && a.qte > 1 && hasSize ? `${a.qte} pour` : "", post: one && a.unite === "lb" ? "/lb" : one && a.unite === "kg" ? "/kg" : "", orig: x.reg || 0 };
+    const r = { ing, mag: x.mag, prix: x.prix, name, pre: a.unite === "u" && a.qte > 1 && hasSize && !/\d\s*[x×]\s*\d/i.test(x.txt) && !hasCount ? `${a.qte} pour` : "", post: one && a.unite === "lb" ? "/lb" : one && a.unite === "kg" ? "/kg" : "", orig: x.reg || 0 };
     let res = null; try { res = Flipp.toItems([r], ING, { guess: true }); } catch (e) {}
     const eggs = ing === "oeufs" && Flipp.norm(x.txt).match(/(?:^| )(6|12|18|24|30|36)(?: |$)(?!g|ml)/);
     if (eggs) return Object.assign(base, { ing, qte: Number(eggs[1]), unite: "u" }); // "œufs blancs 30 calibre gros": a box of 30
@@ -4871,9 +4871,9 @@ async function robotWebHistory() {
 // One-time cleanup (v3.13.40): wrong products had been read on the sites (plant-based butter, mixed ground meat, prepared foods)
 // One-time fix (v3.13.46): the two receipts of 2026-11-22 had been counted too low. Real amounts: Super C 167,20 $ and IGA 98,74 $.
 function dropFix1126() {
-  if (S.dropFixV === 1) return;
+  if (S.dropFixV === 2) return;
   for (const w of Object.values(S.drop || {})) if (Array.isArray(w.items)) w.items = dropNormalize(w.items);
-  S.dropFixV = 1; rankCache = null; save(false);
+  S.dropFixV = 2; rankCache = null; save(false);
 }
 function receiptFix1122() {
   if (S.fixRecu1122 === 1) return;

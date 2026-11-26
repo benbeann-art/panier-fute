@@ -1170,9 +1170,32 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
   }
   function disconnect() { cfg = { token: "", gist: "", last: "" }; saveCfg(); }
 
+  // Pictures cut from a dropped flyer: a second private gist, read only when this device is missing them (the sync gist stays small)
+  const PFILE = "panierfute-photos-circulaires.json";
+  async function photoGist() {
+    if (cfg.pgist) return cfg.pgist;
+    for (let page = 1; page <= 5; page++) {
+      const list = await gh(`/gists?per_page=100&page=${page}`);
+      const f = list.find((g) => g.files && g.files[PFILE]);
+      if (f) { cfg.pgist = f.id; saveCfg(); return f.id; }
+      if (list.length < 100) break;
+    }
+    const g = await gh("/gists", { method: "POST", body: JSON.stringify({ description: "Panier futé - photos des circulaires déposées (ne pas effacer)", public: false, files: { [PFILE]: { content: "{}" } } }) });
+    cfg.pgist = g.id; saveCfg(); return g.id;
+  }
+  async function pullPhotos() {
+    const g = await gh("/gists/" + (await photoGist()));
+    const f = g.files && g.files[PFILE];
+    if (!f) return {};
+    let text = f.content;
+    if (f.truncated && f.raw_url) text = await (await fetch(f.raw_url)).text();
+    try { return JSON.parse(text) || {}; } catch (e) { return {}; }
+  }
+  async function pushPhotos(obj) { await gh("/gists/" + (await photoGist()), { method: "PATCH", body: JSON.stringify({ files: { [PFILE]: { content: JSON.stringify(obj) } } }) }); }
+
   // used by the shared store list (public gist owned by the app's owner)
   const api = (path, opt) => gh(path, opt);
-  root.Sync = { api, hasToken: () => !!cfg.token, connect, pull, push, disconnect, on: () => !!(cfg.token && cfg.gist), last: () => cfg.last };
+  root.Sync = { api, hasToken: () => !!cfg.token, connect, pull, push, disconnect, pullPhotos, pushPhotos, on: () => !!(cfg.token && cfg.gist), last: () => cfg.last };
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
@@ -1798,6 +1821,7 @@ async function syncNow(manual) {
         }
       }
       addIA(S.ia);
+      setTimeout(dropPhotosFetch, 1500); // a flyer dropped on the other device: get its pictures
       if (S.spec && S.spec.items && (!SPEC || S.spec.debut >= SPEC.debut)) SPEC = S.spec;
       S.menu = S.menu.filter((id) => BYID[id]);
       L.setHistory(S.hist); for (const ex of S.extras || []) ensureCustom(ex); applyRegPrices(); rankCache = null;
@@ -4808,7 +4832,47 @@ async function readDropped(files) {
   msg.push(...notes);
   dropMsg = msg.filter(Boolean).join(" ");
   if (S.view === "reglages") rReg(); else render(S.view);
-  if (total) toast(`${total} spéciaux ajoutés`, 3500);
+  if (total) { toast(`${total} spéciaux ajoutés`, 3500); setTimeout(dropPhotosShare, 1000); }
+}
+// ---------- Pictures of a dropped flyer on every device ----------
+// The device that read the flyer cut the product pictures; small copies (about 220 px) go to a private gist so the phone shows them too.
+const cropItems = () => [weekKey(), addDays(weekKey(), 7)].flatMap((wk) => ((dropWeek(wk) || {}).items || []).filter((x) => x.box && x.pdf).map((x) => [wk, cropKey(x)]));
+async function thumbURL(url) {
+  const b = await (await fetch(url)).blob(), bmp = await createImageBitmap(b), k = Math.min(1, 220 / Math.max(bmp.width, bmp.height)), c = document.createElement("canvas");
+  c.width = Math.max(1, Math.round(bmp.width * k)); c.height = Math.max(1, Math.round(bmp.height * k)); c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+  return c.toDataURL("image/jpeg", 0.72);
+}
+let cropSyncBusy = false;
+async function dropPhotosShare() {
+  if (!Sync.on() || cropSyncBusy) return;
+  const have = cropItems().filter(([, k]) => Photos.url(k));
+  if (!have.length) return;
+  const mark = have.length + ":" + have[0][1];
+  if (localStorage.getItem("panierfute.cropsent") === mark) return;
+  cropSyncBusy = true;
+  try {
+    const remote = await Sync.pullPhotos(), weeks = (remote && remote.weeks) || {};
+    for (const wk of Object.keys(weeks)) if (wk < weekKey()) delete weeks[wk];
+    let added = 0;
+    for (const [wk, k] of have) { const w = (weeks[wk] = weeks[wk] || {}); if (!w[k]) { try { w[k] = await thumbURL(Photos.url(k)); added++; } catch (e) {} } }
+    if (added) await Sync.pushPhotos({ weeks });
+    localStorage.setItem("panierfute.cropsent", mark);
+  } catch (e) {} finally { cropSyncBusy = false; }
+}
+async function dropPhotosFetch() {
+  if (!Sync.on() || cropSyncBusy) return;
+  const miss = cropItems().filter(([, k]) => !Photos.url(k));
+  if (!miss.length) return;
+  const mark = miss.length + ":" + miss[0][1], last = JSON.parse(localStorage.getItem("panierfute.cropgot") || "{}");
+  if (last.mark === mark && Date.now() - (last.at || 0) < 3 * 3600 * 1000) return; // not found a moment ago: try again later
+  cropSyncBusy = true;
+  let got = 0;
+  try {
+    const weeks = ((await Sync.pullPhotos()) || {}).weeks || {};
+    for (const [wk, k] of miss) { const d = (weeks[wk] || {})[k]; if (!d) continue; try { await Photos.put(k, await (await fetch(d)).blob(), true); got++; } catch (e) {} }
+  } catch (e) {} finally { cropSyncBusy = false; }
+  try { localStorage.setItem("panierfute.cropgot", JSON.stringify({ mark, at: Date.now() })); } catch (e) {}
+  if (got && (S.view === "speciaux" || S.view === "reglages")) render(S.view);
 }
 // ---------- Marché Bonanza Lalumière: its weekly flyer is 4 PDF pages on its own site; the AI reads them (no web search) ----------
 let bonBusy = false;
@@ -5648,7 +5712,7 @@ Promise.all([getJSON("recettes.json", window.DATA_RECETTES), getJSON("speciaux.j
 
     S.menu = S.menu.filter((id) => BYID[id] && !isCol(id)); S.mes = S.mes.filter((id) => BYID[id]); S.col = (S.col || []).filter((id) => BYID[id]);
     start();
-    Photos.loadAll().then((n) => { if (n) { render(S.view); if (S.open) openRec(S.open); } });
+    Photos.loadAll().then((n) => { if (n) { render(S.view); if (S.open) openRec(S.open); } setTimeout(() => dropPhotosShare().then(dropPhotosFetch), 4000); });
     fetch("photos/index.json", { cache: "no-cache" }).then((r) => (r.ok ? r.json() : [])).then((l) => { if (Array.isArray(l) && l.length) { REPO_PH = new Set(l); render(S.view); if (S.open) openRec(S.open); } }).catch(() => {});
     setTimeout(async () => { loadCostco(); await syncNow(); try { if (!S.costcoOff && !S.reg.stores.includes("Costco")) { S.reg.stores.push("Costco"); save(); render(S.view); } } catch (e) {}
       // v3.13.70: the flyers now also hold snacks, coffee, nuts and drinks: read this week's flyers again once

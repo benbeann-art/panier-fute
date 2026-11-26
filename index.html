@@ -2946,11 +2946,11 @@ function rList() {
     : `Un seul magasin : les autres ne te feraient pas sauver assez (au moins ${S.reg.pen} $) pour valoir le déplacement.`;
   $("#v-epicerie").innerHTML = `<h1>Liste d'épicerie</h1>
     ${addBox()}<p class="lead">${S.menu.length ? `Pour ${S.menu.length} recettes (quantités ajustées) ` : ""}${S.col.length ? `${S.menu.length ? "+ " : "Pour "}${S.col.length} sorte${S.col.length > 1 ? "s" : ""} de collations ` : ""}${S.extras.length ? `${S.menu.length ? "+ " : ""}${S.extras.length} article(s) ajouté(s) à la main. ` : ""} Touche un article quand tu l'as déjà à la maison ou qu'il est dans le panier : il descend en bas.</p>
-    <div class="sum"><div><span class="small mute">Où aller</span><b>${ch.stores.map(esc).join(" + ")}</b></div>
+    ${!todo.length && !checkItems.length ? "" : `<div class="sum"><div><span class="small mute">Où aller</span><b>${ch.stores.map(esc).join(" + ")}</b></div>
       <div><span class="small mute">Total de l'épicerie (avec taxes)</span><b>${L.FR(ch.cost + taxOf(list, ch))} $</b>${taxOf(list, ch) > 0 ? `<span class="small mute">dont ${L.FR(taxOf(list, ch))} $ de taxes</span>` : ""}</div>
       <div><span class="small mute">Sauvé grâce aux spéciaux</span><b style="color:var(--green)">${L.FR(Math.max(0, saved), 0)} $</b></div></div>
     ${list.length ? `<button class="btn" id="tripDone" style="width:100%;margin:4px 0 10px;min-height:48px">✓ J'ai fini mon épicerie</button>` : ""}
-    <p class="small mute">${why} Prix réguliers estimés (moyenne Montréal). Le prix est celui du format complet que tu paies au magasin (il te faut 200 ml d'un pot de 500 ml : c'est le prix du 500 ml), taxes comprises sur ce qui est taxable (collations, boissons, alcool, ménager).</p>
+    <p class="small mute">${why} Prix réguliers estimés (moyenne Montréal). Le prix est celui du format complet que tu paies au magasin (il te faut 200 ml d'un pot de 500 ml : c'est le prix du 500 ml), taxes comprises sur ce qui est taxable (collations, boissons, alcool, ménager).</p>`}
     ${checkItems.length ? `<div class="store"><h3 style="background:#b7791f"><span>À vérifier : tu en as à la maison</span><span class="small">${checkItems.length}</span></h3>
       <p class="small" style="margin:6px 2px">Ton inventaire dit que tu en as. Regarde si c'est assez pour la recette.</p>
       ${checkItems.map((it) => { const h = invHas(it.id), ing = ING[it.id], ix = rankCache ? rankCache.ix : {}, sp = (ix[it.id] || []).find((x) => S.reg.stores.includes(x.mag));

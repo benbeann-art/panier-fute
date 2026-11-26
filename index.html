@@ -4975,6 +4975,7 @@ let iaProps = [], iaAskBusy = false, iaAskText = "", iaAskMsg = "";
 async function iaAsk(text) {
   text = String(text || "").trim().slice(0, 300);
   if (!text || iaAskBusy) return;
+  if (!AI.ready(AIS).length) { iaAskMsg = "Ajoute ta clé Gemini dans Réglages (roue dentée) pour demander des recettes à l'IA."; return rRec(); }
   iaAskBusy = true; iaAskText = text; iaAskMsg = `${AI.PROVIDERS[AI.ready(AIS).includes(AIS.main) ? AIS.main : AI.ready(AIS)[0]].name} prépare des recettes…`; iaProps = []; rRec();
   const best = Object.entries(rankCache ? rankCache.ix : idx()).map(([k, v]) => `${ING[k].n} (${v[0].mag})`).slice(0, 20).join("; ");
   const prompt = `Une famille québécoise te demande : « ${text} ».

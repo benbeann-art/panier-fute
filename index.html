@@ -54,6 +54,9 @@ h2{font-weight:800;font-size:20px;margin:26px 0 10px;line-height:1.2}
 .tag.c-g{background:#1f9d4c;color:#fff}.tag.c-y{background:#f5c518;color:#151515}.tag.c-r{background:#d4241b;color:#fff}.tag.c-o{background:#f26a21;color:#fff}.tag.c-n{background:#9a958c;color:#fff}
 .leg{display:inline-flex;flex-wrap:wrap;gap:4px 6px;align-items:center;margin-top:6px}.leg .tag.mini{min-width:28px}
 .hero.drop{outline:4px dashed var(--red);outline-offset:-6px}
+.dropz{display:block;border:3px dashed var(--red);border-radius:14px;padding:26px 14px;text-align:center;cursor:pointer;margin:10px 0;font-size:1.05rem}
+.dropz.over{background:light-dark(#fde3e1,#3a1512)}
+.dropz.off{opacity:.5;cursor:default}
 .qstep{display:inline-flex;gap:4px;flex:none}.qstep .btn{min-width:38px;font-size:18px;font-weight:900;padding:4px 0}
 .tag.mini{min-width:30px;height:24px;font-size:13px;border-radius:6px 6px 6px 1px}
 .price{font-weight:900;font-size:20px;white-space:nowrap}.spec .price{white-space:normal;text-align:right;line-height:1.15}
@@ -1828,10 +1831,12 @@ const toast = (t, ms) => { const el = $("#toast"); el.textContent = t; el.style.
 // ---------- derived data ----------
 function allSpecials() {
   // the store filters apply to every source (flyers read by the AI too): frozen chopped spinach is not baby spinach
-  const base = (SPEC ? SPEC.items : []).filter((x) => !Flipp.excluded(x.ing, x.txt));
+  const dw = dropWeek(), dm = dw ? Object.keys(dw.mags) : [];
+  const base = (SPEC ? SPEC.items : []).filter((x) => !Flipp.excluded(x.ing, x.txt) && !dm.includes(x.mag));
+  const dropped = dw ? dw.items.filter((x) => !Flipp.excluded(x.ing, x.txt)) : [];
   const now = today(); // local date (UTC was already tomorrow every evening after 19 h)
   const mine = S.extra.filter((x) => !x.fin || x.fin >= now);
-  return base.concat(mine, costcoSpecials());
+  return base.concat(dropped, mine, costcoSpecials());
 }
 function idx() { const all = allSpecials(); L.setWeek(all, ING, S.reg.stores); return L.indexSpecials(all, ING, S.reg.stores); }
 let rankCache = null;
@@ -1979,11 +1984,11 @@ function rSpec() {
   const exp = SPEC && SPEC.fin < now;
   $("#v-speciaux").innerHTML = `
   <div class="split"><div>
-    ${(() => { const f = flyerState(); return f.ok ? "" : `<div class="warn"${f.lvl === "err" ? ' style="background:#fde3e1;border-color:#d4241b;color:#8a1510"' : ""}>${f.lvl === "err" ? "⚠️ " : ""}${f.txt}.${SPEC && SPEC.debut ? ` Tu vois encore les spéciaux du ${frDate(SPEC.debut)} au ${frDate(SPEC.fin)}.` : ""}</div>`; })()}
+    ${(() => { const f = flyerState(); return f.ok ? "" : `<div class="warn"${f.lvl === "err" ? ' style="background:#fde3e1;border-color:#d4241b;color:#8a1510"' : ""}>${f.lvl === "err" ? "⚠️ " : ""}${f.txt}.${SPEC && SPEC.debut ? ` Tu vois encore les spéciaux du ${frDate(SPEC.debut)} au ${frDate(SPEC.fin)}.` : ""}${f.lvl === "err" || f.drop ? ` <button class="btn sm red" id="dropGo" style="margin-top:6px">Déposer la circulaire moi-même</button>` : ""}</div>`; })()}
     ${[3, 4].includes(new Date().getDay()) && S.bannerWk !== weekKey() + new Date().getDay() && (new Date().getDay() === 3 || flyerState().ok) ? `<div class="warn">${new Date().getDay() === 3 ? "Les nouvelles circulaires arrivent demain : c'est le bon moment pour vider le frigo." : "Les nouvelles circulaires sont là : fais ton menu de la semaine !"} <button class="btn sm" id="bannerOk" style="margin-left:6px">OK</button></div>` : ""}
     ${S.reg.postalSet ? "" : `<div class="warn">Pour voir les circulaires et les épiceries de <b>ton coin</b> : <button class="btn sm red" id="geoGo">📍 Utiliser ma position</button> ou mets ton code postal dans Réglages.</div>`}
     <h1>Les spéciaux de la semaine</h1>
-    <div class="week"><b>${SPEC ? "Du " + frDate(SPEC.debut) + " au " + frDate(SPEC.fin) : "Aucune circulaire chargée"}</b><span class="mute small">${esc(SPEC ? SPEC.source : "")}</span></div>
+    <div class="week"><b>${SPEC ? "Du " + frDate(SPEC.debut) + " au " + frDate(SPEC.fin) : "Aucune circulaire chargée"}</b><span class="mute small">${esc(SPEC ? SPEC.source : "")}</span>${dropMags().length ? `<span class="small">✋ Déposées à la main cette semaine : ${dropWeekTxt()}</span>` : ""}</div>
     ${exp && flyerState().ok ? `<div class="warn">Ces spéciaux sont terminés. Touche « Mettre à jour les circulaires » pour voir ceux de la semaine.</div>` : ""}
     <p class="lead">Deux notes de 1 à 10 :<br><b>sem</b> : 10 = le moins cher de toutes les circulaires de la semaine, seulement dans tes épiceries cochées. −1 point par 5 % plus cher.<br><b>an</b> : 10 = le plus bas prix vu cette année dans tes épiceries cochées. S'il a déjà été moins cher, la note baisse de 1 point par 5 % plus cher (ex. 10 % plus cher = 8). Historique : ${S.histWeeks.length} semaine${S.histWeeks.length > 1 ? "s" : ""}.<br>${COTE_LEG}</p>
     <div class="row"><button class="btn red" data-go="menu-auto">Faire mon menu avec les spéciaux</button><button class="btn" id="majNow">Mettre à jour les circulaires</button></div><p class="small mute" id="majMsg"></p>
@@ -2102,6 +2107,9 @@ function rReg() {
       <label class="f" for="rDeb">Le menu commence le</label>
       <select id="rDeb">${L.DAYS.map((d, i) => `<option value="${i}" ${i === S.reg.debut ? "selected" : ""}>${d}</option>`).join("")}</select>
     </div>
+
+    <h2 id="dropTop">Déposer une circulaire</h2>
+    <div class="card">${dropCard()}</div>
 
     <h2>Rappel du mercredi</h2>
     <div class="card"><p class="small" style="margin-top:0">Chaque mercredi à 19 h, ton calendrier te rappelle que les nouvelles circulaires arrivent le lendemain.</p>
@@ -3413,6 +3421,23 @@ async function setMyPhoto(id, file) {
 const webSearch = (site, name) => "https://www.google.com/search?q=" + encodeURIComponent(`site:${site} ${String(name).replace(/\(.*?\)/g, "").trim()}`);
 document.addEventListener("dragover", (e) => { if (e.target.closest && e.target.closest("#sheetIn .hero")) { e.preventDefault(); e.target.closest(".hero").classList.add("drop"); } });
 document.addEventListener("dragleave", (e) => { const h = e.target.closest && e.target.closest("#sheetIn .hero"); if (h) h.classList.remove("drop"); });
+const hasFiles = (e) => e.dataTransfer && [...(e.dataTransfer.types || [])].includes("Files");
+document.addEventListener("dragover", (e) => {
+  if (!hasFiles(e)) return;
+  e.preventDefault(); // a file dropped beside the zone must not open in place of the app
+  const z = e.target.closest && e.target.closest("#dropZone");
+  document.querySelectorAll(".dropz.over").forEach((el) => el !== z && el.classList.remove("over"));
+  if (z) z.classList.add("over"); else if (!(e.target.closest && e.target.closest("#sheetIn .hero"))) e.dataTransfer.dropEffect = "none";
+});
+document.addEventListener("dragleave", (e) => { const z = e.target.closest && e.target.closest("#dropZone"); if (z && !z.contains(e.relatedTarget)) z.classList.remove("over"); });
+document.addEventListener("drop", (e) => {
+  if (!hasFiles(e) || (e.target.closest && e.target.closest("#sheetIn .hero"))) return;
+  e.preventDefault();
+  const z = e.target.closest && e.target.closest("#dropZone");
+  if (!z) return toast("Glisse la circulaire dans la case « Déposer une circulaire » (Réglages)", 4000);
+  z.classList.remove("over");
+  readDropped([...e.dataTransfer.files]);
+});
 document.addEventListener("drop", (e) => {
   const h = e.target.closest && e.target.closest("#sheetIn .hero"); if (!h) return;
   e.preventDefault(); h.classList.remove("drop");
@@ -4243,6 +4268,11 @@ Réponds UNIQUEMENT par un tableau JSON : [{"n":0,"qte":2,"unite":"L"},{"n":1,"q
 // Where this week's download stands, for the message on the specials page
 function flyerState() {
   if (SPEC && SPEC.debut === weekKey()) return { ok: true, txt: "" };
+  const dm = dropMags();
+  if (dm.length) {
+    const miss = S.reg.stores.filter((st) => st !== "Costco" && L.STORES.includes(st) && !dm.includes(st));
+    return miss.length ? { ok: false, lvl: "info", drop: 1, txt: `Circulaires déposées à la main : ${dm.join(", ")}. Pas encore déposées : ${miss.join(", ")}` } : { ok: true, txt: "" };
+  }
   const n = new Date(), d = n.getDay(), h = n.getHours() + n.getMinutes() / 60;
   if (d === 4 && h < 12.5) return { ok: false, lvl: "info", txt: "Les nouvelles circulaires sont téléchargées une seule fois, jeudi midi" };
   if (d === 4 && h < 21) return { ok: false, lvl: "info", txt: "Le téléchargement de midi n'a pas marché ou n'est pas fini : nouvel essai à 20 h" };
@@ -4486,6 +4516,7 @@ function flyerImg(x) {
   if (!x || !x.pdf || !Array.isArray(x.box) || x.box.length !== 4) return null;
   const k = cropKey(x), u = Photos.url(k);
   if (u) return u;
+  if (String(x.pdf).startsWith("drop:")) return null; // dropped flyer: its pictures were cut when it was read
   if (!cropQ.some((y) => cropKey(y) === k)) { cropQ.push(x); setTimeout(runCrops, 50); }
   return null;
 }
@@ -4496,14 +4527,7 @@ async function runCrops() {
     const x = cropQ.shift(), k = cropKey(x);
     try {
       const c = (await renderPdf(x.pdf))[x.pg || 0]; if (!c) continue;
-      let [y0, x0, y1, x1] = x.box.map(Number);
-      const pad = 15; y0 = Math.max(0, y0 - pad); x0 = Math.max(0, x0 - pad); y1 = Math.min(1000, y1 + pad); x1 = Math.min(1000, x1 + pad);
-      const sx = (x0 / 1000) * c.width, sy = (y0 / 1000) * c.height, sw = ((x1 - x0) / 1000) * c.width, sh = ((y1 - y0) / 1000) * c.height;
-      if (sw < 20 || sh < 20) continue;
-      const k2 = Math.min(1, 600 / Math.max(sw, sh)), cc = document.createElement("canvas");
-      cc.width = Math.round(sw * k2); cc.height = Math.round(sh * k2);
-      cc.getContext("2d").drawImage(c, sx, sy, sw, sh, 0, 0, cc.width, cc.height);
-      const blob = await new Promise((r) => cc.toBlob(r, "image/jpeg", 0.85));
+      const blob = await cropBlob(c, x.box); if (!blob) continue;
       const u = await Photos.put(k, blob, true);
       document.querySelectorAll(`[data-crop="${k}"]`).forEach((el) => { el.classList.remove("ph-empty"); el.innerHTML = `<img src="${u}" alt="">`; });
     } catch (e) {}
@@ -4526,6 +4550,154 @@ async function pdfFlyerItems(url, ask, mag, parse) {
   }
   const pdf = await (await fetch(url)).blob();
   return parse(await askAI(ask, { images: [new Blob([pdf], { type: "application/pdf" })], maxTokens: 8000, quiet: true }), false);
+}
+// ---------- Flyers dropped by hand (Réglages): when the robot could not download or read them ----------
+// PDF (every page), photos or screenshots, or a saved web page: the AI reads the products and prices exactly as written.
+// They count for the chosen week and replace that store's flyer (or last week's) in the whole app.
+const DROP_OK = /\.(pdf|png|jpe?g|webp|gif|bmp|txt|html?)$/i;
+let dropBusy = false, dropMsg = "";
+const dropWeek = (wk = weekKey()) => (S.drop || {})[wk] || null;
+const dropMags = (wk) => { const w = dropWeek(wk); return w ? Object.keys(w.mags) : []; };
+const dropWeekTxt = (wk) => { const w = dropWeek(wk); return w ? Object.entries(w.mags).map(([m, v]) => `${m} (${v.n})`).join(", ") : ""; };
+const thuOf = (date) => { const d = new Date(date + "T12:00"); d.setDate(d.getDate() - ((d.getDay() + 3) % 7)); return d.toISOString().slice(0, 10); };
+const defDropWk = () => (new Date().getDay() === 3 ? addDays(weekKey(), 7) : weekKey()); // Wednesday: next week's flyers are already out
+function storeFromName(name) {
+  const n = norm(name).replace(/[^a-z0-9]+/g, "");
+  const keys = [["Super C", "superc"], ["Marché Tradition", "tradition"], ["Tigre Géant", "tigre"], ["Maxi", "maxi"], ["Provigo", "provigo"], ["Metro", "metro"], ["Walmart", "walmart"],
+    ["Adonis", "adonis"], ["Bonanza", "bonanza"], ["Costco", "costco"], ["IGA", "iga"]];
+  const k = keys.find(([, w]) => n.includes(w));
+  return k ? k[0] : "";
+}
+const storeFromAI = (m) => { const n = norm(m).replace(/[^a-z0-9]+/g, ""); return n ? L.STORES.find((st) => norm(st).replace(/[^a-z0-9]+/g, "") === n) || storeFromName(m) : ""; };
+function dropCard() {
+  const wks = [weekKey(), addDays(weekKey(), 7)], dw = defDropWk();
+  const kept = Object.keys(S.drop || {}).filter((wk) => wk >= weekKey()).sort();
+  return `<p class="small" style="margin-top:0">Si le téléchargement des circulaires ne marche pas, ou qu'une épicerie est mal lue : enregistre sa circulaire sur l'ordi (PDF, captures d'écran, photos, ou la page web enregistrée) et glisse-la dans la case. L'IA lit les produits et les prix exactement comme écrits, et tout est prêt : spéciaux, recettes, menu et liste.</p>
+    <div class="grid2"><div><label class="f" for="dropMag">Épicerie</label><select id="dropMag"><option value="">Deviner (nom du fichier ou logo)</option>${L.STORES.map((st) => `<option>${st}</option>`).join("")}</select></div>
+    <div><label class="f" for="dropWk">Semaine</label><select id="dropWk">${wks.map((wk) => `<option value="${wk}" ${wk === dw ? "selected" : ""}>Du ${frDate(wk)} au ${frDate(addDays(wk, 6))}</option>`).join("")}</select></div></div>
+    ${aiOn() ? `<label class="dropz" id="dropZone" for="dropFile">${dropBusy ? "⏳ Lecture en cours…" : "📥 <b>Glisse la circulaire ici</b><br><span class=\"small mute\">ou touche pour choisir les fichiers (PDF, images, page web)</span>"}</label>
+      <input type="file" id="dropFile" accept=".pdf,application/pdf,image/*,.txt,.html,.htm" multiple hidden>`
+    : `<div class="dropz off">📥 Glisse la circulaire ici</div><p class="small" style="color:var(--red)">Il faut une clé d'IA pour lire une circulaire : ajoute ta clé Gemini (gratuite) dans « Intelligence artificielle » plus haut.</p>`}
+    <p class="small" id="dropMsg" aria-live="polite">${esc(dropMsg)}</p>
+    ${kept.map((wk) => `<div class="small" style="margin-top:8px"><b>Déposées pour la semaine du ${frDate(wk)} au ${frDate(addDays(wk, 6))} :</b>${Object.entries(S.drop[wk].mags).map(([m, v]) => `<div class="xrow"><span>${esc(m)} · ${v.n} produit${v.n > 1 ? "s" : ""}${v.files && v.files.length ? ` <span class="mute">(${esc(v.files.slice(-3).join(", "))})</span>` : ""}</span><button class="btn sm" data-dropdel="${wk}|${esc(m)}" aria-label="Enlever">✕</button></div>`).join("")}</div>`).join("")}`;
+}
+function setDropMsg(t) { dropMsg = t; const el = $("#dropMsg"); if (el) el.textContent = t; }
+function cropBlob(c, box) {
+  let [y0, x0, y1, x1] = box.map(Number);
+  const pad = 15; y0 = Math.max(0, y0 - pad); x0 = Math.max(0, x0 - pad); y1 = Math.min(1000, y1 + pad); x1 = Math.min(1000, x1 + pad);
+  const sx = (x0 / 1000) * c.width, sy = (y0 / 1000) * c.height, sw = ((x1 - x0) / 1000) * c.width, sh = ((y1 - y0) / 1000) * c.height;
+  if (!(sw >= 20 && sh >= 20)) return Promise.resolve(null);
+  const k2 = Math.min(1, 600 / Math.max(sw, sh)), cc = document.createElement("canvas");
+  cc.width = Math.round(sw * k2); cc.height = Math.round(sh * k2);
+  cc.getContext("2d").drawImage(c, sx, sy, sw, sh, 0, 0, cc.width, cc.height);
+  return new Promise((r) => cc.toBlob(r, "image/jpeg", 0.85));
+}
+const toCanvas = (src, max) => { const k = Math.min(1, max / Math.max(src.width, src.height)), c = document.createElement("canvas"); c.width = Math.round(src.width * k); c.height = Math.round(src.height * k); c.getContext("2d").drawImage(src, 0, 0, c.width, c.height); return c; };
+// One file -> the parts to read (one per PDF page or image, or pieces of text), rendered one at a time to keep memory low
+async function* dropParts(f) {
+  const isPdf = f.type === "application/pdf" || /\.pdf$/i.test(f.name);
+  if (isPdf) {
+    const lib = await loadPdfJs();
+    const doc = await lib.getDocument({ data: await f.arrayBuffer() }).promise;
+    const n = Math.min(doc.numPages, 40);
+    for (let i = 1; i <= n; i++) {
+      const pg = await doc.getPage(i), v0 = pg.getViewport({ scale: 1 }), vp = pg.getViewport({ scale: Math.min(3, 2200 / Math.max(v0.width, v0.height)) });
+      const c = document.createElement("canvas"); c.width = vp.width; c.height = vp.height;
+      await pg.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
+      let text = ""; try { text = (await pg.getTextContent()).items.map((x) => x.str).join(" ").replace(/\s+/g, " ").trim().slice(0, 6000); } catch (e) {}
+      yield { canvas: c, text, pg: i - 1, of: n };
+      c.width = c.height = 0;
+    }
+    return;
+  }
+  if (/^image\//.test(f.type) || /\.(png|jpe?g|webp|gif|bmp)$/i.test(f.name)) { const bmp = await createImageBitmap(f); yield { canvas: toCanvas(bmp, 2200), text: "", pg: 0, of: 1 }; return; }
+  let txt = await f.text();
+  if (/\.html?$/i.test(f.name) || /^\s*</.test(txt)) { const d = new DOMParser().parseFromString(txt, "text/html"); d.querySelectorAll("script,style,noscript,svg").forEach((x) => x.remove()); txt = d.body ? d.body.textContent : ""; }
+  txt = txt.replace(/[ \t\r]+/g, " ").replace(/\n\s*\n+/g, "\n").trim();
+  const n = Math.min(Math.ceil(txt.length / 12000), 20);
+  for (let i = 0; i < n; i++) yield { canvas: null, text: txt.slice(i * 12000, (i + 1) * 12000), pg: i, of: n };
+}
+async function readDropped(files) {
+  if (dropBusy) return toast("Une circulaire est déjà en lecture : attends qu'elle finisse");
+  if (!aiOn()) { setDropMsg("Il faut une clé d'IA pour lire une circulaire (Réglages → Intelligence artificielle)."); return; }
+  files = files.filter((f) => DROP_OK.test(f.name) || /^image\//.test(f.type) || f.type === "application/pdf");
+  if (!files.length) { setDropMsg("Ce fichier n'est pas une circulaire lisible : il faut un PDF, une image ou une page web enregistrée."); return; }
+  const choice = ($("#dropMag") || {}).value || "", wkChosen = ($("#dropWk") || {}).value || defDropWk();
+  const okWks = [weekKey(), addDays(weekKey(), 7)];
+  const ids = Object.entries(ING).map(([k, v]) => `${k} = ${v.n} [${v.u}]`).join("\n");
+  dropBusy = true; const z = $("#dropZone"); if (z) z.innerHTML = "⏳ Lecture en cours… (garde l'app ouverte)";
+  const got = {}, notes = [], fileMag = {}; let noStore = 0, fails = 0, parts = 0;
+  try {
+    for (let fi = 0; fi < files.length; fi++) {
+      const f = files[fi], fid = "drop:" + hashStr(f.name + "|" + f.size + "|" + f.lastModified);
+      let mag = choice || storeFromName(f.name), wk = wkChosen, wkSeen = false;
+      try {
+        for await (const part of dropParts(f)) {
+          parts++;
+          setDropMsg(`Lecture de ${f.name}${part.of > 1 ? ` : ${part.canvas ? "page" : "partie"} ${part.pg + 1} sur ${part.of}` : ""}${files.length > 1 ? ` (fichier ${fi + 1} sur ${files.length})` : ""}…`);
+          const prompt = `Nous sommes le ${today()}. Voici ${part.canvas ? "une page" : "un extrait"} d'une circulaire d'épicerie du Québec${mag ? ` de ${mag}` : ""}.
+Relève TOUS les produits en spécial avec leur prix, exactement comme écrit : n'invente aucun prix, saute un produit si son prix n'est pas lisible.
+Associe chaque produit à un identifiant de cette liste (sinon "ing": null) :
+${ids}
+Règles : prix au lb → "unite":"lb","qte":1 ; prix au kg seulement → "unite":"kg","qte":1 ; paquet de 375 g à 3,33 $ → "prix":3.33,"qte":375,"unite":"g" ; 2 pour 5 $ → "prix":5,"qte":2,"unite":"u" ; douzaine d'œufs → "qte":12,"unite":"u" ; 2 L → "qte":2,"unite":"L" ; un seul article → "qte":1,"unite":"u".
+Réponds UNIQUEMENT par un objet JSON : {"magasin":"nom de l'épicerie d'après le logo ou le texte, sinon null","debut":"premier jour de la circulaire (AAAA-MM-JJ) s'il est écrit, sinon null","items":[{"ing":"id ou null","prix":3.99,"qte":1,"unite":"lb|kg|g|ml|L|u","txt":"nom court + format","reg":0${part.canvas ? ',"box":[0,0,0,0]' : ""}}]}
+("reg" = prix régulier s'il est écrit, sinon 0${part.canvas ? ` ; "box" = [ymin,xmin,ymax,xmax], le rectangle (de 0 à 1000) qui entoure la photo et le prix du produit sur la page` : ""})${part.text ? `\n\nTexte de la page (aide pour les petits caractères ; les prix doivent venir de la circulaire) :\n${part.text}` : ""}`;
+          let j = null;
+          try {
+            const img = part.canvas ? await new Promise((r) => part.canvas.toBlob(r, "image/jpeg", 0.85)) : null;
+            j = AI.extractJSON(await askAI(prompt, { images: img ? [img] : [], maxTokens: 12000, quiet: true }), "object");
+          } catch (e) { fails++; if (/limite|quota|429|clé|key|401|403/i.test(e.message || "")) { notes.push("L'IA a refusé (" + (e.message || "erreur") + ")"); throw e; } continue; }
+          if (!j || !Array.isArray(j.items)) { fails++; continue; }
+          if (!mag) mag = storeFromAI(j.magasin);
+          if (!wkSeen && j.debut && /^\d{4}-\d{2}-\d{2}$/.test(j.debut)) {
+            wkSeen = true; const w = thuOf(j.debut);
+            if (okWks.includes(w)) wk = w; else notes.push(`${f.name} : la circulaire dit qu'elle commence le ${frDate(j.debut)}, gardée pour la semaine choisie`);
+          }
+          for (const x of j.items) {
+            const prix = Number(String(x && x.prix).replace(",", "."));
+            if (!x || !(prix > 0 && prix < 500)) continue;
+            const it = { ing: ING[x.ing] ? x.ing : null, mag: mag || "?", prix, qte: Number(x.qte) > 0 ? Number(x.qte) : 1, unite: ["lb", "kg", "g", "ml", "L", "u"].includes(x.unite) ? x.unite : "u",
+              txt: String(x.txt || (ING[x.ing] || {}).n || "").slice(0, 90), reg: Number(x.reg) > prix ? Number(x.reg) : 0, drop: 1 };
+            if (part.canvas && Array.isArray(x.box) && x.box.length === 4 && x.box.some((v) => Number(v) > 0)) {
+              it.box = x.box.map((v) => Math.round(Number(v))); it.pdf = fid; it.pg = part.pg;
+              try { const b = await cropBlob(part.canvas, it.box); if (b) await Photos.put(cropKey(it), b, true); else { delete it.box; delete it.pdf; delete it.pg; } } catch (e) { delete it.box; delete it.pdf; delete it.pg; }
+            }
+            (got[wk] = got[wk] || []).push(it);
+          }
+        }
+      } catch (e) {
+        if (notes.some((t) => /L'IA a refusé/.test(t))) break;
+        notes.push(`${f.name} : ${/pdf\.js/.test(e.message || "") ? "le lecteur de PDF n'a pas pu se charger (Internet ?)" : "fichier illisible"}`);
+      }
+      // pages read before the store was known (no logo on page 1): give them the store found later in the same file
+      for (const wk of Object.keys(got)) got[wk].forEach((it) => { if (it.mag === "?" && mag) it.mag = mag; });
+      if (mag) fileMag[f.name] = mag;
+    }
+  } finally { dropBusy = false; }
+  // keep the result: per week and per store, same product + same price only once
+  S.drop = S.drop || {};
+  let total = 0, dup = 0; const mags = new Set(), later = new Set();
+  for (const [wk, items] of Object.entries(got)) {
+    const known = items.filter((x) => x.mag !== "?"); noStore += items.length - known.length;
+    if (!known.length) continue;
+    const w = S.drop[wk] = S.drop[wk] || { items: [], mags: {} };
+    for (const it of known) {
+      if (w.items.some((y) => y.mag === it.mag && y.prix === it.prix && norm(y.txt) === norm(it.txt))) { dup++; continue; }
+      w.items.push(it); total++; mags.add(it.mag); if (wk > weekKey()) later.add(wk);
+      const m = w.mags[it.mag] = w.mags[it.mag] || { n: 0, files: [], at: 0 }; m.n++; m.at = Date.now();
+    }
+    for (const f of files) { const st = fileMag[f.name]; if (st && w.mags[st] && !w.mags[st].files.includes(f.name.slice(0, 60))) w.mags[st].files.push(f.name.slice(0, 60)); }
+  }
+  for (const wk of Object.keys(S.drop)) if (wk < weekKey()) delete S.drop[wk]; // past weeks are over
+  rankCache = null; save();
+  const msg = [total ? `✓ ${total} spécia${total > 1 ? "ux ajoutés" : "l ajouté"} (${[...mags].join(", ")}) : c'est prêt${later.size ? `, ils compteront à partir du jeudi ${frDate([...later][0])}` : ""}.` : dup ? "Cette circulaire était déjà déposée : rien de nouveau." : parts ? "Aucun spécial reconnu dans ce fichier." : ""];
+  if (total && dup) msg.push(`${dup} déjà là (pas en double).`);
+  if (noStore) msg.push(`${noStore} produits sans épicerie reconnue : choisis l'épicerie dans la liste et dépose le fichier de nouveau.`);
+  if (fails) msg.push(`${fails} ${fails > 1 ? "pages n'ont pas pu être lues" : "page n'a pas pu être lue"} : dépose-la de nouveau (ou une capture plus nette).`);
+  msg.push(...notes);
+  dropMsg = msg.filter(Boolean).join(" ");
+  if (S.view === "reglages") rReg(); else render(S.view);
+  if (total) toast(`${total} spéciaux ajoutés`, 3500);
 }
 // ---------- Marché Bonanza Lalumière: its weekly flyer is 4 PDF pages on its own site; the AI reads them (no web search) ----------
 let bonBusy = false;
@@ -5175,6 +5347,12 @@ document.addEventListener("click", (e) => {
   }
   if (t.id === "syncGo") return syncNow(true);
   if (t.id === "syncOff") { Sync.disconnect(); syncState = ""; toast("Synchro arrêtée sur cet appareil"); return rReg(); }
+  if (t.id === "dropGo") { show("reglages", false); return setTimeout(() => { const el = $("#dropTop"); if (el) el.scrollIntoView({ behavior: "smooth" }); }, 120); }
+  if (t.dataset.dropdel) {
+    const [wk, mag] = t.dataset.dropdel.split("|"), w = (S.drop || {})[wk];
+    if (w && confirm(`Enlever la circulaire déposée de ${mag} ?`)) { w.items = w.items.filter((x) => x.mag !== mag); delete w.mags[mag]; if (!Object.keys(w.mags).length) delete S.drop[wk]; rankCache = null; save(); rReg(); toast(`Circulaire de ${mag} enlevée`); }
+    return;
+  }
   if (t.id === "expBtn") {
     const data = JSON.stringify(Object.assign({}, S, { open: null, scroll: {} }));
     navigator.clipboard.writeText(data).then(() => toast("Données copiées : colle-les dans l'autre appareil"), () => { $("#impTxt").value = data; toast("Copie impossible : sélectionne le texte et copie-le"); });
@@ -5284,6 +5462,8 @@ document.addEventListener("change", (e) => {
   else if (t.id === "impSrc") { impSrc = t.value; return; }
   else if (t.id === "cuis") { S.cuis = t.value; recLimit = 40; save(); return rRec(); }
   else if (t.id === "photo" && t.files && t.files[0]) return readSpecials(null, t.files[0]);
+  else if (t.id === "dropFile" && t.files && t.files.length) { const f = [...t.files]; t.value = ""; return readDropped(f); }
+  else if (t.id === "dropMag" || t.id === "dropWk") return;
   else return;
   save();
 });

@@ -5228,6 +5228,8 @@ async function backfillHistory(max, silent) {
   if (S.view === "speciaux") rSpec();
 }
 
+// Bumped when the way flyer lines are read changes (prices in cents, bags...): this week's robot file is read again once
+const PARSE_V = 2;
 let majBusy = false;
 async function updateFlyers(silent) {
   if (majBusy) return false;
@@ -5239,7 +5241,7 @@ async function updateFlyers(silent) {
     const got = await fetchWeek(wk, true, msg);
     if (!(got.debut <= t && t <= got.fin)) throw new Error(`ce n'est pas la bonne semaine (${got.debut} au ${got.fin})`);
     const j = got, items = got.items;
-    SPEC = got;
+    SPEC = got; SPEC.pv = PARSE_V;
     if (officialSpec(SPEC)) recordWeek(SPEC); regFromFlyers(SPEC); learnRegular(SPEC.items, "flyer");
     S.spec = SPEC; S.majTry = ""; rankCache = null; save();
     if (S.reg.stores.includes("Bonanza") && aiOn()) { msg("Lecture de la circulaire Bonanza…"); await mergeBonanza(false); }
@@ -5316,7 +5318,7 @@ async function weeklyAuto() {
   if (AIS.autoMaj === false) return;
   const t = today();
   const recentTry = S.majTry && Date.now() - new Date(S.majTry).getTime() < 36e5; // retry after 1 h (Thursday: the robot file arrives around 12 h 30)
-  if ((!SPEC || SPEC.fin < t || SPEC.debut < weekKey() || !/Flipp/.test(SPEC.source || "") || !(S.near && S.near.length)) && !recentTry) await updateFlyers(true);
+  if ((!SPEC || SPEC.fin < t || SPEC.debut < weekKey() || !/Flipp/.test(SPEC.source || "") || !(S.near && S.near.length)) && !recentTry || (SPEC && SPEC.debut === weekKey() && /Flipp/.test(SPEC.source || "") && SPEC.pv !== PARSE_V)) await updateFlyers(true);
   try { await topUpSnackSpecials(); } catch (e) {}
   try { await ensureCoords(); await loadRegistry(); addNearCustom(); } catch (e) {}
   try { await robotHistory(); } catch (e) {}

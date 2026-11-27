@@ -50,7 +50,7 @@
     bacon: ["bacon", ["bacon"], ["bits", "miettes", "morceaux", "croustil", "burger", "saveur", "dinde", "poulet", "tortellini", "genre"]],
     dinde_tranchee: ["dinde tranchée", ["dinde", "tranch|charcut|fume|roti de dinde|poitrine de dinde"], ["hache", "entiere", "burger", "galette", "sans peau"]],
     saumon: ["filet de saumon", ["saumon"], ["fume", "farci", "tournedos", "conserve", "boite", "roulade", "burger", "galette", "sushi", "pate", "mousse", "croquette", "nourriture", "truite"]],
-    truite: ["truite", ["truite"], ["fume", "farci", "conserve"]],
+    truite: ["truite", ["truite"], ["fume", "fumoir", "farci", "conserve"]],
     tilapia: ["tilapia", ["tilapia"], ["pane", "farci"]],
     sole: ["filets de sole", ["=sole"], ["pane", "farci", "fume", "frit"]],
     riz_arborio: ["riz arborio", ["arborio|risotto"], ["pret", "plat", "sachet", "champignon", "fromage", "repas", "bol"]],
@@ -122,7 +122,7 @@
     kd: ["kraft dinner", ["kraft dinner|diner kraft|macaroni et fromage|macaroni au fromage|mac and cheese|mac et fromage"], ["surgel", "congel", "bol", "coupe", "tasse", "micro", "pret", "repas", "salade", "sauce", "gratine", "maison"]],
     pain_sousmarin: ["pains sous-marin", ["sous marin|sous marins"], ["saucisse", "wiener", "boeuf", "galette", "surgel", "congel", "sauce", "relish", "moutarde", "bbq", "cuit", "garni", "pizza"]],
     pate_pizza: ["pâte à pizza", ["pate a pizza|pizza dough|croute a pizza|croutes a pizza"], ["sauce", "fromage"]],
-    riz: ["riz", ["=riz"], ["basmati", "express", "minute", "instantane", "nouille", "galette", "gateau", "craquelin", "lait", "vinaigre", "farine", "boisson", "crispies", "papier", "pouding", "vermicelle", "cereale", "sauce", "poulet", "plat", "repas", "bebe", "chips", "croustil", "chou fleur", "choux fleurs", "brocoli", "sushi", "spaghetti", "pates", "bol", "son", "sirop", "biscuit", "barre", "galettes", "risotto", "accompagnement", "melange", "ble", "quinoa", "mais", "assaison", "arborio", "risotto"]],
+    riz: ["riz", ["=riz"], ["basmati", "express", "minute", "instantane", "precuit", "nouille", "galette", "gateau", "craquelin", "lait", "vinaigre", "farine", "boisson", "crispies", "papier", "pouding", "vermicelle", "cereale", "sauce", "poulet", "plat", "repas", "bebe", "chips", "croustil", "chou fleur", "choux fleurs", "brocoli", "sushi", "spaghetti", "pates", "bol", "son", "sirop", "biscuit", "barre", "galettes", "risotto", "accompagnement", "melange", "ble", "quinoa", "mais", "assaison", "arborio", "risotto"]],
     riz_basmati: ["riz basmati", ["riz", "basmati"], ["pret", "plat", "bol", "sachet micro", "accompagnement"]],
     pates: ["pâtes alimentaires", ["penne|rotini|fusilli|rigatoni|farfalle|pates alimentaires|pates seches|tortiglioni|cavatappi|bucatini|orzo|linguine|fettuccine|catelli|barilla|primo|italpasta|de cecco|pates"], ["sauce", "a pizza", "fraiches", "pret", "plat", "repas", "kit", "diner", "macaroni et fromage", "salade", "lasagne", "pate a", "pate de", "pate feuillet", "pate brisee", "pate de foie", "farcies", "farci", "ravioli", "tortellini", "gnocchi", "surgel", "congel", "chips", "soupe"]],
     spaghetti: ["spaghetti", ["spaghetti|spaghettini"], ["sauce", "courge", "boulette", "repas", "conserve", "plat", "surgel", "congel"]],
@@ -351,6 +351,10 @@
     if (own && many) q = { qte: NUM(own[1]), unite: own[2] };
     else if (m) q = { qte: Number(m[1]) * NUM(m[2]), unite: m[3] };
     else if ((m = raw.match(/(\d+(?:[.,]\d+)?)\s*(kg|g|ml|l|lb)\b/))) q = { qte: NUM(m[1]), unite: m[2] };
+    const xMul = /\d+\s*[x×]\s*\d/.test(raw);
+    if (q && !xMul) { const pk = raw.match(/(?:paquet|paq\.?|caisse|emballage|boite|bo[iî]te)\s*de\s*(\d+)(?!\s*(?:g|kg|ml|l|lb)\b)/); if (pk && Number(pk[1]) > 1 && Number(pk[1]) <= 48 && /^(ml|l)$/.test(q.unite) && q.qte <= 750) q.qte *= Number(pk[1]); } // "355 ml paquet de 24"
+    // a case of beer with only the can size written ("Bière ... 355 ml" at 36,74 $): about 24 cans (a guess: no price note)
+    if (q && !xMul && /^(k_biere|biere)$/.test(r.ing) && q.qte <= 500 && q.unite === "ml" && r.prix / mult >= 12 && !/(paquet|paq|caisse|emballage|boite)\s*de/.test(raw)) { q.qte *= r.prix / mult >= 25 ? 24 : 12; q.g = 1; }
     if (q) { if (q.unite === "l") q.unite = "L"; q.qte *= mult; }
     if (!q && ingU === "ml" && r.ing === "lait" && !/(^| )(ml|l|litre)( |$)/.test(nm)) return { qte: 2000 * mult, unite: "ml" }; // milk without a size: the usual 2 L
     if (ingU === "u") {
@@ -362,7 +366,7 @@
       if (m) return { qte: Number(m[1]) * mult, unite: "u" };
       m = String(r.post).toLowerCase().match(/ou\s*(\d+[.,]\d{2})\s*\$\s*(?:l'|l’)?unit/); // "4,99 $ ou 0,50 $ l'unité": the bag holds about 10
       if (m && NUM(m[1]) > 0 && r.prix > NUM(m[1])) return { qte: Math.round(r.prix / NUM(m[1])), unite: "u" };
-      if (/(^| )(ch|chacun|chacune|unite|l unite|un)( |$)/.test(post)) return { qte: 1 * mult, unite: "u" };
+      if (/(^| )(ch|chacun|chacune|unite|l unite|un)( |$)/.test(post)) return PACK[r.ing] && /(^| )(unite|l unite)( |$)/.test(post) ? { qte: mult * PACK[r.ing], unite: "u", g: 1 } : { qte: 1 * mult, unite: "u" }; // "Pains kaiser 2/10 $ ... l'unité": 2 bags, not 2 rolls
       return null; // count not written (bag, pack, by weight): the AI reads it
 
     }
@@ -372,13 +376,15 @@
   function toItems(raw, ING, opts) {
     opts = opts || {};
     const items = [], unknown = [];
-    for (const r of raw) {
+    for (let r of raw) {
       const ing = ING[r.ing]; if (!ing) continue;
+      // "169" with no decimals for 400 g of pasta: the flyer gave cents (1,69 $)
+      if (Number.isInteger(Number(r.prix)) && r.prix >= 100 && r.mag !== "Costco") r = Object.assign({}, r, { prix: r.prix / 100 });
       const fix = opts.sizes && opts.sizes[r.ing + "|" + r.name];
       if (fix && fix.skip) continue;
       const perU = ing.u === "u" && String(ing.n || "").match(/\((\d+(?:[.,]\d+)?)\s*(g|ml)\)/i);
       let s = sizeOf(r, ing.u) || (perU ? sizeOf(r, perU[2].toLowerCase() === "ml" ? "ml" : "g") : null) || (fix && fix.qte ? fix : null);
-      let guessed = !!(s && fix && s === fix && fix.guess);
+      let guessed = !!(s && fix && s === fix && fix.guess) || !!(s && s.g);
       if (!s && opts.guess && ing.u === "u" && PACK[r.ing] && !sizeOf(r, "g")) { s = { qte: PACK[r.ing], unite: "u" }; guessed = true; }
       if (!s) { unknown.push(r); continue; }
       const shown = ing.u === "u" && ["lb", "kg", "g", "ml", "L"].includes(s.unite) ? String(Math.round(s.qte * 100) / 100).replace(".", ",") + " " + s.unite : ""; // "5 lb" bag, shown as such
@@ -395,7 +401,7 @@
       if (ing.u === "g" && !["lb", "kg", "g"].includes(s.unite)) { unknown.push(r); continue; }
       if (ing.u === "ml" && !["L", "ml"].includes(s.unite)) { unknown.push(r); continue; }
       if (["cs", "ct"].includes(ing.u)) { unknown.push(r); continue; }
-      items.push({ ing: r.ing, mag: r.mag, prix: r.prix, qte: s.qte, unite: s.unite, txt: pretty(r.name).slice(0, 90), img: r.img || "", reg: r.orig > r.prix ? r.orig : 0, story: r.story || "", pack: shown && s.unite === "u" ? shown : "", ...(guessed ? { guess: true } : {}) });
+      items.push({ ing: r.ing, mag: r.mag, prix: r.prix, qte: s.qte, unite: s.unite, txt: (pretty(r.name).slice(0, 90) + (/membre/i.test(r.pre || "") ? " (prix membre)" : "")).trim(), img: r.img || "", reg: r.orig > r.prix ? r.orig : 0, story: r.story || "", pack: shown && s.unite === "u" ? shown : "", ...(guessed ? { guess: true } : {}) });
     }
     return { items, unknown };
   }

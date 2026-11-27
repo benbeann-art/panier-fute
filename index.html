@@ -1886,14 +1886,14 @@ let rankCache = null;
 const BANS = {
   porc: ["Porc", ["porc_filet", "porc_epaule", "porc_cotelettes", "cotes_levees", "porc_hache", "saucisses", "jambon", "bacon", "c_hotdogs", "lard_sale", "wieners"]],
   boeuf: ["Bœuf", ["boeuf_hache", "boeuf_cubes", "boeuf_bifteck", "boeuf_roti", "bouillon_boeuf", "wieners"]],
-  poisson: ["Poisson et fruits de mer", ["saumon", "truite", "tilapia", "sole", "crevettes", "thon", "worcestershire"]],
+  poisson: ["Poisson et fruits de mer", ["saumon", "truite", "tilapia", "sole", "crevettes", "thon", "worcestershire", "vinaigrette_cesar"]],
   crevettes: ["Crevettes", ["crevettes"]],
   lait: ["Produits laitiers (lactose)", ["lait", "creme", "beurre", "mozzarella", "cheddar", "parmesan", "fromage_creme", "creme_sure", "fromage_tranche", "yogourt", "feta", "pesto", "vinaigrette_cesar", "kd", "gruyere", "ricotta", "fromage_grains"]],
-  oeufs: ["Œufs", ["oeufs", "mayo", "nouilles_oeufs", "vinaigrette_cesar", "gnocchi"]],
+  oeufs: ["Œufs", ["oeufs", "mayo", "nouilles_oeufs", "vinaigrette_cesar", "gnocchi", "croissant"]],
   gluten: ["Gluten (blé, orge)", ["pates", "spaghetti", "macaroni", "lasagne", "nouilles_oeufs", "nouilles_lomein", "couscous", "orge", "farine", "chapelure", "pain_tranche", "kaiser", "baguette", "tortilla", "pita", "croissant", "ciabatta", "bagel", "pain_sousmarin", "pate_pizza", "sauce_soya", "sauce_teriyaki", "sauce_hoisin", "worcestershire", "kd", "pain_hotdog", "pain_burger", "gnocchi", "pate_tarte", "farine_ble", "biere"]],
   soya: ["Soya", ["tofu", "sauce_soya", "sauce_teriyaki", "sauce_hoisin", "edamame"]],
   noix: ["Arachides et noix", ["pesto"]],
-  sesame: ["Sésame", ["huile_sesame"]],
+  sesame: ["Sésame", ["huile_sesame", "sauce_hoisin"]],
   piquant: ["Épicé / piquant", ["piment", "sriracha", "chili_poudre"]],
 };
 const banIds = () => new Set((S.reg.ban || []).flatMap((b) => (BANS[b] ? BANS[b][1] : [])));
@@ -4960,6 +4960,13 @@ async function robotWebHistory() {
 // Everyday prices read on the Maxi and Provigo websites: those two stores' own prices, and the normal price for the other stores
 // One-time cleanup (v3.13.40): wrong products had been read on the sites (plant-based butter, mixed ground meat, prepared foods)
 // One-time fix (v3.13.46): the two receipts of 2026-11-22 had been counted too low. Real amounts: Super C 167,20 $ and IGA 98,74 $.
+// a recipe that contains something now excluded (lists completed over time) leaves the menu and the snacks
+function banClean() {
+  const ids = banIds(); if (!ids.size) return;
+  const ok = (id) => !BYID[id] || !isBanned(BYID[id], ids);
+  const m = S.menu.filter(ok), c = (S.col || []).filter(ok);
+  if (m.length !== S.menu.length || c.length !== (S.col || []).length) { S.menu = m; S.col = c; rankCache = null; save(); render(S.view); }
+}
 function dropFix1126() {
   // past weeks are over: their dropped flyers are removed at start-up (not only when a new flyer is dropped)
   let gone = false;
@@ -5322,7 +5329,7 @@ async function weeklyAuto() {
   try { await topUpSnackSpecials(); } catch (e) {}
   try { await ensureCoords(); await loadRegistry(); addNearCustom(); } catch (e) {}
   try { await robotHistory(); } catch (e) {}
-  try { siteFix(); receiptFix1122(); dropFix1126(); await robotWebHistory(); } catch (e) {}
+  try { siteFix(); receiptFix1122(); dropFix1126(); banClean(); await robotWebHistory(); } catch (e) {}
   try { await robotSitePrices(); } catch (e) {}
   if (aiOn() && SPEC && nearCustom().length) { try { await mergeCustom(); } catch (e) {} }
   if (aiOn() && SPEC && S.reg.stores.includes("Bonanza") && !(S.bonanza && S.bonanza.v === 2 && S.bonanza.date >= addDays(today(), -6) && SPEC.items.some((x) => x.mag === "Bonanza"))) { try { await mergeBonanza(false); } catch (e) {} }
@@ -5634,7 +5641,7 @@ document.addEventListener("change", (e) => {
   if (t.dataset.rvz !== undefined && invReview) { invReview[Number(t.dataset.rvz)].zone = t.value; return; }
   if (t.id === "spicesHome") { S.spicesHome = t.checked; rankCache = null; save(); return rHome(); }
   if (t.dataset.ckp !== undefined && cook) { cook.done[t.dataset.ckp] = t.checked; return; }
-  if (t.dataset.ban !== undefined) { const b = t.dataset.ban; S.reg.ban = t.checked ? [...new Set((S.reg.ban || []).concat(b))] : (S.reg.ban || []).filter((x) => x !== b); S.menu = S.menu.filter((id) => !BYID[id] || !isBanned(BYID[id])); rankCache = null; save(); return; }
+  if (t.dataset.ban !== undefined) { const b = t.dataset.ban; S.reg.ban = t.checked ? [...new Set((S.reg.ban || []).concat(b))] : (S.reg.ban || []).filter((x) => x !== b); S.menu = S.menu.filter((id) => !BYID[id] || !isBanned(BYID[id])); S.col = (S.col || []).filter((id) => !BYID[id] || !isBanned(BYID[id])); rankCache = null; save(); return; }
   if (t.id === "sumMonth") { sumMonth = t.value; const sb = $("#sumHost"); if (sb) sb.innerHTML = summaryBox(); return; }
   if (t.id === "budget") { S.reg.budget = Math.max(0, Number(t.value) || 0); save(); return; }
   if (t.id === "regAuto") { AIS.regAuto = t.checked; saveAI(); return; }

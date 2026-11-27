@@ -179,7 +179,7 @@
     sirop_erable: ["sirop d'érable", ["sirop", "erable"], ["saveur", "biscuit", "cereale", "gruau", "bacon", "jambon", "saucisse", "bonbon", "beurre", "tire", "sucre", "the", "cafe", "creme", "yogourt", "barre", "noix"]],
     fromage_grains: ["fromage en grains", ["fromage", "grain|grains|crottes"], ["poutine kit", "chips"]],
     aubergine: ["aubergines", ["aubergine"], ["trempette", "baba", "parmigiana", "grille", "marine"]],
-    pomme: ["pommes", ["=pomme|=pommes"], ["terre", "jus", "compote", "tarte", "chips", "croustil", "sauce", "cidre", "vinaigre", "chausson", "muffin", "barre", "boisson", "puree", "gateau", "beigne", "cannelle et", "sechees", "pain", "yogourt", "gourde", "collation", "frite", "rondelle"]],
+    pomme: ["pommes", ["=pomme|=pommes"], ["terre", "jus", "compote", "compte", "applesnax", "collation", "coupe", "tarte", "chips", "croustil", "sauce", "cidre", "vinaigre", "chausson", "muffin", "barre", "boisson", "puree", "gateau", "beigne", "cannelle et", "sechees", "pain", "yogourt", "gourde", "collation", "frite", "rondelle"]],
     ricotta: ["ricotta", ["ricotta"], ["ravioli", "cannelloni", "pizza", "lasagne", "tortellini", "gateau"]],
     gnocchi: ["gnocchis", ["gnocchi"], ["sauce", "repas", "plat"]],
     haricots_blancs: ["haricots blancs", ["haricot|haricots|feve", "blanc|cannellini|romano"], ["sauce", "soupe", "lard", "beans", "au lard"]],

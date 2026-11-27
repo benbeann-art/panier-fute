@@ -605,13 +605,13 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
   }
   function fmtQty(ing, q, exact) {
     if (ing.u === "g") {
-      if (q >= 1000) {
+      if (q >= 995) { // 999 g rounds to 1000 g: say 1 kg
         const kg = FR(q / 1000, 1) + " kg";
         return ing.r.startsWith("Viandes") || ing.r.startsWith("Poissons") ? kg + " (≈ " + FR(q / LB, 1) + " lb)" : kg;
       }
       return (q < 10 ? Math.max(1, Math.round(q)) : Math.round(q / 10) * 10) + " g";
     }
-    if (ing.u === "ml") return q >= 1000 ? FR(q / 1000, 1) + " L" : (q < 10 ? Math.max(1, Math.round(q)) : Math.round(q / 10) * 10) + " ml";
+    if (ing.u === "ml") return q >= 995 ? FR(q / 1000, 1) + " L" : (q < 10 ? Math.max(1, Math.round(q)) : Math.round(q / 10) * 10) + " ml";
     if (ing.u === "u" && ing.n.startsWith("Ail")) {
       // a head has about 10 cloves: only talk about heads when it is close to one or more
       const n = Math.max(1, Math.ceil(q)), h = Math.round(n / 10);
@@ -1381,7 +1381,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
     sirop_erable: ["sirop d'érable", ["sirop", "erable"], ["saveur", "biscuit", "cereale", "gruau", "bacon", "jambon", "saucisse", "bonbon", "beurre", "tire", "sucre", "the", "cafe", "creme", "yogourt", "barre", "noix"]],
     fromage_grains: ["fromage en grains", ["fromage", "grain|grains|crottes"], ["poutine kit", "chips"]],
     aubergine: ["aubergines", ["aubergine"], ["trempette", "baba", "parmigiana", "grille", "marine"]],
-    pomme: ["pommes", ["=pomme|=pommes"], ["terre", "jus", "compote", "tarte", "chips", "croustil", "sauce", "cidre", "vinaigre", "chausson", "muffin", "barre", "boisson", "puree", "gateau", "beigne", "cannelle et", "sechees", "pain", "yogourt", "gourde", "collation", "frite", "rondelle"]],
+    pomme: ["pommes", ["=pomme|=pommes"], ["terre", "jus", "compote", "compte", "applesnax", "collation", "coupe", "tarte", "chips", "croustil", "sauce", "cidre", "vinaigre", "chausson", "muffin", "barre", "boisson", "puree", "gateau", "beigne", "cannelle et", "sechees", "pain", "yogourt", "gourde", "collation", "frite", "rondelle"]],
     ricotta: ["ricotta", ["ricotta"], ["ravioli", "cannelloni", "pizza", "lasagne", "tortellini", "gateau"]],
     gnocchi: ["gnocchis", ["gnocchi"], ["sauce", "repas", "plat"]],
     haricots_blancs: ["haricots blancs", ["haricot|haricots|feve", "blanc|cannellini|romano"], ["sauce", "soupe", "lard", "beans", "au lard"]],
@@ -5178,6 +5178,8 @@ async function robotSitePrices() {
     for (const st of ["Maxi", "Provigo"]) {
       const x = (r.stores[st] || {})[id];
       if (!x || !(x.pu > 0)) continue;
+      const base = ING[id].p0 != null ? ING[id].p0 : ING[id].p;
+      if (base > 0 && (x.pu > base * 2.2 || x.pu < base * 0.4)) continue; // another product on the store site (fresh pineapple for a can, a bulb of garlic for a clove)
       (S.regStore[id] = S.regStore[id] || {})[st] = { p: x.pu, date: r.date, src: "site" };
       got.push(x.pu);
     }
@@ -5199,7 +5201,8 @@ function regFromFlyers(spec) {
   for (const [id, l] of Object.entries(by)) {
     l.sort((a, b) => a - b);
     const p = l[Math.floor(l.length / 2)], g = ING[id], base = g.p0 != null ? g.p0 : g.p;
-    if (p < base * 0.25 || p > base * 4) continue;
+    // one "au lieu de" far from the usual price is often another product (apple sauce cups read as apples): needs 2 flyers to count
+    if (p < base * 0.25 || p > base * 4 || ((p > base * 2 || p < base * 0.5) && l.length < 2)) continue;
     S.regPrices[id] = { p, date: today(), by: "circulaires" }; n++;
   }
   if (n) applyRegPrices();
@@ -5270,6 +5273,12 @@ async function updateFlyers(silent) {
 // The AI is asked a price per kg / L / unit; it is converted to the app's own unit. Wild answers are refused.
 function regRef(id) { const u = ING[id].u; return u === "g" ? "kg" : u === "ml" ? "L" : "unité"; }
 function toUnitPrice(id, price) { const u = ING[id].u; return u === "g" || u === "ml" ? price / 1000 : price; }
+function regFix1127() {
+  if (S.regFixV === 1) return;
+  for (const id of Object.keys(S.regPrices || {})) { const g = ING[id]; const base = g ? (g.p0 != null ? g.p0 : g.p) : 0; const x = S.regPrices[id]; if (!g || !(base > 0) || x.p > base * 2 || x.p < base * 0.45) { delete S.regPrices[id]; if (g && g.p0 != null) g.p = g.p0; } }
+  for (const id of Object.keys(S.regStore || {})) { const g = ING[id]; const base = g ? (g.p0 != null ? g.p0 : g.p) : 0; for (const st of Object.keys(S.regStore[id])) { const x = S.regStore[id][st]; if (!(base > 0) || x.p > base * 2.2 || x.p < base * 0.4) delete S.regStore[id][st]; } }
+  S.regFixV = 1; S.siteRegDate = ""; rankCache = null; save(false);
+}
 function applyRegPrices() {
   for (const [id, x] of Object.entries(S.regPrices || {})) {
     const g = ING[id]; if (!g || !(x.p > 0)) continue;
@@ -5330,7 +5339,7 @@ async function weeklyAuto() {
   try { await topUpSnackSpecials(); } catch (e) {}
   try { await ensureCoords(); await loadRegistry(); addNearCustom(); } catch (e) {}
   try { await robotHistory(); } catch (e) {}
-  try { siteFix(); receiptFix1122(); dropFix1126(); banClean(); await robotWebHistory(); } catch (e) {}
+  try { siteFix(); receiptFix1122(); dropFix1126(); banClean(); regFix1127(); await robotWebHistory(); } catch (e) {}
   try { await robotSitePrices(); } catch (e) {}
   if (aiOn() && SPEC && nearCustom().length) { try { await mergeCustom(); } catch (e) {} }
   if (aiOn() && SPEC && S.reg.stores.includes("Bonanza") && !(S.bonanza && S.bonanza.v === 2 && S.bonanza.date >= addDays(today(), -6) && SPEC.items.some((x) => x.mag === "Bonanza"))) { try { await mergeBonanza(false); } catch (e) {} }

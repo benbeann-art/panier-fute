@@ -1493,6 +1493,11 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
     // "5/25 $ ou 6,99 unitaire": the price for one, kept to show it
     const one = /^\s*\d+\s*\//.test(x.pre || "") && d.match(/\bou\s*(\d+[.,]\d{2})\s*\$?\s*(?:unitaire|ch\b|chacun|chacune|l'unité|l’unité)/);
     if (one) x.alt = NUM(one[1]);
+    // "7,49 $ … 16,51/kg": the other number is the same price per kg, so 7,49 is per lb (and the other way around)
+    const eqKg = x.prix > 0 && d.match(/(\d+[.,]\d{2})\s*\$?\s*(?:\/|le|par)\s*kg\b/);
+    if (eqKg && Math.abs(NUM(eqKg[1]) / x.prix - 2.2046) < 0.08) { x.post = "/lb"; return x; }
+    const eqLb = x.prix > 0 && d.match(/(\d+[.,]\d{2})\s*\$?\s*(?:\/|la|le|par)\s*(?:lb|livre)\b/);
+    if (eqLb && Math.abs(x.prix / NUM(eqLb[1]) - 2.2046) < 0.08) { x.post = "/kg"; return x; }
     if (/^\s*ch/i.test(x.post || "") && /(?<![\d,.\/$])\d+(?:[.,]\d+)?\s*(kg|lb)\b(?!\s*\/)/.test(d)) x.post = ""; // "ch." on a 3 lb bag
     const bag = d.match(/(\d+[.,]\d{2})\s*\$\s*(?:le|la|par)\s*(sac|filet|caisse|boite|boîte|paquet|emballage|contenant|barquette)\s*(?:de\s*)?(\d+(?:[.,]\d+)?)\s*(lb|kg|g)\b/);
     if (bag) { x.prix = NUM(bag[1]); addSize(x, `${bag[2]} de ${bag[3]} ${bag[4]}`); x.post = ""; return x; }
@@ -2087,7 +2092,7 @@ function rSpec() {
 }
 // ---------- Check a special against its flyer picture: by me (🔍) or by the AI, which corrects it by itself ----------
 // S.spFix[mag|ing|name] = { qte, unite, prix, p0, skip, by: "moi" | "ia", was } ; S.spChk = { wk, ok: { key: 1 }, n }
-const spWk = () => weekKey() + "/2"; // "/2": checked again after the reading rules changed (v3.24.9)
+const spWk = () => weekKey() + "/3"; // "/3": checked again after the reading rules changed (v3.24.10)
 const spByKey = (k) => allSpecials().find((x) => x.k === k);
 const rawByKey = (k) => (RAWLAST || []).find((r) => r.mag + "|" + r.ing + "|" + r.name === k);
 function spUnitChoices(ing) {
@@ -2166,7 +2171,8 @@ ${use.map((x, j) => `Photo ${j} : on cherche « ${ING[x.sp.ing].n.split(" (")[0]
 Attention :
 - « 5/25 $ » = 5 articles pour 25 $ : "prix":25, "pour":5, "par":"article". Ce n'est JAMAIS 5 lb.
 - « 20-30 un./lb » sur des crevettes = leur grosseur, pas un prix à la livre.
-- « ou 6,99 unitaire » est le prix pour un seul : garde le gros prix (5/25 $).
+- « ou 6,99 unitaire » est le prix pour un seul : garde le gros prix (5/25 $). Un « prix membre » écrit en gros : garde-le.
+- « 7,49 /lb » avec « 16,51/kg » en petit : "prix":7.49, "par":"lb" (le petit chiffre au kg est le même prix).
 - "format" = le format d'UN SEUL article (ex. "300 g"), même quand le prix est pour plusieurs.
 Réponds UNIQUEMENT par un tableau JSON : [{"n":0,"prix":3.99,"pour":1,"par":"lb","format":"","produit":"…"}]`;
       let arr = [];
@@ -2198,6 +2204,8 @@ Réponds UNIQUEMENT par un tableau JSON : [{"n":0,"prix":3.99,"pour":1,"par":"lb
 }
 // Each week, on its own: the AI checks the specials that matter (the best notes, the cheapest of the week), 36 at most
 async function autoCheckSpecials() {
+  // the AI's corrections made before it knew "5/25 $" and the member price: done again with the new rules
+  if (S.spFixV !== 1) { for (const [k, v] of Object.entries(S.spFix || {})) if (v.by === "ia") delete S.spFix[k]; S.spFixV = 1; save(false); await reparseWeek(); }
   if (!aiOn() || AIS.spCheck === false || !SPEC || SPEC.debut !== weekKey()) return;
   if (S.spChk && S.spChk.wk === spWk() && S.spChk.n >= 36) return;
   const items = allSpecials().filter((sp) => sp.k && sp.img && !sp.fix && ING[sp.ing] && (!S.reg.stores.length || S.reg.stores.includes(sp.mag)));
@@ -5399,7 +5407,7 @@ async function backfillHistory(max, silent) {
 }
 
 // Bumped when the way flyer lines are read changes (prices in cents, bags...): this week's robot file is read again once
-const PARSE_V = 5;
+const PARSE_V = 6;
 let majBusy = false;
 async function updateFlyers(silent) {
   if (majBusy) return false;

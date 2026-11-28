@@ -290,6 +290,11 @@
     // "5/25 $ ou 6,99 unitaire": the price for one, kept to show it
     const one = /^\s*\d+\s*\//.test(x.pre || "") && d.match(/\bou\s*(\d+[.,]\d{2})\s*\$?\s*(?:unitaire|ch\b|chacun|chacune|l'unité|l’unité)/);
     if (one) x.alt = NUM(one[1]);
+    // "7,49 $ … 16,51/kg": the other number is the same price per kg, so 7,49 is per lb (and the other way around)
+    const eqKg = x.prix > 0 && d.match(/(\d+[.,]\d{2})\s*\$?\s*(?:\/|le|par)\s*kg\b/);
+    if (eqKg && Math.abs(NUM(eqKg[1]) / x.prix - 2.2046) < 0.08) { x.post = "/lb"; return x; }
+    const eqLb = x.prix > 0 && d.match(/(\d+[.,]\d{2})\s*\$?\s*(?:\/|la|le|par)\s*(?:lb|livre)\b/);
+    if (eqLb && Math.abs(x.prix / NUM(eqLb[1]) - 2.2046) < 0.08) { x.post = "/kg"; return x; }
     if (/^\s*ch/i.test(x.post || "") && /(?<![\d,.\/$])\d+(?:[.,]\d+)?\s*(kg|lb)\b(?!\s*\/)/.test(d)) x.post = ""; // "ch." on a 3 lb bag
     const bag = d.match(/(\d+[.,]\d{2})\s*\$\s*(?:le|la|par)\s*(sac|filet|caisse|boite|boîte|paquet|emballage|contenant|barquette)\s*(?:de\s*)?(\d+(?:[.,]\d+)?)\s*(lb|kg|g)\b/);
     if (bag) { x.prix = NUM(bag[1]); addSize(x, `${bag[2]} de ${bag[3]} ${bag[4]}`); x.post = ""; return x; }

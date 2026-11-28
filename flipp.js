@@ -284,8 +284,12 @@
   }
   const addSize = (x, t) => { const h = x.name.split(" | ")[0]; if (h === h.toUpperCase()) t = t.toUpperCase(); x.name = /\s\|\s/.test(x.name) ? x.name.replace(/\s\|\s/, " " + t + " | ") : x.name + " " + t; };
   function applyDetail(x, desc) {
-    const d = String(desc || "").toLowerCase().replace(/\s+/g, " ");
+    // "20-30 un./lb" on shrimp is their size (how many per pound), not a price per pound
+    const d = String(desc || "").toLowerCase().replace(/\s+/g, " ").replace(/\b\d+\s*[-–\/à]\s*\d+\s*(?:un\.?|unités?|ct|count)?\s*\/\s*(?:lb|kg)\b/g, " ").replace(/\b(?:un\.?|unités?|ct|count)\s*\/\s*(?:lb|kg)\b/g, " ");
     if (!d.trim()) return x;
+    // "5/25 $ ou 6,99 unitaire": the price for one, kept to show it
+    const one = /^\s*\d+\s*\//.test(x.pre || "") && d.match(/\bou\s*(\d+[.,]\d{2})\s*\$?\s*(?:unitaire|ch\b|chacun|chacune|l'unité|l’unité)/);
+    if (one) x.alt = NUM(one[1]);
     if (/^\s*ch/i.test(x.post || "") && /(?<![\d,.\/$])\d+(?:[.,]\d+)?\s*(kg|lb)\b(?!\s*\/)/.test(d)) x.post = ""; // "ch." on a 3 lb bag
     const bag = d.match(/(\d+[.,]\d{2})\s*\$\s*(?:le|la|par)\s*(sac|filet|caisse|boite|boîte|paquet|emballage|contenant|barquette)\s*(?:de\s*)?(\d+(?:[.,]\d+)?)\s*(lb|kg|g)\b/);
     if (bag) { x.prix = NUM(bag[1]); addSize(x, `${bag[2]} de ${bag[3]} ${bag[4]}`); x.post = ""; return x; }
@@ -383,6 +387,8 @@
       if (ff && ff.skip) continue;
       const k = r.mag + "|" + r.ing + "|" + r.name;
       if (ff && ff.prix > 0 && Number(r.prix) === ff.p0) r = Object.assign({}, r, { prix: ff.prix });
+      // "5/25 $" is 5 packages for 25 $: a "/lb" with it comes from the description ("20-30 un./lb"), not from the price
+      if (/^\s*[2-9]\s*\//.test(r.pre || "") && /^\s*\/?\s*lb\b/i.test(r.post || "") && !(ff && ff.qte > 0)) r = Object.assign({}, r, { post: "" });
       // "169" with no decimals for 400 g of pasta: the flyer gave cents (1,69 $)
       if (Number.isInteger(Number(r.prix)) && r.prix >= 100 && r.mag !== "Costco") r = Object.assign({}, r, { prix: r.prix / 100 });
       const fix = opts.sizes && opts.sizes[r.ing + "|" + r.name];
@@ -390,6 +396,7 @@
       const perU = ing.u === "u" && String(ing.n || "").match(/\((\d+(?:[.,]\d+)?)\s*(g|ml)\)/i);
       let s = (ff && ff.qte > 0 ? { qte: ff.qte, unite: ff.unite } : null) || sizeOf(r, ing.u) || (perU ? sizeOf(r, perU[2].toLowerCase() === "ml" ? "ml" : "g") : null) || (fix && fix.qte ? fix : null);
       let guessed = !!(s && fix && s === fix && fix.guess) || !!(s && s.g);
+      if (s && fix && s === fix && fix.one) { const pm = String(r.pre || "").match(/^\s*(\d+)\s*(?:\/|pour\b)/i); if (pm && Number(pm[1]) > 1) s = { qte: fix.qte * Number(pm[1]), unite: fix.unite }; } // the size of one package, for "5/25 $"
       if (!s && opts.guess && ing.u === "u" && PACK[r.ing] && !sizeOf(r, "g")) { s = { qte: PACK[r.ing], unite: "u" }; guessed = true; }
       if (!s) { unknown.push(r); continue; }
       // deli counter: "3,99 $/100 g, rég. 19,91 $/lb" sent by Flipp as "/lb". A regular price 4,4+ times the sale price is per lb vs per 100 g.
@@ -410,7 +417,7 @@
       if (ing.u === "g" && !["lb", "kg", "g"].includes(s.unite)) { unknown.push(r); continue; }
       if (ing.u === "ml" && !["L", "ml"].includes(s.unite)) { unknown.push(r); continue; }
       if (["cs", "ct"].includes(ing.u)) { unknown.push(r); continue; }
-      items.push({ ing: r.ing, mag: r.mag, prix: r.prix, qte: s.qte, unite: s.unite, txt: (pretty(r.name).slice(0, 90) + (/membre/i.test(r.pre || "") ? " (prix membre)" : "")).trim(), img: r.img || "", reg: r.orig > r.prix ? r.orig : 0, story: r.story || "", pack: shown && s.unite === "u" ? shown : "", k, ...(ff ? { fix: ff.by || "moi" } : guessed ? { guess: true } : {}) });
+      items.push({ ing: r.ing, mag: r.mag, prix: r.prix, qte: s.qte, unite: s.unite, txt: (pretty(r.name).slice(0, 90) + (/membre/i.test(r.pre || "") ? " (prix membre)" : "") + (r.alt > 0 ? ` (ou ${String(r.alt.toFixed(2)).replace(".", ",")} $ l'unité)` : "")).trim(), img: r.img || "", reg: r.orig > r.prix ? r.orig : 0, story: r.story || "", pack: shown && s.unite === "u" ? shown : "", k, ...(ff ? { fix: ff.by || "moi" } : guessed ? { guess: true } : {}) });
     }
     return { items, unknown };
   }

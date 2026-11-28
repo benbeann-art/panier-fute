@@ -1487,8 +1487,12 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
   }
   const addSize = (x, t) => { const h = x.name.split(" | ")[0]; if (h === h.toUpperCase()) t = t.toUpperCase(); x.name = /\s\|\s/.test(x.name) ? x.name.replace(/\s\|\s/, " " + t + " | ") : x.name + " " + t; };
   function applyDetail(x, desc) {
-    const d = String(desc || "").toLowerCase().replace(/\s+/g, " ");
+    // "20-30 un./lb" on shrimp is their size (how many per pound), not a price per pound
+    const d = String(desc || "").toLowerCase().replace(/\s+/g, " ").replace(/\b\d+\s*[-–\/à]\s*\d+\s*(?:un\.?|unités?|ct|count)?\s*\/\s*(?:lb|kg)\b/g, " ").replace(/\b(?:un\.?|unités?|ct|count)\s*\/\s*(?:lb|kg)\b/g, " ");
     if (!d.trim()) return x;
+    // "5/25 $ ou 6,99 unitaire": the price for one, kept to show it
+    const one = /^\s*\d+\s*\//.test(x.pre || "") && d.match(/\bou\s*(\d+[.,]\d{2})\s*\$?\s*(?:unitaire|ch\b|chacun|chacune|l'unité|l’unité)/);
+    if (one) x.alt = NUM(one[1]);
     if (/^\s*ch/i.test(x.post || "") && /(?<![\d,.\/$])\d+(?:[.,]\d+)?\s*(kg|lb)\b(?!\s*\/)/.test(d)) x.post = ""; // "ch." on a 3 lb bag
     const bag = d.match(/(\d+[.,]\d{2})\s*\$\s*(?:le|la|par)\s*(sac|filet|caisse|boite|boîte|paquet|emballage|contenant|barquette)\s*(?:de\s*)?(\d+(?:[.,]\d+)?)\s*(lb|kg|g)\b/);
     if (bag) { x.prix = NUM(bag[1]); addSize(x, `${bag[2]} de ${bag[3]} ${bag[4]}`); x.post = ""; return x; }
@@ -1596,6 +1600,8 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
       if (ff && ff.skip) continue;
       const k = r.mag + "|" + r.ing + "|" + r.name;
       if (ff && ff.prix > 0 && Number(r.prix) === ff.p0) r = Object.assign({}, r, { prix: ff.prix });
+      // "5/25 $" is 5 packages for 25 $: a "/lb" with it comes from the description ("20-30 un./lb"), not from the price
+      if (/^\s*[2-9]\s*\//.test(r.pre || "") && /^\s*\/?\s*lb\b/i.test(r.post || "") && !(ff && ff.qte > 0)) r = Object.assign({}, r, { post: "" });
       // "169" with no decimals for 400 g of pasta: the flyer gave cents (1,69 $)
       if (Number.isInteger(Number(r.prix)) && r.prix >= 100 && r.mag !== "Costco") r = Object.assign({}, r, { prix: r.prix / 100 });
       const fix = opts.sizes && opts.sizes[r.ing + "|" + r.name];
@@ -1604,6 +1610,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
       let s = (ff && ff.qte > 0 ? { qte: ff.qte, unite: ff.unite } : null) || sizeOf(r, ing.u) || (perU ? sizeOf(r, perU[2].toLowerCase() === "ml" ? "ml" : "g") : null) || (fix && fix.qte ? fix : null);
       if (s && fix && s === fix && ing.u === "g" && perLbNotKg(r.prix, s, ing)) s = { qte: 1, unite: "lb" }; // "2,49 $" read as per kg but it is per lb
       let guessed = !!(s && fix && s === fix && fix.guess) || !!(s && s.g);
+      if (s && fix && s === fix && fix.one) { const pm = String(r.pre || "").match(/^\s*(\d+)\s*(?:\/|pour\b)/i); if (pm && Number(pm[1]) > 1) s = { qte: fix.qte * Number(pm[1]), unite: fix.unite }; } // the size of one package, for "5/25 $"
       if (!s && opts.guess && ing.u === "u" && PACK[r.ing] && !sizeOf(r, "g")) { s = { qte: PACK[r.ing], unite: "u" }; guessed = true; }
       if (!s) { unknown.push(r); continue; }
       // deli counter: "3,99 $/100 g, rég. 19,91 $/lb" sent by Flipp as "/lb". A regular price 4,4+ times the sale price is per lb vs per 100 g.
@@ -1624,7 +1631,7 @@ ol.steps{padding-left:22px}ol.steps li{margin:0 0 10px}
       if (ing.u === "g" && !["lb", "kg", "g"].includes(s.unite)) { unknown.push(r); continue; }
       if (ing.u === "ml" && !["L", "ml"].includes(s.unite)) { unknown.push(r); continue; }
       if (["cs", "ct"].includes(ing.u)) { unknown.push(r); continue; }
-      items.push({ ing: r.ing, mag: r.mag, prix: r.prix, qte: s.qte, unite: s.unite, txt: (pretty(r.name).slice(0, 90) + (/membre/i.test(r.pre || "") ? " (prix membre)" : "")).trim(), img: r.img || "", reg: r.orig > r.prix ? r.orig : 0, story: r.story || "", pack: shown && s.unite === "u" ? shown : "", k, ...(ff ? { fix: ff.by || "moi" } : guessed ? { guess: true } : {}) });
+      items.push({ ing: r.ing, mag: r.mag, prix: r.prix, qte: s.qte, unite: s.unite, txt: (pretty(r.name).slice(0, 90) + (/membre/i.test(r.pre || "") ? " (prix membre)" : "") + (r.alt > 0 ? ` (ou ${String(r.alt.toFixed(2)).replace(".", ",")} $ l'unité)` : "")).trim(), img: r.img || "", reg: r.orig > r.prix ? r.orig : 0, story: r.story || "", pack: shown && s.unite === "u" ? shown : "", k, ...(ff ? { fix: ff.by || "moi" } : guessed ? { guess: true } : {}) });
     }
     return { items, unknown };
   }
@@ -2049,7 +2056,7 @@ function rSpec() {
     <p class="small mute" style="margin:8px 0">Touche un article pour le choisir, puis « Voir les recettes ».${S.store && FLYER[S.store] ? ` <a href="${FLYER[S.store]}" target="_blank" rel="noopener">Voir la vraie circulaire ${esc(S.store)} →</a>` : ""}</p>
     ${selBar}
     ${costcoBox()}
-    <div class="flyer">${shown.map((x) => `<div class="artw">${card(x)}${x.sp.k ? `<button class="chk" data-spchk="${esc(x.sp.k)}" aria-label="Vérifier ce spécial" title="Vérifier ce spécial">${x.sp.fix === "ia" ? "🤖" : x.sp.fix ? "✎" : S.spChk && S.spChk.wk === weekKey() && S.spChk.ok[x.sp.k] ? "✓" : "🔍"}</button>` : ""}</div>`).join("") || (S.store === "Costco" ? "" : `<p class="mute">Aucun spécial pour ce magasin cette semaine.</p>`)}</div>
+    <div class="flyer">${shown.map((x) => `<div class="artw">${card(x)}${x.sp.k ? `<button class="chk" data-spchk="${esc(x.sp.k)}" aria-label="Vérifier ce spécial" title="Vérifier ce spécial">${x.sp.fix === "ia" ? "🤖" : x.sp.fix ? "✎" : S.spChk && S.spChk.wk === spWk() && S.spChk.ok[x.sp.k] ? "✓" : "🔍"}</button>` : ""}</div>`).join("") || (S.store === "Costco" ? "" : `<p class="mute">Aucun spécial pour ce magasin cette semaine.</p>`)}</div>
     <details style="margin-top:14px"><summary>Voir en liste détaillée (historique des prix)</summary>${shown.map(row).join("")}</details>
   </div><div>
     <h2 style="margin-top:8px">Historique des prix (12 mois)</h2>
@@ -2080,6 +2087,7 @@ function rSpec() {
 }
 // ---------- Check a special against its flyer picture: by me (🔍) or by the AI, which corrects it by itself ----------
 // S.spFix[mag|ing|name] = { qte, unite, prix, p0, skip, by: "moi" | "ia", was } ; S.spChk = { wk, ok: { key: 1 }, n }
+const spWk = () => weekKey() + "/2"; // "/2": checked again after the reading rules changed (v3.24.9)
 const spByKey = (k) => allSpecials().find((x) => x.k === k);
 const rawByKey = (k) => (RAWLAST || []).find((r) => r.mag + "|" + r.ing + "|" + r.name === k);
 function spUnitChoices(ing) {
@@ -2091,7 +2099,7 @@ function openSpCheck(k) {
   const sp = spByKey(k), ing = sp && ING[sp.ing];
   if (!sp || !ing) return toast("Ce spécial n'est plus dans les circulaires.");
   const fx = (S.spFix || {})[k], pu = L.unitPrice(sp, ing), c = L.cote(sp, ing);
-  const ok = S.spChk && S.spChk.wk === weekKey() && S.spChk.ok[k];
+  const ok = S.spChk && S.spChk.wk === spWk() && S.spChk.ok[k];
   const u0 = sp.unite === "g" && sp.qte === 100 ? "100g" : sp.unite;
   $("#sheetIn").innerHTML = `<button class="close" id="closeSheet" aria-label="Fermer">×</button>
     <h2>Vérifier ce spécial</h2>
@@ -2132,7 +2140,7 @@ function spSetFix(k, fx) {
   if (fx) S.spFix[k] = Object.assign(fx, { at: today() }); else delete S.spFix[k];
   const ks = Object.keys(S.spFix); if (ks.length > 400) for (const x of ks.sort((a, b) => String(S.spFix[a].at).localeCompare(String(S.spFix[b].at))).slice(0, ks.length - 400)) delete S.spFix[x];
 }
-function spMarkOk(k, v) { if (!S.spChk || S.spChk.wk !== weekKey()) S.spChk = { wk: weekKey(), ok: {}, n: 0 }; S.spChk.ok[k] = v; }
+function spMarkOk(k, v) { if (!S.spChk || S.spChk.wk !== spWk()) S.spChk = { wk: spWk(), ok: {}, n: 0 }; S.spChk.ok[k] = v; }
 // The AI looks at the flyer pictures (6 per question) and says what it reads; the app's own rules turn that into a price per kg / per unit.
 // When it is more than 12 % away from what the app understood, the app corrects itself (and shows 🤖 on the special).
 let spChkBusy = false;
@@ -2155,6 +2163,11 @@ Pour chaque photo, lis ce qui est imprimé, sans rien deviner :
 - "produit" : le nom court du produit.
 Si une offre a plusieurs produits (ex. « citrons 2 lb ou oranges 3 lb »), donne le format du produit cherché ci-dessous.
 ${use.map((x, j) => `Photo ${j} : on cherche « ${ING[x.sp.ing].n.split(" (")[0]} »`).join("\n")}
+Attention :
+- « 5/25 $ » = 5 articles pour 25 $ : "prix":25, "pour":5, "par":"article". Ce n'est JAMAIS 5 lb.
+- « 20-30 un./lb » sur des crevettes = leur grosseur, pas un prix à la livre.
+- « ou 6,99 unitaire » est le prix pour un seul : garde le gros prix (5/25 $).
+- "format" = le format d'UN SEUL article (ex. "300 g"), même quand le prix est pour plusieurs.
 Réponds UNIQUEMENT par un tableau JSON : [{"n":0,"prix":3.99,"pour":1,"par":"lb","format":"","produit":"…"}]`;
       let arr = [];
       try { arr = AI.extractJSON(await askAI(prompt, { images: pics, maxTokens: 2000, quiet: true, json: true }), "array") || []; } catch (e) { if (/limite|quota|429/i.test(e.message || "")) break; continue; }
@@ -2174,7 +2187,7 @@ Réponds UNIQUEMENT par un tableau JSON : [{"n":0,"prix":3.99,"pour":1,"par":"lb
         spSetFix(x.k, fx); fixed++;
       }
     }
-    if (!S.spChk || S.spChk.wk !== weekKey()) S.spChk = { wk: weekKey(), ok: {}, n: 0 };
+    if (!S.spChk || S.spChk.wk !== spWk()) S.spChk = { wk: spWk(), ok: {}, n: 0 };
     S.spChk.n = (S.spChk.n || 0) + todo.length;
     save(false);
     if (fixed) { await reparseWeek(); if (!quiet || fixed) toast(`🤖 L'IA a relu les photos : ${fixed} spécia${fixed > 1 ? "ux corrigés" : "l corrigé"}`, 5000); }
@@ -2186,12 +2199,12 @@ Réponds UNIQUEMENT par un tableau JSON : [{"n":0,"prix":3.99,"pour":1,"par":"lb
 // Each week, on its own: the AI checks the specials that matter (the best notes, the cheapest of the week), 36 at most
 async function autoCheckSpecials() {
   if (!aiOn() || AIS.spCheck === false || !SPEC || SPEC.debut !== weekKey()) return;
-  if (S.spChk && S.spChk.wk === weekKey() && S.spChk.n >= 36) return;
+  if (S.spChk && S.spChk.wk === spWk() && S.spChk.n >= 36) return;
   const items = allSpecials().filter((sp) => sp.k && sp.img && !sp.fix && ING[sp.ing] && (!S.reg.stores.length || S.reg.stores.includes(sp.mag)));
   L.setWeek(items, ING, S.reg.stores);
-  const done = (S.spChk && S.spChk.wk === weekKey() && S.spChk.ok) || {};
+  const done = (S.spChk && S.spChk.wk === spWk() && S.spChk.ok) || {};
   const pick = items.map((sp) => ({ sp, c: L.cote(sp, ING[sp.ing]) || 0, w: L.weekCote(sp, ING[sp.ing]) || 0 }))
-    .filter((x) => !done[x.sp.k] && (x.c >= 7 || x.w >= 10)).sort((a, b) => b.c + b.w - a.c - a.w).slice(0, 36 - ((S.spChk && S.spChk.wk === weekKey() && S.spChk.n) || 0));
+    .filter((x) => !done[x.sp.k] && (x.c >= 7 || x.w >= 10)).sort((a, b) => b.c + b.w - a.c - a.w).slice(0, 36 - ((S.spChk && S.spChk.wk === spWk() && S.spChk.n) || 0));
   if (pick.length) await aiCheckSpecials(pick.map((x) => x.sp.k), true);
 }
 const opts = (a, b, v) => { let s = ""; for (let i = a; i <= b; i++) s += `<option value="${i}" ${i === Number(v) ? "selected" : ""}>${i}</option>`; return s; };
@@ -4444,6 +4457,8 @@ Pour chacun, dis ce que le prix achète : "qte" et "unite" (lb, kg, g, ml, L ou 
 - ingrédient en [grammes] : un poids (g, kg ou lb) ; en [millilitres] : un volume (ml ou L).
 - Ingrédient en [unités] vendu en sac, en paquet ou au poids : convertis en nombre d'unités (ex. sac de 3 lb d'oignons ≈ 10 ; sac de 2 lb de citrons ≈ 8 ; « 5 un. » = 5 ; « 2/5 $ » = 2). Un prix au lb pour un légume à l'unité : donne "qte":1,"unite":"lb" seulement si l'ingrédient est en [grammes], sinon convertis (1 lb d'oignons ≈ 3 oignons).
 - Si le format n'est pas écrit, donne le format le plus courant de ce produit au Québec (ex. lait sans format = 2 L, beurre = 454 g, poivrons en sac = 3) et ajoute "devine":true.
+- « 5/ 25 $ » ou « 2/ 5 $ » = plusieurs articles pour ce prix : donne le format d'UN SEUL article et ajoute "un":true (l'app multiplie).
+- « 20-30 un./lb » sur des crevettes = leur grosseur, pas un prix à la livre.
 - Si l'article n'est pas vraiment l'ingrédient visé (autre produit, plat cuisiné, saveur…), mets "qte": null.
 ${lines}
 Réponds UNIQUEMENT par un tableau JSON : [{"n":0,"qte":2,"unite":"L"},{"n":1,"qte":454,"unite":"g","devine":true}]`;
@@ -4451,7 +4466,7 @@ Réponds UNIQUEMENT par un tableau JSON : [{"n":0,"qte":2,"unite":"L"},{"n":1,"q
         const arr = AI.extractJSON(await askAI(prompt, { maxTokens: 6000, quiet: true }), "array") || [];
         for (const x of arr) {
           const r = x && part[x.n]; if (!r) continue;
-          if (Number(x.qte) > 0 && ["lb", "kg", "g", "ml", "L", "u"].includes(x.unite)) sizes[r.ing + "|" + r.name] = { qte: Number(x.qte), unite: x.unite, ...(x.devine ? { guess: true } : {}) };
+          if (Number(x.qte) > 0 && ["lb", "kg", "g", "ml", "L", "u"].includes(x.unite)) sizes[r.ing + "|" + r.name] = { qte: Number(x.qte), unite: x.unite, ...(x.devine ? { guess: true } : {}), ...(x.un ? { one: 1 } : {}) };
           else if (x.qte === null) sizes[r.ing + "|" + r.name] = { skip: true };
         }
       } catch (e) { break; }
@@ -5384,7 +5399,7 @@ async function backfillHistory(max, silent) {
 }
 
 // Bumped when the way flyer lines are read changes (prices in cents, bags...): this week's robot file is read again once
-const PARSE_V = 4;
+const PARSE_V = 5;
 let majBusy = false;
 async function updateFlyers(silent) {
   if (majBusy) return false;

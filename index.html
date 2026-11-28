@@ -2153,6 +2153,8 @@ Pour chaque photo, lis ce qui est imprimé, sans rien deviner :
 - "par" : "lb" si le prix est la livre, "kg" si c'est le kilo, "100g" si c'est par 100 g, sinon "article" (prix pour l'article, le paquet ou le sac entier).
 - "format" : le poids, le volume ou le nombre écrit pour l'article (ex. "454 g", "2 L", "6 un.", "sac de 5 lb"), ou "" si rien n'est écrit.
 - "produit" : le nom court du produit.
+Si une offre a plusieurs produits (ex. « citrons 2 lb ou oranges 3 lb »), donne le format du produit cherché ci-dessous.
+${use.map((x, j) => `Photo ${j} : on cherche « ${ING[x.sp.ing].n.split(" (")[0]} »`).join("\n")}
 Réponds UNIQUEMENT par un tableau JSON : [{"n":0,"prix":3.99,"pour":1,"par":"lb","format":"","produit":"…"}]`;
       let arr = [];
       try { arr = AI.extractJSON(await askAI(prompt, { images: pics, maxTokens: 2000, quiet: true, json: true }), "array") || []; } catch (e) { if (/limite|quota|429/i.test(e.message || "")) break; continue; }

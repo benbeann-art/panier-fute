@@ -5407,7 +5407,7 @@ async function backfillHistory(max, silent) {
 }
 
 // Bumped when the way flyer lines are read changes (prices in cents, bags...): this week's robot file is read again once
-const PARSE_V = 6;
+const PARSE_V = 7;
 let majBusy = false;
 async function updateFlyers(silent) {
   if (majBusy) return false;

@@ -387,6 +387,10 @@
       let guessed = !!(s && fix && s === fix && fix.guess) || !!(s && s.g);
       if (!s && opts.guess && ing.u === "u" && PACK[r.ing] && !sizeOf(r, "g")) { s = { qte: PACK[r.ing], unite: "u" }; guessed = true; }
       if (!s) { unknown.push(r); continue; }
+      // deli counter: "3,99 $/100 g, rég. 19,91 $/lb" sent by Flipp as "/lb". A regular price 4,4+ times the sale price is per lb vs per 100 g.
+      if (s.unite === "lb" && r.orig > 0 && r.orig / r.prix >= 4.4 && r.orig / r.prix <= 12) { s = { qte: 100 * (s.qte || 1), unite: "g" }; r = Object.assign({}, r, { orig: Math.round((r.orig / 4.536) * 100) / 100 }); }
+      // mini cucumbers counted one by one: about 3 make one cucumber
+      if (r.ing === "concombre" && s.unite === "u" && /\bmini/i.test(r.name) && !/\d\s*(g|kg|lb)\b/i.test(r.name)) s = { ...s, qte: Math.max(1, Math.round((s.qte / 3) * 100) / 100) };
       const shown = ing.u === "u" && ["lb", "kg", "g", "ml", "L"].includes(s.unite) ? String(Math.round(s.qte * 100) / 100).replace(".", ",") + " " + s.unite : ""; // "5 lb" bag, shown as such
       if (ing.u === "u" && (s.unite === "lb" || s.unite === "kg") && EACH_LB[r.ing]) s = { qte: Math.max(1, Math.round(s.qte * (s.unite === "kg" ? 2.2046 : 1) * EACH_LB[r.ing])), unite: "u" };
       // sold by the unit of a known size ("Tofu ferme (454 g)", "Thon (170 g)"): a 1,25 kg pack = 2.75 units

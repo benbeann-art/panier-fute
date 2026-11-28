@@ -378,19 +378,24 @@
     const items = [], unknown = [];
     for (let r of raw) {
       const ing = ING[r.ing]; if (!ing) continue;
+      // corrections for this exact flyer item (by me, or by the AI that looked at its picture): size and unit, and the price if it is still the same
+      const ff = opts.fixes && opts.fixes[r.mag + "|" + r.ing + "|" + r.name];
+      if (ff && ff.skip) continue;
+      const k = r.mag + "|" + r.ing + "|" + r.name;
+      if (ff && ff.prix > 0 && Number(r.prix) === ff.p0) r = Object.assign({}, r, { prix: ff.prix });
       // "169" with no decimals for 400 g of pasta: the flyer gave cents (1,69 $)
       if (Number.isInteger(Number(r.prix)) && r.prix >= 100 && r.mag !== "Costco") r = Object.assign({}, r, { prix: r.prix / 100 });
       const fix = opts.sizes && opts.sizes[r.ing + "|" + r.name];
       if (fix && fix.skip) continue;
       const perU = ing.u === "u" && String(ing.n || "").match(/\((\d+(?:[.,]\d+)?)\s*(g|ml)\)/i);
-      let s = sizeOf(r, ing.u) || (perU ? sizeOf(r, perU[2].toLowerCase() === "ml" ? "ml" : "g") : null) || (fix && fix.qte ? fix : null);
+      let s = (ff && ff.qte > 0 ? { qte: ff.qte, unite: ff.unite } : null) || sizeOf(r, ing.u) || (perU ? sizeOf(r, perU[2].toLowerCase() === "ml" ? "ml" : "g") : null) || (fix && fix.qte ? fix : null);
       let guessed = !!(s && fix && s === fix && fix.guess) || !!(s && s.g);
       if (!s && opts.guess && ing.u === "u" && PACK[r.ing] && !sizeOf(r, "g")) { s = { qte: PACK[r.ing], unite: "u" }; guessed = true; }
       if (!s) { unknown.push(r); continue; }
       // deli counter: "3,99 $/100 g, rég. 19,91 $/lb" sent by Flipp as "/lb". A regular price 4,4+ times the sale price is per lb vs per 100 g.
-      if (s.unite === "lb" && r.orig > 0 && r.orig / r.prix >= 4.4 && r.orig / r.prix <= 12) { s = { qte: 100 * (s.qte || 1), unite: "g" }; r = Object.assign({}, r, { orig: Math.round((r.orig / 4.536) * 100) / 100 }); }
+      if (!ff && s.unite === "lb" && r.orig > 0 && r.orig / r.prix >= 4.4 && r.orig / r.prix <= 12) { s = { qte: 100 * (s.qte || 1), unite: "g" }; r = Object.assign({}, r, { orig: Math.round((r.orig / 4.536) * 100) / 100 }); }
       // mini cucumbers counted one by one: about 3 make one cucumber
-      if (r.ing === "concombre" && s.unite === "u" && /\bmini/i.test(r.name) && !/\d\s*(g|kg|lb)\b/i.test(r.name)) s = { ...s, qte: Math.max(1, Math.round((s.qte / 3) * 100) / 100) };
+      if (!ff && r.ing === "concombre" && s.unite === "u" && /\bmini/i.test(r.name) && !/\d\s*(g|kg|lb)\b/i.test(r.name)) s = { ...s, qte: Math.max(1, Math.round((s.qte / 3) * 100) / 100) };
       const shown = ing.u === "u" && ["lb", "kg", "g", "ml", "L"].includes(s.unite) ? String(Math.round(s.qte * 100) / 100).replace(".", ",") + " " + s.unite : ""; // "5 lb" bag, shown as such
       if (ing.u === "u" && (s.unite === "lb" || s.unite === "kg") && EACH_LB[r.ing]) s = { qte: Math.max(1, Math.round(s.qte * (s.unite === "kg" ? 2.2046 : 1) * EACH_LB[r.ing])), unite: "u" };
       // sold by the unit of a known size ("Tofu ferme (454 g)", "Thon (170 g)"): a 1,25 kg pack = 2.75 units
@@ -405,7 +410,7 @@
       if (ing.u === "g" && !["lb", "kg", "g"].includes(s.unite)) { unknown.push(r); continue; }
       if (ing.u === "ml" && !["L", "ml"].includes(s.unite)) { unknown.push(r); continue; }
       if (["cs", "ct"].includes(ing.u)) { unknown.push(r); continue; }
-      items.push({ ing: r.ing, mag: r.mag, prix: r.prix, qte: s.qte, unite: s.unite, txt: (pretty(r.name).slice(0, 90) + (/membre/i.test(r.pre || "") ? " (prix membre)" : "")).trim(), img: r.img || "", reg: r.orig > r.prix ? r.orig : 0, story: r.story || "", pack: shown && s.unite === "u" ? shown : "", ...(guessed ? { guess: true } : {}) });
+      items.push({ ing: r.ing, mag: r.mag, prix: r.prix, qte: s.qte, unite: s.unite, txt: (pretty(r.name).slice(0, 90) + (/membre/i.test(r.pre || "") ? " (prix membre)" : "")).trim(), img: r.img || "", reg: r.orig > r.prix ? r.orig : 0, story: r.story || "", pack: shown && s.unite === "u" ? shown : "", k, ...(ff ? { fix: ff.by || "moi" } : guessed ? { guess: true } : {}) });
     }
     return { items, unknown };
   }

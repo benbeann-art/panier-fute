@@ -3087,6 +3087,23 @@ function renderSugg() {
     (aiOn() ? `<button class="sug" data-addai="1" style="border-color:var(--red)"><span>Demander à l'IA : « ${esc(t)} »</span><span class="small mute">elle trouve le prix et le magasin</span></button>` : "") +
     `<button class="sug" data-addc="1"><span>Ajouter « ${esc(t)} » tel quel</span><span class="small mute">prix à entrer</span></button>`;
 }
+// A special chosen in Spéciaux goes on the grocery list too (the format of the special: 10 kg of flour, 1 lb of chicken, 6 oranges…).
+// It is marked "sp" so that taking the special off takes it off the list, and only that.
+function spAmount(sp) {
+  const ing = ING[sp.ing]; if (!ing) return 0;
+  const q = Number(sp.qte) || 1, f = { g: { g: 1, kg: 1000, lb: 453.6 }, ml: { ml: 1, L: 1000, l: 1000 } }[ing.u];
+  if (ing.u === "u") return sp.unite === "u" ? q : 1;
+  return f && f[sp.unite] ? Math.round(q * f[sp.unite]) : 0;
+}
+function spToList(id, mag) {
+  const sp = allSpecials().find((x) => x.ing === id && x.mag === mag) || allSpecials().find((x) => x.ing === id);
+  const q = sp ? spAmount(sp) : 0; if (!(q > 0) || !ING[id]) return;
+  const e = S.extras.find((x) => x.k === id && x.sp);
+  if (e) Object.assign(e, { q, mag: sp.mag }); else S.extras.push({ k: id, q, sp: 1, mag: sp.mag, at: Date.now() });
+  delete S.coches[id];
+  toast(`Ajouté à la liste d'épicerie : ${ING[id].n.split(" (")[0]} (${L.fmtQty(ING[id], q)}, ${sp.mag})`);
+}
+function spOffList(id) { S.extras = S.extras.filter((x) => !(x.k === id && x.sp)); }
 function addExtra(k, name) {
   const e = S.extras.find((x) => x.k === k);
   if (e) e.q += 1; else S.extras.push(k.startsWith("u_") ? { k, q: 1, n: name, p: 0, at: Date.now() } : { k, q: 1, at: Date.now() });
@@ -3101,7 +3118,7 @@ function addBox() {
     <label class="f" for="addTxt" style="margin-top:0;font-size:16px">Ajouter un article</label>
     <input type="search" id="addTxt" placeholder="lait, beurre, fromage, papier toilette…" autocomplete="off" enterkeyhint="done">
     <div id="sugg"></div>
-    ${S.extras.length ? `<div class="small" style="margin-top:10px"><b>Ajoutés à la main :</b>${S.extras.map((e, i) => `<div class="xrow"><span>${esc(itemName(e.k))}</span>
+    ${S.extras.length ? `<div class="small" style="margin-top:10px"><b>Ajoutés à la main ou des spéciaux :</b>${S.extras.map((e, i) => `<div class="xrow"><span>${esc(itemName(e.k))}</span>
       ${e.ai ? `<span class="chip sp">IA</span>` : ""}${e.k.startsWith("u_") ? `<label class="small mute">Prix <input type="number" class="xprice" data-xp="${i}" min="0" step="0.01" value="${e.p || ""}" placeholder="0,00" inputmode="decimal"> $</label>` : ""}
       <span class="qty"><button class="btn sm" data-xq="${i}" data-d="-1" aria-label="Moins">−</button><b>${e.q}</b><button class="btn sm" data-xq="${i}" data-d="1" aria-label="Plus">+</button></span>
       <button class="x" data-xdel="${i}" aria-label="Retirer">×</button></div>`).join("")}</div>` : ""}
@@ -5707,12 +5724,12 @@ document.addEventListener("click", (e) => {
   if (d.askq) { window.scrollTo(0, 0); return iaAsk(S.q); }
   if (t.id === "majNow") return updateFlyers(false);
   if (d.sel) { const id = d.sel, mag = d.selmag || ""; S.selMag = S.selMag || {};
-    if (!S.sel.includes(id)) { S.sel = S.sel.concat(id); S.selMag[id] = mag; }
-    else if (S.selMag[id] && mag && S.selMag[id] !== mag) S.selMag[id] = mag; // the same product, at the other store: that one is the chosen card now
-    else { S.sel = S.sel.filter((x) => x !== id); delete S.selMag[id]; }
-    save(); rSpec(); return; }
+    if (!S.sel.includes(id)) { S.sel = S.sel.concat(id); S.selMag[id] = mag; spToList(id, mag); }
+    else if (S.selMag[id] && mag && S.selMag[id] !== mag) { S.selMag[id] = mag; spToList(id, mag); } // the same product, at the other store: that one is the chosen card now
+    else { S.sel = S.sel.filter((x) => x !== id); delete S.selMag[id]; spOffList(id); }
+    save(); updateBadge(); rSpec(); return; }
   if (d.storeF !== undefined) { S.store = d.storeF; save(false); rSpec(); setTimeout(hydratePhotos, 50); return; }
-  if (t.id === "selClear") { S.sel = []; S.selMag = {}; save(); return rSpec(); }
+  if (t.id === "selClear") { for (const id of S.sel) spOffList(id); S.sel = []; S.selMag = {}; save(); updateBadge(); return rSpec(); }
   if (d.tagf !== undefined) { S.tag = d.tagf; recLimit = 40; save(); return rRec(); }
   if (t.id === "myPhotoDel") { const id = S.open; Photos.del(id).then(() => { delete MYPH[id]; saveMyPh(); openRec(id); render(S.view); }); return; }
   if (t.id === "impGo") return importRecipe();

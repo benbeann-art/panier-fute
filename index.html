@@ -149,7 +149,7 @@ body:has(#timers:not([hidden])){padding-bottom:calc(170px + env(safe-area-inset-
 .ph-empty{display:grid;place-items:center;background:#fff6cc;padding:8px;text-align:center;font-weight:800;font-size:14px;color:#6d5800}
 .art .tags2{position:absolute;top:6px;left:6px}.art .tags2 .tag{box-shadow:0 2px 6px rgba(0,0,0,.25)}
 .tags2{display:inline-flex;gap:4px;flex:none}.tags2 .tag{min-width:48px}.tags2 .tag small{left:0;right:0;text-align:center;bottom:2px}.tags2 .tag{padding-bottom:8px}
-.artw{position:relative;display:flex}.artw>.art{flex:1;min-width:0}.chk{position:absolute;top:6px;right:6px;z-index:2;width:36px;height:36px;border-radius:50%;border:2px solid var(--line);background:#fff;color:#151515;font-size:16px;line-height:1;padding:0;box-shadow:0 2px 6px rgba(0,0,0,.2)}.artw .art .ok{right:48px}
+.artw{position:relative;display:flex}.artw>.art{flex:1;min-width:0}.spchk{position:absolute;top:6px;right:6px;z-index:2;width:36px;height:36px;border-radius:50%;border:2px solid var(--line);background:#fff;color:#151515;font-size:16px;line-height:1;padding:0;box-shadow:0 2px 6px rgba(0,0,0,.2)}.artw .art .ok{right:48px}
 .art .ok{position:absolute;top:8px;right:8px;background:var(--green);color:#fff;font-weight:800;font-size:12px;padding:3px 8px;border-radius:999px}
 .art.on{border-color:var(--red);box-shadow:0 0 0 3px var(--red)}
 .art .body{display:flex;flex-direction:column;gap:2px;padding:8px 10px 10px}
@@ -2061,7 +2061,7 @@ function rSpec() {
     <p class="small mute" style="margin:8px 0">Touche un article pour le choisir, puis « Voir les recettes ».${S.store && FLYER[S.store] ? ` <a href="${FLYER[S.store]}" target="_blank" rel="noopener">Voir la vraie circulaire ${esc(S.store)} →</a>` : ""}</p>
     ${selBar}
     ${costcoBox()}
-    <div class="flyer">${shown.map((x) => `<div class="artw">${card(x)}${x.sp.k ? `<button class="chk" data-spchk="${esc(x.sp.k)}" aria-label="Vérifier ce spécial" title="Vérifier ce spécial">${x.sp.fix === "ia" ? "🤖" : x.sp.fix ? "✎" : S.spChk && S.spChk.wk === spWk() && S.spChk.ok[x.sp.k] ? "✓" : "🔍"}</button>` : ""}</div>`).join("") || (S.store === "Costco" ? "" : `<p class="mute">Aucun spécial pour ce magasin cette semaine.</p>`)}</div>
+    <div class="flyer">${shown.map((x) => `<div class="artw">${card(x)}${x.sp.k ? `<button class="spchk" data-spchk="${esc(x.sp.k)}" aria-label="Vérifier ce spécial" title="Vérifier ce spécial">${x.sp.fix === "ia" ? "🤖" : x.sp.fix ? "✎" : S.spChk && S.spChk.wk === spWk() && S.spChk.ok[x.sp.k] ? "✓" : "🔍"}</button>` : ""}</div>`).join("") || (S.store === "Costco" ? "" : `<p class="mute">Aucun spécial pour ce magasin cette semaine.</p>`)}</div>
     <details style="margin-top:14px"><summary>Voir en liste détaillée (historique des prix)</summary>${shown.map(row).join("")}</details>
   </div><div>
     <h2 style="margin-top:8px">Historique des prix (12 mois)</h2>
